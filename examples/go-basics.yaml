@@ -1,0 +1,36 @@
+pack_version: "0.1.0"
+topic:
+  slug: "go-basics"
+  name: "Go Basics"
+questions:
+  - type: "single_select"
+    intro: "Consider Go's control flow mechanisms."
+    prompt: "What does `defer` do in Go?"
+    choices:
+      - { id: "A", text: "Executes the function call immediately" }
+      - { id: "B", text: "Schedules the call to run when the surrounding function returns" }
+      - { id: "C", text: "Pauses the current goroutine" }
+    correct_choice_ids: ["B"]
+    tags: ["functions", "control-flow"]
+    difficulty: 1
+
+  - type: "multi_select"
+    prompt: "Which of these are valid Go data types?"
+    choices:
+      - { id: "A", text: "int" }
+      - { id: "B", text: "float64" }
+      - { id: "C", text: "char" }
+      - { id: "D", text: "string" }
+    correct_choice_ids: ["A", "B", "D"]
+    tags: ["types"]
+    difficulty: 1
+
+  - type: "single_select"
+    prompt: "What is the zero value of a `bool` in Go?"
+    choices:
+      - { id: "A", text: "true" }
+      - { id: "B", text: "false" }
+      - { id: "C", text: "nil" }
+    correct_choice_ids: ["B"]
+    tags: ["types", "zero-values"]
+    difficulty: 1
