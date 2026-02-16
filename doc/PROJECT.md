@@ -50,18 +50,15 @@ golearn/
 │   │   └── hashing.go           # stable content hashing
 │   ├── ports/                   # interfaces (driven + driving)
 │   │   ├── repositories.go      # TopicRepo, QuestionRepo, SessionRepo, AttemptRepo
-│   │   ├── sources.go           # PackSource (read/write pack files)
-│   │   └── selector.go          # question selection strategy
+│   │   └── sources.go           # PackSource (read/write pack files)
 │   ├── app/                     # use cases / application services
 │   │   ├── import_pack.go
-│   │   ├── export_pack.go
-│   │   ├── start_session.go
-│   │   ├── record_attempt.go
-│   │   └── select_questions.go
+│   │   ├── export_pack.go       # (planned)
+│   │   ├── session.go           # session lifecycle engine
+│   │   └── selector.go          # question selection policy
 │   └── adapters/                # infrastructure implementations
 │       ├── sqlite/
 │       │   ├── db.go            # open, migrate, pragma setup
-│       │   ├── migrations/      # ordered SQL migration files
 │       │   ├── topic_repo.go
 │       │   ├── question_repo.go
 │       │   ├── session_repo.go

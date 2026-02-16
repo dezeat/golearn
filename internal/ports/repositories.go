@@ -26,3 +26,29 @@ type QuestionRepository interface {
 	// ListByTopic returns all questions for a given topic ID.
 	ListByTopic(topicID int64) ([]domain.Question, error)
 }
+
+// SessionRepository persists practice sessions.
+type SessionRepository interface {
+	// Create inserts a new session and returns its ID.
+	Create(session *domain.Session) (int64, error)
+
+	// Finish marks a session as ended (sets ended_at).
+	Finish(id int64) error
+}
+
+// QuestionStats holds aggregated attempt statistics for one question.
+type QuestionStats struct {
+	QuestionID int64
+	Attempts   int
+	Wrong      int
+}
+
+// AttemptRepository persists and queries attempts within sessions.
+type AttemptRepository interface {
+	// Record inserts a single attempt.
+	Record(attempt *domain.Attempt) error
+
+	// StatsByTopic returns per-question attempt stats for all
+	// questions in a topic, keyed by question ID.
+	StatsByTopic(topicID int64) (map[int64]QuestionStats, error)
+}
