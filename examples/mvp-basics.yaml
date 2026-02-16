@@ -1,0 +1,127 @@
+pack_version: "0.1.0"
+topic:
+  slug: "mvp-basics"
+  name: "MVP Basics"
+questions:
+  # Q1: single_select, with intro, 4 choices — Go basics
+  - type: "single_select"
+    intro: "In Go, multiple return values are a common pattern."
+    prompt: "What is the idiomatic way to signal an error from a Go function?"
+    choices:
+      - { id: "A", text: "Throw an exception" }
+      - { id: "B", text: "Return an error as the last return value" }
+      - { id: "C", text: "Set a global error variable" }
+      - { id: "D", text: "Use panic for all errors" }
+    correct_choice_ids: ["B"]
+    tags: ["go", "error-handling"]
+    difficulty: 1
+
+  # Q2: single_select, no intro, 2 choices (true/false style) — CLI
+  - type: "single_select"
+    prompt: "In most CLI tools, the flag '--help' is used to display usage information."
+    choices:
+      - { id: "A", text: "True" }
+      - { id: "B", text: "False" }
+    correct_choice_ids: ["A"]
+    tags: ["cli"]
+    difficulty: 1
+
+  # Q3: single_select, with intro, 4 choices — Databases
+  - type: "single_select"
+    intro: "SQLite is a self-contained, serverless SQL database engine."
+    prompt: "Which SQLite pragma enables Write-Ahead Logging for better concurrency?"
+    choices:
+      - { id: "A", text: "PRAGMA journal_mode=DELETE" }
+      - { id: "B", text: "PRAGMA journal_mode=WAL" }
+      - { id: "C", text: "PRAGMA synchronous=OFF" }
+      - { id: "D", text: "PRAGMA cache_size=1000" }
+    correct_choice_ids: ["B"]
+    tags: ["database", "sqlite"]
+    difficulty: 2
+
+  # Q4: single_select, no intro, 5 choices — General programming
+  - type: "single_select"
+    prompt: "Which data structure uses FIFO (First-In, First-Out) ordering?"
+    choices:
+      - { id: "A", text: "Stack" }
+      - { id: "B", text: "Queue" }
+      - { id: "C", text: "Binary tree" }
+      - { id: "D", text: "Hash map" }
+      - { id: "E", text: "Linked list" }
+    correct_choice_ids: ["B"]
+    tags: ["data-structures"]
+    difficulty: 1
+
+  # Q5: single_select, with intro, 4 choices — Concurrency
+  - type: "single_select"
+    intro: "Go provides built-in concurrency primitives."
+    prompt: "What is the primary mechanism for communication between goroutines in Go?"
+    choices:
+      - { id: "A", text: "Shared memory with locks" }
+      - { id: "B", text: "Channels" }
+      - { id: "C", text: "Callbacks" }
+      - { id: "D", text: "Thread pools" }
+    correct_choice_ids: ["B"]
+    tags: ["go", "concurrency"]
+    difficulty: 2
+
+  # Q6: multi_select, no intro, 4 choices — Go basics
+  - type: "multi_select"
+    prompt: "Which of the following are valid Go built-in types?"
+    choices:
+      - { id: "A", text: "int" }
+      - { id: "B", text: "float64" }
+      - { id: "C", text: "char" }
+      - { id: "D", text: "bool" }
+    correct_choice_ids: ["A", "B", "D"]
+    tags: ["go", "types"]
+    difficulty: 1
+
+  # Q7: multi_select, with intro, 5 choices — Databases
+  - type: "multi_select"
+    intro: "SQL databases support various constraint types to enforce data integrity."
+    prompt: "Which of these are valid SQL constraint types?"
+    choices:
+      - { id: "A", text: "PRIMARY KEY" }
+      - { id: "B", text: "FOREIGN KEY" }
+      - { id: "C", text: "UNIQUE" }
+      - { id: "D", text: "SORTED" }
+      - { id: "E", text: "NOT NULL" }
+    correct_choice_ids: ["A", "B", "C", "E"]
+    tags: ["database", "sql"]
+    difficulty: 2
+
+  # Q8: multi_select, no intro, 4 choices — Concurrency
+  - type: "multi_select"
+    prompt: "Which of these are common concurrency problems?"
+    choices:
+      - { id: "A", text: "Deadlock" }
+      - { id: "B", text: "Race condition" }
+      - { id: "C", text: "Garbage collection" }
+      - { id: "D", text: "Starvation" }
+    correct_choice_ids: ["A", "B", "D"]
+    tags: ["concurrency"]
+    difficulty: 3
+
+  # Q9: multi_select, with intro, 2 choices (true/false style) — CLI
+  - type: "multi_select"
+    intro: "Environment variables are commonly used to configure CLI applications."
+    prompt: "Which of these are valid ways to pass configuration to a CLI tool?"
+    choices:
+      - { id: "A", text: "Command-line flags" }
+      - { id: "B", text: "Environment variables" }
+    correct_choice_ids: ["A", "B"]
+    tags: ["cli", "configuration"]
+    difficulty: 1
+
+  # Q10: multi_select, no intro, 4 choices — General programming
+  - type: "multi_select"
+    prompt: "Which of these are considered good software engineering practices?"
+    choices:
+      - { id: "A", text: "Writing unit tests" }
+      - { id: "B", text: "Using version control" }
+      - { id: "C", text: "Hardcoding credentials in source" }
+      - { id: "D", text: "Code review before merging" }
+    correct_choice_ids: ["A", "B", "D"]
+    tags: ["best-practices"]
+    difficulty: 1

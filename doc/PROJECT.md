@@ -76,7 +76,6 @@ golearn/
 │   ├── workflow.md
 │   ├── project.md
 │   └── progress.md
-├── doc/
 │   └── SPEC.md                  # original specification
 ├── go.mod
 ├── go.sum

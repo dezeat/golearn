@@ -6,7 +6,7 @@ certification prep and learning new technologies.
 ## Features
 
 - **Import** question packs from YAML or JSON files
-- **Practice** in an interactive terminal UI with immediate feedback
+- **Practice** in an interactive Bubble Tea TUI with immediate feedback
 - **Track** your sessions, accuracy, and weak areas in SQLite
 - **Export** packs back to canonical format for sharing
 - **Deduplicate** questions automatically via content hashing
@@ -17,14 +17,17 @@ certification prep and learning new technologies.
 # Build
 make build
 
-# Import a question pack
-./bin/golearn import examples/go-basics.yaml
+# Import the built-in example pack (10 questions)
+./bin/golearn import examples/mvp-basics.yaml
 
-# Re-import — duplicates are skipped automatically
-./bin/golearn import examples/go-basics.yaml
-
-# Launch the TUI (coming soon)
+# Launch the interactive TUI
 ./bin/golearn tui
+
+# Or use the text-mode session runner
+./bin/golearn run mvp-basics --n 5
+
+# Export a topic back to a pack file
+./bin/golearn export mvp-basics --out out.yaml
 ```
 
 ## Requirements
@@ -43,7 +46,7 @@ internal/
   adapters/
     sqlite/               SQLite persistence + migrations
     pack/                 YAML/JSON pack reader
-    tui/                  Bubble Tea terminal UI (planned)
+    tui/                  Bubble Tea terminal UI
 examples/                 Sample question packs
 doc/                      Spec, workflow, project docs, progress
 ```
@@ -105,6 +108,31 @@ Import validates every question and reports errors with file path, question inde
 ```
 examples/bad.yaml: question[2].choices: must have >= 2 choices, got 1
 ```
+
+## Export
+
+```bash
+# Export a topic to YAML
+./bin/golearn export mvp-basics --out pack.yaml
+
+# Export to JSON
+./bin/golearn export mvp-basics --out pack.json --format json
+
+# Re-import the exported file — zero duplicates
+./bin/golearn import pack.yaml
+```
+
+## TUI
+
+```bash
+./bin/golearn tui
+```
+
+The TUI provides:
+- **Topic select** — browse topics with question counts and accuracy
+- **Session config** — choose number of questions
+- **Question screen** — navigate choices with ↑/↓, toggle with space, submit with enter
+- **Summary** — view total answered, correct count, and accuracy %
 
 ## Documentation
 

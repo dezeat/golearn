@@ -10,13 +10,14 @@ import (
 
 	"github.com/dezeat/golearn/internal/adapters/pack"
 	"github.com/dezeat/golearn/internal/adapters/sqlite"
+	"github.com/dezeat/golearn/internal/adapters/tui"
 	"github.com/dezeat/golearn/internal/app"
 )
 
 func main() {
 	dbPath := sqlite.DefaultDBPath()
 
-	// Parse global flags and find the subcommand manually.
+	// Parse global flags and find the subcommand.
 	args := os.Args[1:]
 	var subcommand string
 	var subArgs []string
@@ -34,7 +35,11 @@ func main() {
 			dbPath = arg[5:]
 			continue
 		}
-		if arg[0] == '-' {
+		if arg == "--help" || arg == "-h" || arg == "help" {
+			printUsage()
+			os.Exit(0)
+		}
+		if len(arg) > 0 && arg[0] == '-' {
 			continue // skip unknown flags
 		}
 		// First non-flag argument is the subcommand.
@@ -60,29 +65,43 @@ func main() {
 			os.Exit(1)
 		}
 	case "tui":
-		fmt.Println("TUI not yet implemented.")
+		if err := runTUI(dbPath); err != nil {
+			fmt.Fprintf(os.Stderr, "error: %v\n", err)
+			os.Exit(1)
+		}
 	case "export":
-		fmt.Println("Export not yet implemented.")
+		if err := runExport(dbPath, subArgs); err != nil {
+			fmt.Fprintf(os.Stderr, "error: %v\n", err)
+			os.Exit(1)
+		}
 	default:
-		fmt.Fprintf(os.Stderr, "unknown command: %s\n", subcommand)
+		fmt.Fprintf(os.Stderr, "error: unknown command %q\n\n", subcommand)
 		printUsage()
 		os.Exit(1)
 	}
 }
 
 func printUsage() {
-	fmt.Println("golearn — MCQ practice tool")
+	fmt.Println("golearn — local-first MCQ practice tool")
 	fmt.Println()
 	fmt.Println("Usage: golearn [--db <path>] <command> [args]")
 	fmt.Println()
 	fmt.Println("Commands:")
-	fmt.Println("  import <path>           Import a question pack file or directory")
-	fmt.Println("  run <topic-slug> [--n]  Start a practice session")
-	fmt.Println("  tui                     Launch the interactive TUI")
-	fmt.Println("  export                  Export a topic to a pack file")
+	fmt.Println("  import <path>                          Import a question pack file or directory")
+	fmt.Println("  run <topic-slug> [--n N]               Start a practice session (text mode)")
+	fmt.Println("  tui                                    Launch the interactive TUI")
+	fmt.Println("  export <topic-slug> --out <path>       Export a topic to a pack file")
+	fmt.Println("  help                                   Show this help message")
 	fmt.Println()
 	fmt.Println("Flags:")
 	fmt.Printf("  --db <path>     SQLite database path (default: %s)\n", sqlite.DefaultDBPath())
+	fmt.Println()
+	fmt.Println("Examples:")
+	fmt.Println("  golearn import examples/mvp-basics.yaml")
+	fmt.Println("  golearn tui")
+	fmt.Println("  golearn run go-basics --n 5")
+	fmt.Println("  golearn export mvp-basics --out out.yaml")
+	fmt.Println("  golearn export mvp-basics --out out.json --format json")
 }
 
 func runImport(dbPath string, args []string) error {
@@ -123,6 +142,81 @@ func runImport(dbPath string, args []string) error {
 	}
 
 	return err
+}
+
+// runTUI launches the Bubble Tea interactive terminal UI.
+func runTUI(dbPath string) error {
+	db, err := sqlite.Open(dbPath)
+	if err != nil {
+		return fmt.Errorf("open database: %w", err)
+	}
+	defer db.Close()
+
+	return tui.Run(db)
+}
+
+// runExport implements the `golearn export <topic-slug> --out <path> [--format yaml|json]` command.
+func runExport(dbPath string, args []string) error {
+	var topicSlug, outPath, format string
+
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		switch {
+		case arg == "--out" || arg == "-out" || arg == "-o":
+			if i+1 < len(args) {
+				outPath = args[i+1]
+				i++
+			}
+		case strings.HasPrefix(arg, "--out="):
+			outPath = arg[6:]
+		case arg == "--format" || arg == "-format" || arg == "-f":
+			if i+1 < len(args) {
+				format = args[i+1]
+				i++
+			}
+		case strings.HasPrefix(arg, "--format="):
+			format = arg[9:]
+		case len(arg) > 0 && arg[0] == '-':
+			// skip unknown flags
+		default:
+			if topicSlug == "" {
+				topicSlug = arg
+			}
+		}
+	}
+
+	if topicSlug == "" {
+		return fmt.Errorf("usage: golearn export <topic-slug> --out <path> [--format yaml|json]")
+	}
+	if outPath == "" {
+		return fmt.Errorf("--out <path> is required\n\nUsage: golearn export <topic-slug> --out <path> [--format yaml|json]")
+	}
+
+	// Infer format from file extension if not specified.
+	if format == "" {
+		if strings.HasSuffix(strings.ToLower(outPath), ".json") {
+			format = "json"
+		} else {
+			format = "yaml"
+		}
+	}
+
+	db, err := sqlite.Open(dbPath)
+	if err != nil {
+		return fmt.Errorf("open database: %w", err)
+	}
+	defer db.Close()
+
+	topicRepo := sqlite.NewTopicRepo(db)
+	questionRepo := sqlite.NewQuestionRepo(db)
+
+	svc := app.NewExportService(topicRepo, questionRepo)
+	if err := svc.Export(topicSlug, outPath, format); err != nil {
+		return err
+	}
+
+	fmt.Printf("Exported topic %q to %s\n", topicSlug, outPath)
+	return nil
 }
 
 // runSession implements the `golearn run <topic-slug> [--n N]` command.

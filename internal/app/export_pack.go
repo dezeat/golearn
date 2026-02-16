@@ -1,0 +1,229 @@
+// Package app — export_pack.go implements the export use case.
+//
+// Exports all questions for a given topic from the database back
+// to the canonical pack file format (YAML or JSON). Questions are
+// sorted deterministically by created_at ASC, then by hash for
+// tie-breaking, ensuring byte-stable output for the same data.
+package app
+
+import (
+	"encoding/json"
+	"fmt"
+	"os"
+	"path/filepath"
+	"sort"
+	"strings"
+
+	"gopkg.in/yaml.v3"
+
+	"github.com/dezeat/golearn/internal/domain"
+	"github.com/dezeat/golearn/internal/ports"
+)
+
+// ExportService handles the export use case.
+type ExportService struct {
+	topics    ports.TopicRepository
+	questions ports.QuestionRepository
+}
+
+// NewExportService creates an export service with the given dependencies.
+func NewExportService(topics ports.TopicRepository, questions ports.QuestionRepository) *ExportService {
+	return &ExportService{topics: topics, questions: questions}
+}
+
+// Export writes the canonical pack file for the given topic slug.
+// format must be "yaml" or "json". outPath is the destination file.
+func (s *ExportService) Export(topicSlug, outPath, format string) error {
+	if format == "" {
+		format = "yaml"
+	}
+	format = strings.ToLower(format)
+	if format != "yaml" && format != "json" {
+		return fmt.Errorf("unsupported export format %q (must be yaml or json)", format)
+	}
+
+	// Resolve topic by slug.
+	topic, err := s.findTopic(topicSlug)
+	if err != nil {
+		return err
+	}
+
+	// Load all questions for the topic.
+	questions, err := s.questions.ListByTopic(topic.ID)
+	if err != nil {
+		return fmt.Errorf("list questions for topic %q: %w", topicSlug, err)
+	}
+	if len(questions) == 0 {
+		return fmt.Errorf("topic %q has no questions to export", topicSlug)
+	}
+
+	// Deterministic ordering: created_at ASC, then hash ASC for tie-breaking.
+	sort.Slice(questions, func(i, j int) bool {
+		if questions[i].CreatedAt.Equal(questions[j].CreatedAt) {
+			return questions[i].Hash < questions[j].Hash
+		}
+		return questions[i].CreatedAt.Before(questions[j].CreatedAt)
+	})
+
+	// Build the canonical pack structure.
+	pack := domain.Pack{
+		PackVersion: "0.1.0",
+		Topic: domain.PackTopic{
+			Slug: topic.Slug,
+			Name: topic.Name,
+		},
+		Questions: make([]domain.PackQuestion, 0, len(questions)),
+	}
+
+	for _, q := range questions {
+		pq := domain.PackQuestion{
+			Type:             q.Type,
+			Prompt:           q.Prompt,
+			Choices:          q.Choices,
+			CorrectChoiceIDs: q.CorrectChoiceIDs,
+		}
+		// Only include optional fields when they have meaningful values.
+		if q.Intro != "" {
+			pq.Intro = q.Intro
+		}
+		if len(q.Tags) > 0 {
+			pq.Tags = q.Tags
+		}
+		if q.Difficulty > 0 {
+			pq.Difficulty = q.Difficulty
+		}
+		if q.Source != "" && q.Source != "manual:file" {
+			pq.Source = q.Source
+		}
+		if q.SourceRef != "" {
+			pq.SourceRef = q.SourceRef
+		}
+		if q.Confidence != 1.0 {
+			conf := q.Confidence
+			pq.Confidence = &conf
+		}
+		pack.Questions = append(pack.Questions, pq)
+	}
+
+	// Serialise to the requested format.
+	var data []byte
+	switch format {
+	case "yaml":
+		data, err = yaml.Marshal(&pack)
+	case "json":
+		data, err = json.MarshalIndent(&pack, "", "  ")
+		if err == nil {
+			data = append(data, '\n') // trailing newline for JSON
+		}
+	}
+	if err != nil {
+		return fmt.Errorf("marshal pack as %s: %w", format, err)
+	}
+
+	// Ensure the output directory exists.
+	dir := filepath.Dir(outPath)
+	if dir != "" && dir != "." {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			return fmt.Errorf("create output directory %s: %w", dir, err)
+		}
+	}
+
+	if err := os.WriteFile(outPath, data, 0o644); err != nil {
+		return fmt.Errorf("write export file %s: %w", outPath, err)
+	}
+
+	return nil
+}
+
+// ExportToBytes returns the serialised pack as bytes (for testing).
+func (s *ExportService) ExportToBytes(topicSlug, format string) ([]byte, error) {
+	if format == "" {
+		format = "yaml"
+	}
+	format = strings.ToLower(format)
+
+	topic, err := s.findTopic(topicSlug)
+	if err != nil {
+		return nil, err
+	}
+
+	questions, err := s.questions.ListByTopic(topic.ID)
+	if err != nil {
+		return nil, fmt.Errorf("list questions for topic %q: %w", topicSlug, err)
+	}
+	if len(questions) == 0 {
+		return nil, fmt.Errorf("topic %q has no questions to export", topicSlug)
+	}
+
+	sort.Slice(questions, func(i, j int) bool {
+		if questions[i].CreatedAt.Equal(questions[j].CreatedAt) {
+			return questions[i].Hash < questions[j].Hash
+		}
+		return questions[i].CreatedAt.Before(questions[j].CreatedAt)
+	})
+
+	pack := domain.Pack{
+		PackVersion: "0.1.0",
+		Topic: domain.PackTopic{
+			Slug: topic.Slug,
+			Name: topic.Name,
+		},
+		Questions: make([]domain.PackQuestion, 0, len(questions)),
+	}
+
+	for _, q := range questions {
+		pq := domain.PackQuestion{
+			Type:             q.Type,
+			Prompt:           q.Prompt,
+			Choices:          q.Choices,
+			CorrectChoiceIDs: q.CorrectChoiceIDs,
+		}
+		if q.Intro != "" {
+			pq.Intro = q.Intro
+		}
+		if len(q.Tags) > 0 {
+			pq.Tags = q.Tags
+		}
+		if q.Difficulty > 0 {
+			pq.Difficulty = q.Difficulty
+		}
+		if q.Source != "" && q.Source != "manual:file" {
+			pq.Source = q.Source
+		}
+		if q.SourceRef != "" {
+			pq.SourceRef = q.SourceRef
+		}
+		if q.Confidence != 1.0 {
+			conf := q.Confidence
+			pq.Confidence = &conf
+		}
+		pack.Questions = append(pack.Questions, pq)
+	}
+
+	switch format {
+	case "yaml":
+		return yaml.Marshal(&pack)
+	case "json":
+		data, err := json.MarshalIndent(&pack, "", "  ")
+		if err != nil {
+			return nil, err
+		}
+		return append(data, '\n'), nil
+	default:
+		return nil, fmt.Errorf("unsupported format %q", format)
+	}
+}
+
+// findTopic resolves a topic by slug from the repository.
+func (s *ExportService) findTopic(slug string) (*domain.Topic, error) {
+	topics, err := s.topics.List()
+	if err != nil {
+		return nil, fmt.Errorf("list topics: %w", err)
+	}
+	for i := range topics {
+		if topics[i].Slug == slug {
+			return &topics[i], nil
+		}
+	}
+	return nil, fmt.Errorf("topic %q not found", slug)
+}
