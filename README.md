@@ -20,7 +20,10 @@ make build
 # Import a question pack
 ./bin/golearn import examples/go-basics.yaml
 
-# Launch the TUI
+# Re-import — duplicates are skipped automatically
+./bin/golearn import examples/go-basics.yaml
+
+# Launch the TUI (coming soon)
 ./bin/golearn tui
 ```
 
@@ -32,17 +35,17 @@ make build
 ## Project Structure
 
 ```
-cmd/golearn/          CLI entrypoint
+cmd/golearn/              CLI entrypoint
 internal/
-  domain/             Pure domain types, validation, hashing
-  ports/              Interfaces (repositories, pack source, selector)
-  app/                Use cases (import, export, session, selection)
+  domain/                 Pure domain types, validation, hashing
+  ports/                  Interfaces (repositories, pack source)
+  app/                    Use cases (import, export, session)
   adapters/
-    sqlite/           SQLite persistence
-    pack/             YAML/JSON pack reader/writer
-    tui/              Bubble Tea terminal UI
-examples/             Sample question packs
-docs/                 Agent workflow, project spec, progress tracking
+    sqlite/               SQLite persistence + migrations
+    pack/                 YAML/JSON pack reader
+    tui/                  Bubble Tea terminal UI (planned)
+examples/                 Sample question packs
+doc/                      Spec, workflow, project docs, progress
 ```
 
 ## Development
@@ -50,9 +53,10 @@ docs/                 Agent workflow, project spec, progress tracking
 ```bash
 make build      # compile to ./bin/golearn
 make test       # run all tests
-make lint       # golangci-lint (if installed)
+make fmt        # check gofmt formatting
 make vet        # go vet
-make check      # vet + lint + test (CI gate)
+make lint       # golangci-lint (if installed)
+make check      # fmt + vet + lint + test (CI gate)
 make clean      # remove build artifacts
 ```
 
@@ -81,15 +85,34 @@ questions:
     correct_choice_ids: ["B"]
 ```
 
-See [docs/project.md](docs/project.md) for the full schema and validation rules.
+See [doc/PROJECT.md](doc/PROJECT.md) for the full schema and validation rules.
+
+## Import
+
+```bash
+# Import a single file
+./bin/golearn import examples/go-basics.yaml
+
+# Import all packs in a directory
+./bin/golearn import path/to/packs/
+
+# Use a custom DB path
+./bin/golearn --db /tmp/test.db import examples/go-basics.yaml
+```
+
+Import validates every question and reports errors with file path, question index, and field:
+
+```
+examples/bad.yaml: question[2].choices: must have >= 2 choices, got 1
+```
 
 ## Documentation
 
 | Document                              | Purpose                              |
 |---------------------------------------|--------------------------------------|
-| [docs/project.md](docs/project.md)    | Technical spec, data model, pack schema |
-| [docs/workflow.md](docs/workflow.md)  | Agent workflow and code standards     |
-| [docs/progress.md](docs/progress.md) | Status, changelog, milestones         |
+| [doc/PROJECT.md](doc/PROJECT.md)      | Technical spec, data model, pack schema |
+| [doc/WORKFLOW.md](doc/WORKFLOW.md)    | Agent workflow and code standards     |
+| [doc/PROGRESS.md](doc/PROGRESS.md)   | Status, changelog, milestones         |
 | [doc/SPEC.md](doc/SPEC.md)           | Original design specification         |
 
 ## License

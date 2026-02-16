@@ -1,0 +1,101 @@
+// Package domain defines the core types for golearn.
+// All types here are persistence-agnostic.
+package domain
+
+import "time"
+
+// QuestionType enumerates supported MCQ types.
+type QuestionType string
+
+const (
+	SingleSelect QuestionType = "single_select"
+	MultiSelect  QuestionType = "multi_select"
+)
+
+// Choice represents one option in a multiple-choice question.
+type Choice struct {
+	ID   string `json:"id"   yaml:"id"`
+	Text string `json:"text" yaml:"text"`
+}
+
+// Rationale holds optional explanation text (reserved for future use).
+type Rationale struct {
+	Correct   string            `json:"correct,omitempty"   yaml:"correct,omitempty"`
+	PerChoice map[string]string `json:"per_choice,omitempty" yaml:"per_choice,omitempty"`
+}
+
+// Topic groups questions under a named category.
+type Topic struct {
+	ID   int64  `json:"id"`
+	Slug string `json:"slug"`
+	Name string `json:"name"`
+}
+
+// Question is the canonical MCQ domain model.
+type Question struct {
+	ID               int64        `json:"id"`
+	TopicID          int64        `json:"topic_id"`
+	Type             QuestionType `json:"type"`
+	Intro            string       `json:"intro,omitempty"`
+	Prompt           string       `json:"prompt"`
+	Choices          []Choice     `json:"choices"`
+	CorrectChoiceIDs []string     `json:"correct_choice_ids"`
+	Tags             []string     `json:"tags,omitempty"`
+	Difficulty       int          `json:"difficulty,omitempty"`
+	Rationale        Rationale    `json:"rationale,omitempty"`
+	Source           string       `json:"source,omitempty"`
+	SourceRef        string       `json:"source_ref,omitempty"`
+	Confidence       float64      `json:"confidence"`
+	Hash             string       `json:"hash"`
+	CreatedAt        time.Time    `json:"created_at"`
+}
+
+// Session tracks a practice or exam run (stubbed for future use).
+type Session struct {
+	ID         int64      `json:"id"`
+	TopicID    int64      `json:"topic_id"`
+	Mode       string     `json:"mode"`
+	RequestedN int        `json:"requested_n"`
+	StartedAt  time.Time  `json:"started_at"`
+	EndedAt    *time.Time `json:"ended_at,omitempty"`
+}
+
+// Attempt records a single answer within a session (stubbed for future use).
+type Attempt struct {
+	ID                int64     `json:"id"`
+	SessionID         int64     `json:"session_id"`
+	QuestionID        int64     `json:"question_id"`
+	SelectedChoiceIDs []string  `json:"selected_choice_ids"`
+	Correct           bool      `json:"correct"`
+	Skipped           bool      `json:"skipped"`
+	LatencyMs         int       `json:"latency_ms"`
+	CreatedAt         time.Time `json:"created_at"`
+}
+
+// Pack is the in-memory representation of a question pack file.
+type Pack struct {
+	PackVersion string         `json:"pack_version" yaml:"pack_version"`
+	Topic       PackTopic      `json:"topic"        yaml:"topic"`
+	Questions   []PackQuestion `json:"questions" yaml:"questions"`
+}
+
+// PackTopic identifies the topic inside a pack file.
+type PackTopic struct {
+	Slug string `json:"slug" yaml:"slug"`
+	Name string `json:"name" yaml:"name"`
+}
+
+// PackQuestion is the per-question schema inside a pack file.
+type PackQuestion struct {
+	Type             QuestionType `json:"type"               yaml:"type"`
+	Intro            string       `json:"intro,omitempty"    yaml:"intro,omitempty"`
+	Prompt           string       `json:"prompt"             yaml:"prompt"`
+	Choices          []Choice     `json:"choices"            yaml:"choices"`
+	CorrectChoiceIDs []string     `json:"correct_choice_ids" yaml:"correct_choice_ids"`
+	Tags             []string     `json:"tags,omitempty"     yaml:"tags,omitempty"`
+	Difficulty       int          `json:"difficulty,omitempty" yaml:"difficulty,omitempty"`
+	Rationale        *Rationale   `json:"rationale,omitempty"  yaml:"rationale,omitempty"`
+	Source           string       `json:"source,omitempty"   yaml:"source,omitempty"`
+	SourceRef        string       `json:"source_ref,omitempty" yaml:"source_ref,omitempty"`
+	Confidence       *float64     `json:"confidence,omitempty" yaml:"confidence,omitempty"`
+}

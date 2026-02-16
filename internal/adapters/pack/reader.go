@@ -1,0 +1,77 @@
+// Package pack implements reading question pack files (YAML / JSON).
+package pack
+
+import (
+	"encoding/json"
+	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
+
+	"gopkg.in/yaml.v3"
+
+	"github.com/dezeat/golearn/internal/domain"
+)
+
+// Reader reads pack files from disk.
+type Reader struct{}
+
+// NewReader creates a new pack reader.
+func NewReader() *Reader {
+	return &Reader{}
+}
+
+// ReadPack parses a single YAML or JSON pack file.
+func (r *Reader) ReadPack(path string) (*domain.Pack, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("read pack file %s: %w", path, err)
+	}
+
+	ext := strings.ToLower(filepath.Ext(path))
+	var pack domain.Pack
+
+	switch ext {
+	case ".yaml", ".yml":
+		if err := yaml.Unmarshal(data, &pack); err != nil {
+			return nil, fmt.Errorf("parse YAML %s: %w", path, err)
+		}
+	case ".json":
+		if err := json.Unmarshal(data, &pack); err != nil {
+			return nil, fmt.Errorf("parse JSON %s: %w", path, err)
+		}
+	default:
+		return nil, fmt.Errorf("unsupported file extension %q (expected .yaml, .yml, or .json)", ext)
+	}
+
+	return &pack, nil
+}
+
+// ReadDirectory reads all pack files (*.yaml, *.yml, *.json) from a directory.
+func (r *Reader) ReadDirectory(dir string) ([]*domain.Pack, []error) {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return nil, []error{fmt.Errorf("read directory %s: %w", dir, err)}
+	}
+
+	var packs []*domain.Pack
+	var errs []error
+
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		ext := strings.ToLower(filepath.Ext(entry.Name()))
+		if ext != ".yaml" && ext != ".yml" && ext != ".json" {
+			continue
+		}
+		p, err := r.ReadPack(filepath.Join(dir, entry.Name()))
+		if err != nil {
+			errs = append(errs, err)
+			continue
+		}
+		packs = append(packs, p)
+	}
+
+	return packs, errs
+}

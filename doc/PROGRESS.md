@@ -4,26 +4,44 @@
 
 | Area            | Status           | Notes                                |
 |-----------------|------------------|--------------------------------------|
-| Documentation   | ✅ Done          | `workflow.md`, `project.md`, `progress.md` created |
-| Go module       | ✅ Scaffold      | `go.mod` initialised; stub `main.go` |
-| Domain models   | 🔲 Not started   |                                      |
-| Ports/interfaces| 🔲 Not started   |                                      |
-| SQLite adapter  | 🔲 Not started   |                                      |
-| Pack import     | 🔲 Not started   |                                      |
+| Documentation   | ✅ Done          | `WORKFLOW.md`, `PROJECT.md`, `PROGRESS.md` |
+| Go module       | ✅ Done          | `go.mod` with yaml.v3 + modernc.org/sqlite |
+| Domain models   | ✅ Done          | `models.go`, `validation.go`, `hashing.go` |
+| Ports/interfaces| ✅ Done          | `repositories.go`, `sources.go`      |
+| Pack reader     | ✅ Done          | YAML + JSON parsing                  |
+| SQLite adapter  | ✅ Done          | DB open, migrations, topic + question repos |
+| Import use case | ✅ Done          | Validate → normalise → hash → dedupe → insert |
+| CLI (import)    | ✅ Done          | `golearn import <path>` with `--db` flag |
+| Tests           | ✅ Done          | Validation, hashing, SQLite dedupe   |
+| Makefile        | ✅ Done          | `fmt`, `vet`, `lint`, `test`, `check` |
 | Pack export     | 🔲 Not started   |                                      |
 | Session engine  | 🔲 Not started   |                                      |
 | TUI             | 🔲 Not started   |                                      |
-| Makefile        | ✅ Scaffold      | `build`, `test`, `lint`, `check`     |
 
 ---
 
 ## Changelog
 
+### 2026-02-16 — Foundation layer
+
+- Implemented domain models: `Topic`, `Question`, `Session`, `Attempt`, `Pack*` types
+- Implemented validation (7 rules): type, prompt, choices ≥2, unique IDs, correct refs, single_select count
+- Implemented stable hashing: SHA-256 over normalised content with null-byte separators
+- Implemented normalisation: whitespace trim, `\r\n` → `\n`
+- Defined port interfaces: `TopicRepository`, `QuestionRepository`, `PackReader`
+- Implemented pack reader adapter: YAML (`yaml.v3`) + JSON, file + directory support
+- Implemented SQLite adapter: `Open()` with WAL + FK pragmas, embedded migrations
+- Implemented SQLite repos: `TopicRepo` (upsert by slug), `QuestionRepo` (INSERT OR IGNORE by hash)
+- Implemented import use case: parse → normalise → validate → hash → upsert topic → insert questions
+- Wired CLI: `golearn import <path>` with `--db` flag (default `~/.golearn/golearn.db`)
+- Added unit tests: validation (good + bad), hashing stability, SQLite insert + dedupe
+- Updated Makefile: added `fmt` target, `check` = fmt + vet + lint + test
+- Updated `.gitignore`: added `.golearn/`, `bin/`, `dist/`, `tmp/`
+- Dependencies: `gopkg.in/yaml.v3`, `modernc.org/sqlite` (CGo-free)
+
 ### 2026-02-16 — Initial scaffold
 
-- Created `docs/workflow.md` — agent workflow and code standards
-- Created `docs/project.md` — technical spec, data model, pack schema
-- Created `docs/progress.md` — this file
+- Created `doc/WORKFLOW.md`, `PROJECT.md`, `PROGRESS.md`
 - Created `README.md` with project overview and quickstart
 - Initialised `go.mod` (`github.com/dezeat/golearn`)
 - Added stub `cmd/golearn/main.go`
@@ -34,25 +52,13 @@
 
 ## Next Milestones
 
-### Milestone 1 — Foundation
+### Milestone 2 — Export + Session Engine
 
-- [ ] Domain models (`internal/domain/models.go`)
-- [ ] Validation logic (`internal/domain/validation.go`)
-- [ ] Stable hashing (`internal/domain/hashing.go`)
-- [ ] Port interfaces (`internal/ports/`)
-- [ ] SQLite adapter: open, migrate, WAL pragma (`internal/adapters/sqlite/db.go`)
-- [ ] SQLite repo implementations (topic, question)
-- [ ] Unit tests for domain + hashing
-
-### Milestone 2 — Import / Export + Session Engine
-
-- [ ] Pack reader: YAML + JSON (`internal/adapters/pack/`)
-- [ ] Import use case with validation + dedup (`internal/app/import_pack.go`)
 - [ ] Export use case with stable ordering (`internal/app/export_pack.go`)
 - [ ] Session + attempt repos (SQLite)
 - [ ] Question selector (unseen → weak → random fill)
 - [ ] `start_session` + `record_attempt` use cases
-- [ ] CLI wiring: `golearn import`, `golearn export`
+- [ ] CLI wiring: `golearn export`
 
 ### Milestone 3 — TUI + Polish
 
@@ -66,10 +72,10 @@
 
 ## Technical Debt Log
 
-| ID  | Area            | Description                                         | Priority |
-|-----|-----------------|-----------------------------------------------------|----------|
-| D1  | Lint            | `golangci-lint` config not yet created (`.golangci.yml`) | Medium  |
-| D2  | Export ordering  | Need to decide and document canonical sort column (`created_at` vs `id`) | Medium |
-| D3  | Export versioning| Pack format is `0.1.0`; no migration strategy yet for schema changes | Low |
-| D4  | Migrations       | No migration tool chosen yet; evaluate `golang-migrate` vs embedded SQL | Medium |
-| D5  | CLI framework    | `cobra` vs stdlib `flag` not decided                | Low      |
+| ID  | Area             | Description                                         | Priority |
+|-----|------------------|-----------------------------------------------------|----------|
+| D1  | Lint             | `golangci-lint` config not yet created (`.golangci.yml`) | Medium  |
+| D2  | Export ordering  | Need to decide canonical sort column (`created_at` vs `id`) | Medium |
+| D3  | Export versioning| Pack format `0.1.0`; no migration strategy yet for schema changes | Low |
+| D4  | CLI framework    | Using manual arg parsing; consider `cobra` for subcommands | Low |
+| D5  | Error reporting  | Pack-level errors stop the file; consider partial import | Low |

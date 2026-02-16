@@ -1,8 +1,12 @@
-.PHONY: build test vet lint check clean
+.PHONY: build test vet lint fmt check clean run
 
 BINARY  := golearn
 BIN_DIR := ./bin
 SRC     := ./cmd/golearn
+
+## run: run without building
+run:
+	go run $(SRC)/main.go
 
 ## build: compile the golearn binary
 build:
@@ -17,6 +21,10 @@ test:
 vet:
 	go vet ./...
 
+## fmt: check formatting (fails if files need formatting)
+fmt:
+	@test -z "$$(gofmt -l .)" || { echo "Files need formatting:"; gofmt -l .; exit 1; }
+
 ## lint: run golangci-lint (install separately)
 lint:
 	@if command -v golangci-lint >/dev/null 2>&1; then \
@@ -25,8 +33,8 @@ lint:
 		echo "golangci-lint not installed — skipping"; \
 	fi
 
-## check: full CI gate (vet + lint + test)
-check: vet lint test
+## check: full CI gate (fmt + vet + lint + test)
+check: fmt vet lint test
 
 ## clean: remove build artifacts
 clean:
