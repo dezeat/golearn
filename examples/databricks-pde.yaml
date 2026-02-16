@@ -1,0 +1,406 @@
+pack_version: "0.1.0"
+topic:
+  slug: "databricks-pde"
+  name: "Databricks Professional Data Engineer"
+questions:
+  # ── Auto Loader ──────────────────────────────────────────────
+
+  - type: "single_select"
+    intro: "Auto Loader incrementally processes new data files as they arrive in cloud storage."
+    prompt: "Which Spark reader format does Auto Loader use in a Structured Streaming query?"
+    choices:
+      - { id: "A", text: "cloudFiles" }
+      - { id: "B", text: "autoLoader" }
+      - { id: "C", text: "deltaStream" }
+      - { id: "D", text: "fileStream" }
+    correct_choice_ids: ["A"]
+    tags: ["auto-loader", "structured-streaming"]
+    difficulty: 1
+    source_ref: "https://docs.databricks.com/en/ingestion/auto-loader/index.html"
+
+  - type: "single_select"
+    intro: "Auto Loader supports two modes for detecting new files."
+    prompt: "Which Auto Loader file notification mode uses cloud events to detect new files instead of listing the directory?"
+    choices:
+      - { id: "A", text: "Directory listing mode" }
+      - { id: "B", text: "File notification mode" }
+      - { id: "C", text: "Trigger mode" }
+      - { id: "D", text: "Polling mode" }
+    correct_choice_ids: ["B"]
+    tags: ["auto-loader"]
+    difficulty: 2
+    source_ref: "https://docs.databricks.com/en/ingestion/auto-loader/file-notification-mode.html"
+
+  - type: "single_select"
+    prompt: "What option in Auto Loader enables automatic inference and evolution of the schema as new data arrives?"
+    choices:
+      - { id: "A", text: "cloudFiles.inferColumnTypes" }
+      - { id: "B", text: "cloudFiles.schemaEvolutionMode" }
+      - { id: "C", text: "cloudFiles.schemaLocation" }
+      - { id: "D", text: "cloudFiles.autoSchema" }
+    correct_choice_ids: ["A"]
+    tags: ["auto-loader", "schema-evolution"]
+    difficulty: 2
+    source_ref: "https://docs.databricks.com/en/ingestion/auto-loader/schema.html"
+
+  # ── Delta Lake ───────────────────────────────────────────────
+
+  - type: "single_select"
+    intro: "Delta Lake stores metadata in a transaction log directory."
+    prompt: "What is the name of the directory where Delta Lake stores its transaction log?"
+    choices:
+      - { id: "A", text: "_delta_log" }
+      - { id: "B", text: "_transaction_log" }
+      - { id: "C", text: "_metadata" }
+      - { id: "D", text: "_commits" }
+    correct_choice_ids: ["A"]
+    tags: ["delta-lake", "transaction-log"]
+    difficulty: 1
+    source_ref: "https://docs.databricks.com/en/delta/index.html"
+
+  - type: "single_select"
+    prompt: "How often does Delta Lake create a checkpoint file to summarize the transaction log?"
+    choices:
+      - { id: "A", text: "Every 5 commits" }
+      - { id: "B", text: "Every 10 commits" }
+      - { id: "C", text: "Every 50 commits" }
+      - { id: "D", text: "Every 100 commits" }
+    correct_choice_ids: ["B"]
+    tags: ["delta-lake", "checkpointing"]
+    difficulty: 2
+    source_ref: "https://docs.databricks.com/en/delta/index.html"
+
+  - type: "single_select"
+    intro: "Delta Lake provides ACID transactions on data lakes."
+    prompt: "Which isolation level does Delta Lake use by default for write operations?"
+    choices:
+      - { id: "A", text: "Read Committed" }
+      - { id: "B", text: "Serializable" }
+      - { id: "C", text: "WriteSerializable" }
+      - { id: "D", text: "Snapshot Isolation" }
+    correct_choice_ids: ["C"]
+    tags: ["delta-lake", "isolation-levels"]
+    difficulty: 3
+    source_ref: "https://docs.databricks.com/en/delta/isolation-level.html"
+
+  - type: "single_select"
+    prompt: "What happens when you run VACUUM on a Delta table with a retention period of 0 hours?"
+    choices:
+      - { id: "A", text: "It deletes all data files" }
+      - { id: "B", text: "It fails with an error unless you set spark.databricks.delta.retentionDurationCheck.enabled to false" }
+      - { id: "C", text: "It only removes the transaction log" }
+      - { id: "D", text: "It automatically sets retention to 7 days" }
+    correct_choice_ids: ["B"]
+    tags: ["delta-lake", "vacuum"]
+    difficulty: 3
+    source_ref: "https://docs.databricks.com/en/delta/vacuum.html"
+
+  - type: "single_select"
+    prompt: "What is the default retention period for VACUUM on a Delta table?"
+    choices:
+      - { id: "A", text: "24 hours" }
+      - { id: "B", text: "48 hours" }
+      - { id: "C", text: "7 days" }
+      - { id: "D", text: "30 days" }
+    correct_choice_ids: ["C"]
+    tags: ["delta-lake", "vacuum"]
+    difficulty: 2
+    source_ref: "https://docs.databricks.com/en/delta/vacuum.html"
+
+  # ── ZORDER & Optimization ───────────────────────────────────
+
+  - type: "single_select"
+    intro: "OPTIMIZE compacts small files in a Delta table for better read performance."
+    prompt: "What does ZORDER BY do when used with the OPTIMIZE command on a Delta table?"
+    choices:
+      - { id: "A", text: "Sorts data globally across all files" }
+      - { id: "B", text: "Co-locates related data in the same set of files to improve data skipping" }
+      - { id: "C", text: "Creates a secondary index on the specified columns" }
+      - { id: "D", text: "Partitions the table by the specified columns" }
+    correct_choice_ids: ["B"]
+    tags: ["delta-lake", "zorder", "optimization"]
+    difficulty: 2
+    source_ref: "https://docs.databricks.com/en/delta/optimize.html"
+
+  - type: "single_select"
+    prompt: "Which Delta Lake feature automatically compacts small files without requiring manual OPTIMIZE commands?"
+    choices:
+      - { id: "A", text: "Auto Compaction" }
+      - { id: "B", text: "Auto Loader" }
+      - { id: "C", text: "Z-Ordering" }
+      - { id: "D", text: "Data Skipping" }
+    correct_choice_ids: ["A"]
+    tags: ["delta-lake", "optimization", "auto-compaction"]
+    difficulty: 2
+    source_ref: "https://docs.databricks.com/en/delta/optimize.html"
+
+  # ── Structured Streaming ─────────────────────────────────────
+
+  - type: "single_select"
+    intro: "Structured Streaming uses checkpointing to track the progress of a streaming query."
+    prompt: "What is the purpose of the checkpoint location in a Structured Streaming query?"
+    choices:
+      - { id: "A", text: "To store the output data" }
+      - { id: "B", text: "To track query progress and enable fault-tolerant recovery" }
+      - { id: "C", text: "To cache intermediate results in memory" }
+      - { id: "D", text: "To store the query execution plan" }
+    correct_choice_ids: ["B"]
+    tags: ["structured-streaming", "checkpointing"]
+    difficulty: 2
+    source_ref: "https://docs.databricks.com/en/structured-streaming/index.html"
+
+  - type: "single_select"
+    prompt: "In Structured Streaming, which output mode writes only the rows that have changed since the last trigger?"
+    choices:
+      - { id: "A", text: "Complete mode" }
+      - { id: "B", text: "Append mode" }
+      - { id: "C", text: "Update mode" }
+      - { id: "D", text: "Delta mode" }
+    correct_choice_ids: ["C"]
+    tags: ["structured-streaming", "output-modes"]
+    difficulty: 2
+    source_ref: "https://docs.databricks.com/en/structured-streaming/index.html"
+
+  - type: "single_select"
+    intro: "Watermarks allow Structured Streaming to handle late-arriving data."
+    prompt: "What does a watermark define in a Structured Streaming query?"
+    choices:
+      - { id: "A", text: "The maximum number of records to process per batch" }
+      - { id: "B", text: "The threshold for how late data can arrive and still be included in stateful aggregations" }
+      - { id: "C", text: "The frequency at which checkpoint files are created" }
+      - { id: "D", text: "The partition strategy for the output table" }
+    correct_choice_ids: ["B"]
+    tags: ["structured-streaming", "watermarks"]
+    difficulty: 3
+    source_ref: "https://docs.databricks.com/en/structured-streaming/watermarks.html"
+
+  - type: "single_select"
+    prompt: "Which trigger option in Structured Streaming processes all available data in a single batch and then stops?"
+    choices:
+      - { id: "A", text: "trigger(processingTime='1 second')" }
+      - { id: "B", text: "trigger(once=True)" }
+      - { id: "C", text: "trigger(availableNow=True)" }
+      - { id: "D", text: "trigger(continuous='1 second')" }
+    correct_choice_ids: ["C"]
+    tags: ["structured-streaming", "triggers"]
+    difficulty: 3
+    source_ref: "https://docs.databricks.com/en/structured-streaming/triggers.html"
+
+  # ── Change Data Feed ─────────────────────────────────────────
+
+  - type: "single_select"
+    intro: "Change Data Feed (CDF) records row-level changes to a Delta table."
+    prompt: "Which table property must be set to enable Change Data Feed on a Delta table?"
+    choices:
+      - { id: "A", text: "delta.enableChangeDataCapture" }
+      - { id: "B", text: "delta.enableChangeDataFeed" }
+      - { id: "C", text: "delta.trackChanges" }
+      - { id: "D", text: "delta.cdc.enabled" }
+    correct_choice_ids: ["B"]
+    tags: ["change-data-feed", "delta-lake"]
+    difficulty: 2
+    source_ref: "https://docs.databricks.com/en/delta/delta-change-data-feed.html"
+
+  - type: "single_select"
+    prompt: "When reading from a CDF-enabled Delta table, which column indicates whether a row was inserted, updated, or deleted?"
+    choices:
+      - { id: "A", text: "_change_type" }
+      - { id: "B", text: "_operation" }
+      - { id: "C", text: "_action" }
+      - { id: "D", text: "_cdc_type" }
+    correct_choice_ids: ["A"]
+    tags: ["change-data-feed", "delta-lake"]
+    difficulty: 2
+    source_ref: "https://docs.databricks.com/en/delta/delta-change-data-feed.html"
+
+  # ── Unity Catalog ────────────────────────────────────────────
+
+  - type: "single_select"
+    intro: "Unity Catalog provides a unified governance model for data and AI assets."
+    prompt: "What is the three-level namespace hierarchy used by Unity Catalog?"
+    choices:
+      - { id: "A", text: "workspace.database.table" }
+      - { id: "B", text: "catalog.schema.table" }
+      - { id: "C", text: "account.catalog.table" }
+      - { id: "D", text: "metastore.database.object" }
+    correct_choice_ids: ["B"]
+    tags: ["unity-catalog", "governance"]
+    difficulty: 1
+    source_ref: "https://docs.databricks.com/en/data-governance/unity-catalog/index.html"
+
+  - type: "single_select"
+    prompt: "In Unity Catalog, what is a metastore?"
+    choices:
+      - { id: "A", text: "A compute cluster for running queries" }
+      - { id: "B", text: "The top-level container for metadata that maps to a cloud storage location" }
+      - { id: "C", text: "A secret scope for storing credentials" }
+      - { id: "D", text: "A workspace-level configuration for access control" }
+    correct_choice_ids: ["B"]
+    tags: ["unity-catalog", "governance"]
+    difficulty: 2
+    source_ref: "https://docs.databricks.com/en/data-governance/unity-catalog/index.html"
+
+  # ── Medallion Architecture ───────────────────────────────────
+
+  - type: "single_select"
+    intro: "The medallion architecture organises data into layers of increasing quality."
+    prompt: "In the Bronze/Silver/Gold medallion architecture, what is the primary purpose of the Bronze layer?"
+    choices:
+      - { id: "A", text: "Store fully transformed, business-level aggregates" }
+      - { id: "B", text: "Store raw, unprocessed data as ingested from source systems" }
+      - { id: "C", text: "Store cleaned and conformed data with enforced schemas" }
+      - { id: "D", text: "Store machine learning model outputs" }
+    correct_choice_ids: ["B"]
+    tags: ["medallion-architecture"]
+    difficulty: 1
+    source_ref: "https://docs.databricks.com/en/lakehouse/medallion.html"
+
+  - type: "single_select"
+    prompt: "Which medallion layer typically applies data quality rules, deduplication, and schema enforcement?"
+    choices:
+      - { id: "A", text: "Bronze" }
+      - { id: "B", text: "Silver" }
+      - { id: "C", text: "Gold" }
+      - { id: "D", text: "Platinum" }
+    correct_choice_ids: ["B"]
+    tags: ["medallion-architecture"]
+    difficulty: 1
+    source_ref: "https://docs.databricks.com/en/lakehouse/medallion.html"
+
+  # ── Delta Live Tables (DLT) ─────────────────────────────────
+
+  - type: "multi_select"
+    intro: "Delta Live Tables (DLT) is a declarative framework for building reliable data pipelines."
+    prompt: "Which of the following are valid dataset types in a Delta Live Tables pipeline?"
+    choices:
+      - { id: "A", text: "Streaming tables" }
+      - { id: "B", text: "Materialized views" }
+      - { id: "C", text: "Temporary views" }
+      - { id: "D", text: "External tables" }
+    correct_choice_ids: ["A", "B"]
+    tags: ["dlt", "delta-live-tables"]
+    difficulty: 2
+    source_ref: "https://docs.databricks.com/en/delta-live-tables/index.html"
+
+  - type: "single_select"
+    prompt: "In Delta Live Tables, what decorator is used to define a materialized view in Python?"
+    choices:
+      - { id: "A", text: "@dlt.table" }
+      - { id: "B", text: "@dlt.view" }
+      - { id: "C", text: "@dlt.materialized_view" }
+      - { id: "D", text: "@dlt.dataset" }
+    correct_choice_ids: ["A"]
+    tags: ["dlt", "delta-live-tables"]
+    difficulty: 2
+    source_ref: "https://docs.databricks.com/en/delta-live-tables/python-ref.html"
+
+  # ── Partitioning ─────────────────────────────────────────────
+
+  - type: "multi_select"
+    intro: "Partitioning divides a table's data into separate directories based on column values."
+    prompt: "Which of the following are best practices for partitioning Delta tables?"
+    choices:
+      - { id: "A", text: "Partition on low-cardinality columns commonly used in query filters" }
+      - { id: "B", text: "Partition on high-cardinality columns like user IDs for maximum granularity" }
+      - { id: "C", text: "Ensure each partition contains at least 1 GB of data" }
+      - { id: "D", text: "Avoid partitioning small tables where data skipping is sufficient" }
+    correct_choice_ids: ["A", "C", "D"]
+    tags: ["delta-lake", "partitioning"]
+    difficulty: 3
+    source_ref: "https://docs.databricks.com/en/tables/partitions.html"
+
+  # ── CDC ──────────────────────────────────────────────────────
+
+  - type: "multi_select"
+    prompt: "Which of the following are valid values for the _change_type column in a Delta table's Change Data Feed?"
+    choices:
+      - { id: "A", text: "insert" }
+      - { id: "B", text: "update_preimage" }
+      - { id: "C", text: "update_postimage" }
+      - { id: "D", text: "delete" }
+      - { id: "E", text: "upsert" }
+    correct_choice_ids: ["A", "B", "C", "D"]
+    tags: ["change-data-feed", "cdc"]
+    difficulty: 3
+    source_ref: "https://docs.databricks.com/en/delta/delta-change-data-feed.html"
+
+  - type: "multi_select"
+    intro: "Delta Live Tables supports the APPLY CHANGES INTO syntax for processing CDC feeds."
+    prompt: "Which clauses are required when using APPLY CHANGES INTO in Delta Live Tables?"
+    choices:
+      - { id: "A", text: "KEYS" }
+      - { id: "B", text: "SEQUENCE BY" }
+      - { id: "C", text: "PARTITION BY" }
+      - { id: "D", text: "STORED AS" }
+    correct_choice_ids: ["A", "B"]
+    tags: ["dlt", "cdc"]
+    difficulty: 3
+    source_ref: "https://docs.databricks.com/en/delta-live-tables/cdc.html"
+
+  # ── Delta Optimization & Maintenance ─────────────────────────
+
+  - type: "multi_select"
+    prompt: "Which of the following operations can be used to improve query performance on a Delta table?"
+    choices:
+      - { id: "A", text: "OPTIMIZE" }
+      - { id: "B", text: "ZORDER BY" }
+      - { id: "C", text: "VACUUM" }
+      - { id: "D", text: "ANALYZE TABLE ... COMPUTE STATISTICS" }
+    correct_choice_ids: ["A", "B", "D"]
+    tags: ["delta-lake", "optimization"]
+    difficulty: 2
+    source_ref: "https://docs.databricks.com/en/delta/optimize.html"
+
+  - type: "multi_select"
+    intro: "Time travel allows querying previous versions of a Delta table."
+    prompt: "Which of the following are valid ways to query a previous version of a Delta table?"
+    choices:
+      - { id: "A", text: "SELECT * FROM table VERSION AS OF 5" }
+      - { id: "B", text: "SELECT * FROM table TIMESTAMP AS OF '2024-01-01'" }
+      - { id: "C", text: "SELECT * FROM table@v5" }
+      - { id: "D", text: "SELECT * FROM table ROLLBACK TO 5" }
+    correct_choice_ids: ["A", "B"]
+    tags: ["delta-lake", "time-travel"]
+    difficulty: 2
+    source_ref: "https://docs.databricks.com/en/delta/history.html"
+
+  # ── Streaming + Delta ────────────────────────────────────────
+
+  - type: "multi_select"
+    prompt: "Which of the following are true about using Delta Lake as a streaming source?"
+    choices:
+      - { id: "A", text: "Delta tables can be used as both streaming sources and sinks" }
+      - { id: "B", text: "The maxFilesPerTrigger option limits the number of new files processed per micro-batch" }
+      - { id: "C", text: "Streaming from a Delta table requires enabling Change Data Feed" }
+      - { id: "D", text: "Delta's transaction log ensures exactly-once processing guarantees" }
+    correct_choice_ids: ["A", "B", "D"]
+    tags: ["structured-streaming", "delta-lake"]
+    difficulty: 3
+    source_ref: "https://docs.databricks.com/en/structured-streaming/delta-lake.html"
+
+  - type: "multi_select"
+    prompt: "When using foreachBatch with a Structured Streaming query writing to Delta Lake, which of the following are true?"
+    choices:
+      - { id: "A", text: "foreachBatch provides the batch DataFrame and a unique batch ID" }
+      - { id: "B", text: "You can perform multiple write operations within a single foreachBatch call" }
+      - { id: "C", text: "foreachBatch guarantees idempotent writes automatically without additional logic" }
+      - { id: "D", text: "You can use the batch ID with Delta merge operations to achieve exactly-once semantics" }
+    correct_choice_ids: ["A", "B", "D"]
+    tags: ["structured-streaming", "delta-lake"]
+    difficulty: 4
+    source_ref: "https://docs.databricks.com/en/structured-streaming/foreach.html"
+
+  # ── Data Quality & Governance ────────────────────────────────
+
+  - type: "multi_select"
+    intro: "Delta Live Tables supports data quality constraints through expectations."
+    prompt: "Which actions can a DLT expectation take when a record violates a data quality rule?"
+    choices:
+      - { id: "A", text: "Track the violation in metrics but allow the record" }
+      - { id: "B", text: "Drop the violating record" }
+      - { id: "C", text: "Fail the pipeline" }
+      - { id: "D", text: "Quarantine the record to a separate error table automatically" }
+    correct_choice_ids: ["A", "B", "C"]
+    tags: ["dlt", "data-quality"]
+    difficulty: 3
+    source_ref: "https://docs.databricks.com/en/delta-live-tables/expectations.html"

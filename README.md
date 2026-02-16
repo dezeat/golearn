@@ -17,17 +17,17 @@ certification prep and learning new technologies.
 # Build
 make build
 
-# Import the built-in example pack (10 questions)
-./bin/golearn import examples/mvp-basics.yaml
+# Import the Databricks PDE certification practice pack (30 questions)
+./bin/golearn import examples/databricks-pde.yaml
 
 # Launch the interactive TUI
 ./bin/golearn tui
 
 # Or use the text-mode session runner
-./bin/golearn run mvp-basics --n 5
+./bin/golearn run databricks-pde --n 10
 
 # Export a topic back to a pack file
-./bin/golearn export mvp-basics --out out.yaml
+./bin/golearn export databricks-pde --out out.yaml
 ```
 
 ## Requirements
@@ -90,6 +90,35 @@ questions:
 
 See [doc/PROJECT.md](doc/PROJECT.md) for the full schema and validation rules.
 
+## Example Packs
+
+| Pack                          | Questions | Description                                |
+|-------------------------------|-----------|--------------------------------------------|
+| `examples/go-basics.yaml`    | 3         | Go language fundamentals                   |
+| `examples/mvp-basics.yaml`   | 10        | Mixed topics (Go, CLI, databases, general) |
+| `examples/databricks-pde.yaml` | 30      | Databricks Professional Data Engineer prep |
+
+### Professional Data Engineer — Practice Pack
+
+The `databricks-pde.yaml` pack contains 30 exam-style questions covering:
+
+- **Auto Loader** — file notification mode, schema inference
+- **Delta Lake** — transaction log, VACUUM, isolation levels, time travel
+- **Structured Streaming** — checkpointing, watermarks, output modes, triggers
+- **Change Data Feed** — enabling CDF, _change_type values, CDC processing
+- **Unity Catalog** — namespace hierarchy, metastore concepts
+- **Medallion Architecture** — Bronze/Silver/Gold layer purposes
+- **Delta Live Tables** — dataset types, decorators, expectations, APPLY CHANGES
+- **Optimization** — OPTIMIZE, ZORDER, auto compaction, partitioning best practices
+
+All answers are based on official Databricks documentation with `source_ref` links.
+
+```bash
+./bin/golearn import examples/databricks-pde.yaml
+./bin/golearn tui
+# → Select "Databricks Professional Data Engineer"
+```
+
 ## Import
 
 ```bash
@@ -141,7 +170,7 @@ The TUI provides:
 | [doc/PROJECT.md](doc/PROJECT.md)      | Technical spec, data model, pack schema |
 | [doc/WORKFLOW.md](doc/WORKFLOW.md)    | Agent workflow and code standards     |
 | [doc/PROGRESS.md](doc/PROGRESS.md)   | Status, changelog, milestones         |
-| [doc/SPEC.md](doc/SPEC.md)           | Original design specification         |
+| [doc/SPEC.md](doc/SPEC.md)           | Product specification                 |
 
 ## License
 

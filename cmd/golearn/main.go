@@ -84,24 +84,27 @@ func main() {
 func printUsage() {
 	fmt.Println("golearn — local-first MCQ practice tool")
 	fmt.Println()
-	fmt.Println("Usage: golearn [--db <path>] <command> [args]")
+	fmt.Println("Usage:")
+	fmt.Println("  golearn [--db <path>] <command> [args]")
 	fmt.Println()
 	fmt.Println("Commands:")
-	fmt.Println("  import <path>                          Import a question pack file or directory")
-	fmt.Println("  run <topic-slug> [--n N]               Start a practice session (text mode)")
-	fmt.Println("  tui                                    Launch the interactive TUI")
-	fmt.Println("  export <topic-slug> --out <path>       Export a topic to a pack file")
-	fmt.Println("  help                                   Show this help message")
+	fmt.Println("  import <path>                     Import a question pack file or directory")
+	fmt.Println("  tui                               Launch the interactive TUI")
+	fmt.Println("  run <topic-slug> [--n N]          Start a practice session (text mode)")
+	fmt.Println("  export <slug> --out <path>        Export a topic to a pack file")
+	fmt.Println("  help                              Show this help message")
 	fmt.Println()
-	fmt.Println("Flags:")
-	fmt.Printf("  --db <path>     SQLite database path (default: %s)\n", sqlite.DefaultDBPath())
+	fmt.Println("Global Flags:")
+	fmt.Printf("  --db <path>    SQLite database path (default: %s)\n", sqlite.DefaultDBPath())
 	fmt.Println()
 	fmt.Println("Examples:")
-	fmt.Println("  golearn import examples/mvp-basics.yaml")
+	fmt.Println("  golearn import examples/databricks-pde.yaml")
 	fmt.Println("  golearn tui")
-	fmt.Println("  golearn run go-basics --n 5")
-	fmt.Println("  golearn export mvp-basics --out out.yaml")
+	fmt.Println("  golearn run databricks-pde --n 15")
+	fmt.Println("  golearn export databricks-pde --out backup.yaml")
 	fmt.Println("  golearn export mvp-basics --out out.json --format json")
+	fmt.Println()
+	fmt.Println("Pack files use YAML or JSON format. See doc/PROJECT.md for the schema.")
 }
 
 func runImport(dbPath string, args []string) error {
@@ -127,16 +130,17 @@ func runImport(dbPath string, args []string) error {
 	fmt.Println("Import Summary")
 	fmt.Println("──────────────")
 	if result != nil {
-		fmt.Printf("  Files processed: %d\n", result.FilesProcessed)
-		fmt.Printf("  Questions added: %d\n", result.Inserted)
+		fmt.Printf("  Files processed:    %d\n", result.FilesProcessed)
+		fmt.Printf("  Questions added:    %d\n", result.Inserted)
 		fmt.Printf("  Duplicates skipped: %d\n", result.Duplicates)
 		if result.Invalid > 0 {
-			fmt.Printf("  Validation errors: %d\n", result.Invalid)
+			fmt.Printf("  Validation errors:  %d\n", result.Invalid)
 		}
 		if len(result.Errors) > 0 {
+			fmt.Println()
 			fmt.Println("  Errors:")
 			for _, e := range result.Errors {
-				fmt.Printf("    - %s\n", e)
+				fmt.Fprintf(os.Stderr, "    ✗ %s\n", e)
 			}
 		}
 	}

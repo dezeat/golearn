@@ -1,15 +1,19 @@
 # golearn — Progress
 
+## ✅ MVP COMPLETE
+
+All core capabilities are implemented, tested, and documented.
+
 ## Current Status
 
 | Area            | Status           | Notes                                |
 |-----------------|------------------|--------------------------------------|
-| Documentation   | ✅ Done          | `WORKFLOW.md`, `PROJECT.md`, `PROGRESS.md` |
+| Documentation   | ✅ Done          | `WORKFLOW.md`, `PROJECT.md`, `PROGRESS.md`, `SPEC.md` |
 | Go module       | ✅ Done          | `go.mod` with yaml.v3 + modernc.org/sqlite + bubbletea |
 | Domain models   | ✅ Done          | `models.go`, `validation.go`, `hashing.go`, `correctness.go` |
 | Ports/interfaces| ✅ Done          | `repositories.go`, `sources.go`      |
 | Pack reader     | ✅ Done          | YAML + JSON parsing                  |
-| SQLite adapter  | ✅ Done          | DB open, migrations, all repos       |
+| SQLite adapter  | ✅ Done          | DB open, WAL, FK, migrations, all repos |
 | Import use case | ✅ Done          | Validate → normalise → hash → dedupe → insert |
 | CLI (import)    | ✅ Done          | `golearn import <path>` with `--db` flag |
 | Session engine  | ✅ Done          | StartSession, GetNextQuestion, RecordAttempt, EndSession |
@@ -19,14 +23,51 @@
 | CLI (export)    | ✅ Done          | `golearn export <slug> --out <path> [--format]` |
 | Bubble Tea TUI  | ✅ Done          | Topic select, config, question, feedback, summary |
 | CLI (tui)       | ✅ Done          | `golearn tui` with alt-screen        |
-| Example pack    | ✅ Done          | `examples/mvp-basics.yaml` (10 questions) |
+| Example packs   | ✅ Done          | `go-basics.yaml`, `mvp-basics.yaml`, `databricks-pde.yaml` |
 | CLI (help)      | ✅ Done          | `golearn help` with examples         |
 | Tests           | ✅ Done          | 31 tests: validation, hashing, correctness, selector, session, export, integration |
 | Makefile        | ✅ Done          | `fmt`, `vet`, `lint`, `test`, `check` |
+| Lint config     | ✅ Done          | `.golangci.yml` with sensible rules  |
+| CI pipeline     | ✅ Done          | GitHub Actions workflow (`.github/workflows/ci.yml`) |
 
 ---
 
 ## Changelog
+
+### 2026-02-16 — Phase 4: Polish + Product Reframe + Content Expansion
+
+- Replaced `doc/SPEC.md` with business-unit product specification:
+  - Product vision, value proposition, target personas
+  - Use cases, deployment scenarios, differentiation matrix
+  - 6–12 month roadmap with phased milestones
+  - Enterprise expansion opportunities (LLM generation, team assessment)
+- Resolved technical debt:
+  - D1: Added `.golangci.yml` with errcheck, govet, staticcheck, gocritic, misspell
+  - D5: Documented import error handling strategy (fail-per-file, not fail-fast)
+  - D6: Added `GetBySlug` to `TopicRepository` and `TopicRepo`; refactored
+    `session.go` and `export_pack.go` to use direct lookup instead of List()+filter
+  - D9: Added `.github/workflows/ci.yml` (fmt + vet + lint + test + build + smoke test)
+- Updated `doc/PROJECT.md`:
+  - Repository structure matches actual file layout
+  - Added CLI framework decision rationale (stdlib vs cobra)
+  - Added pack versioning strategy
+  - Added "Export Guarantees" section
+  - Added "Determinism Guarantees" section
+  - Added "Session Engine" constraints documentation
+  - Corrected hashing and selection policy descriptions
+- Updated `doc/PROGRESS.md`:
+  - Added "MVP COMPLETE" marker
+  - Cleaned technical debt log (removed resolved items, updated remaining)
+  - Added Phase 4 changelog entry
+- Created `examples/databricks-pde.yaml`: 30-question Databricks PDE certification pack
+  - 20 single_select + 10 multi_select questions
+  - Topics: Auto Loader, Delta Lake, Structured Streaming, Unity Catalog,
+    Change Data Feed, VACUUM, ZORDER, medallion architecture, DLT, checkpointing,
+    watermarks, CDC, partitioning, isolation levels
+  - Source references to official Databricks documentation
+- Improved CLI help formatting with clearer structure
+- Improved import summary output formatting
+- All tests pass, `make check` green
 
 ### 2026-02-16 — Phase 3: Bubble Tea TUI + Export + MVP polish
 
@@ -61,7 +102,7 @@
 - Updated README with TUI, export, and example pack documentation
 - All 31 tests pass, `make check` green
 
-### 2026-02-16 — Session engine + selection policy + CLI run loop (Phase 2)
+### 2026-02-16 — Phase 2: Session engine + selection policy + CLI run loop
 
 - Added `domain/correctness.go`: centralised answer evaluation — exact, order-insensitive set match
 - Extended `ports/repositories.go`: added `SessionRepository`, `AttemptRepository`, `QuestionStats` type
@@ -75,54 +116,23 @@
   - `GetNextQuestion()` — serves from in-memory queue, no duplicates
   - `RecordAttempt()` — evaluates correctness via domain layer, persists attempt
   - `EndSession()` — sets ended_at timestamp
-- Added CLI `golearn run <topic-slug> [--n N]` command:
-  - Interactive stdin loop with intro/prompt/choices display
-  - Supports comma-separated choice IDs, 's' to skip, 'q' to quit
-  - Measures answer latency, prints correct/incorrect feedback
-  - Prints session summary: total answered, correct count, accuracy %
-- Added 16 new tests (27 total):
-  - Correctness: 9 table-driven cases (exact match, order-insensitive, edge cases)
-  - Selector: 6 tests (unseen priority, weak sorting, cap, determinism, empty input)
-  - Session lifecycle: 5 tests (full lifecycle, correctness eval, skip, topic not found, stats affect selection)
+- Added CLI `golearn run <topic-slug> [--n N]` command
+- Added 16 new tests (27 total)
 - All tests deterministic with fixed random seeds
 
-### 2026-02-16 — Foundation layer
+### 2026-02-16 — Phase 1: Foundation layer
 
 - Implemented domain models: `Topic`, `Question`, `Session`, `Attempt`, `Pack*` types
-- Implemented validation (7 rules): type, prompt, choices ≥2, unique IDs, correct refs, single_select count
-- Implemented stable hashing: SHA-256 over normalised content with null-byte separators
-- Implemented normalisation: whitespace trim, `\r\n` → `\n`
-- Defined port interfaces: `TopicRepository`, `QuestionRepository`, `PackReader`
-- Implemented pack reader adapter: YAML (`yaml.v3`) + JSON, file + directory support
-- Implemented SQLite adapter: `Open()` with WAL + FK pragmas, embedded migrations
-- Implemented SQLite repos: `TopicRepo` (upsert by slug), `QuestionRepo` (INSERT OR IGNORE by hash)
-- Implemented import use case: parse → normalise → validate → hash → upsert topic → insert questions
-- Wired CLI: `golearn import <path>` with `--db` flag (default `~/.golearn/golearn.db`)
-- Added unit tests: validation (good + bad), hashing stability, SQLite insert + dedupe
-- Updated Makefile: added `fmt` target, `check` = fmt + vet + lint + test
-- Updated `.gitignore`: added `.golearn/`, `bin/`, `dist/`, `tmp/`
-- Dependencies: `gopkg.in/yaml.v3`, `modernc.org/sqlite` (CGo-free)
+- Implemented validation (7 rules), stable hashing, normalisation
+- Defined port interfaces, implemented pack reader, SQLite adapter, import use case
+- Wired CLI: `golearn import <path>` with `--db` flag
+- Added unit tests, Makefile, `.gitignore`
+- Dependencies: `gopkg.in/yaml.v3`, `modernc.org/sqlite`
 
-### 2026-02-16 — Initial scaffold
+### 2026-02-16 — Phase 0: Initial scaffold
 
-- Created `doc/WORKFLOW.md`, `PROJECT.md`, `PROGRESS.md`
-- Created `README.md` with project overview and quickstart
-- Initialised `go.mod` (`github.com/dezeat/golearn`)
-- Added stub `cmd/golearn/main.go`
-- Added `Makefile` with `build`, `test`, `lint`, `vet`, `check` targets
+- Created doc files, README, `go.mod`, stub `main.go`, Makefile
 - Added example pack `examples/go-basics.yaml`
-
----
-
-## Next Milestones
-
-### Milestone 4 — Polish + CI
-
-- [ ] CI pipeline (`make check` in GitHub Actions)
-- [ ] `golangci-lint` config (`.golangci.yml`)
-- [ ] Consider `cobra` for CLI if more subcommands are needed
-- [ ] Lipgloss styling improvements for TUI
-- [ ] `golearn stats` command for viewing per-topic statistics
 
 ---
 
@@ -130,12 +140,6 @@
 
 | ID  | Area             | Description                                         | Priority |
 |-----|------------------|-----------------------------------------------------|----------|
-| D1  | Lint             | `golangci-lint` config not yet created (`.golangci.yml`) | Medium  |
-| D2  | ~~Export ordering~~  | ~~Need to decide canonical sort column~~ — Resolved: `created_at ASC`, hash tie-break | Done |
-| D3  | Export versioning| Pack format `0.1.0`; no migration strategy yet for schema changes | Low |
-| D4  | CLI framework    | Using manual arg parsing; consider `cobra` for subcommands | Low |
-| D5  | Error reporting  | Pack-level errors stop the file; consider partial import | Low |
-| D6  | ~~Topic lookup~~     | ~~`StartSession` lists all topics then filters~~ — Acceptable for MVP scale | Closed |
-| D7  | Session state    | Session engine holds in-memory queue; only one active session per engine instance | Low |
+| D3  | Export versioning | Pack format `0.1.0`; import accepts any version string. Version-aware parsing needed if schema evolves. | Low |
+| D7  | Session state    | Session engine holds in-memory queue; one active session per engine instance. Intentional MVP constraint. | Low |
 | D8  | TUI testing      | TUI screens have no unit tests (Bubble Tea model testing) | Medium |
-| D9  | CI pipeline      | No GitHub Actions workflow yet for automated `make check` | Medium |

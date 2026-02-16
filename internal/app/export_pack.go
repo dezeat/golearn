@@ -216,14 +216,12 @@ func (s *ExportService) ExportToBytes(topicSlug, format string) ([]byte, error) 
 
 // findTopic resolves a topic by slug from the repository.
 func (s *ExportService) findTopic(slug string) (*domain.Topic, error) {
-	topics, err := s.topics.List()
+	topic, err := s.topics.GetBySlug(slug)
 	if err != nil {
-		return nil, fmt.Errorf("list topics: %w", err)
+		return nil, fmt.Errorf("get topic %q: %w", slug, err)
 	}
-	for i := range topics {
-		if topics[i].Slug == slug {
-			return &topics[i], nil
-		}
+	if topic == nil {
+		return nil, fmt.Errorf("topic %q not found", slug)
 	}
-	return nil, fmt.Errorf("topic %q not found", slug)
+	return topic, nil
 }

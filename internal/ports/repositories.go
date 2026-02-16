@@ -8,6 +8,9 @@ type TopicRepository interface {
 	// UpsertBySlug creates a topic or returns the existing one matching the slug.
 	UpsertBySlug(slug, name string) (*domain.Topic, error)
 
+	// GetBySlug returns a single topic by slug, or nil if not found.
+	GetBySlug(slug string) (*domain.Topic, error)
+
 	// List returns all topics ordered by slug.
 	List() ([]domain.Topic, error)
 }

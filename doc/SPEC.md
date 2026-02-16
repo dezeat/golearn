@@ -1,619 +1,329 @@
-GoLearn — SPEC
-0. Goal
+# golearn — Product Specification
 
-GoLearn is a local-first TUI app to practice multiple-choice questions for certificates and new tech. It supports:
+> **Version:** 1.0 · **Status:** MVP Complete · **Date:** February 2026
 
-Importing question packs from files (YAML/JSON)
+---
 
-Running practice sessions in a TUI
+## 1. Executive Summary
 
-Persisting questions + attempts in SQLite
+**golearn** is a local-first, terminal-native practice tool for multiple-choice question (MCQ) learning. It enables engineers and certification candidates to import structured question packs, run adaptive practice sessions, and track mastery over time — all without cloud dependencies, accounts, or network access.
 
-Exporting question packs back to files (for sharing or syncing to places like a Databricks workspace later)
+The tool is designed for deliberate practice: high-frequency, low-friction repetition with intelligent question selection that surfaces weak areas automatically.
 
-Non-goals (MVP):
+---
 
-No LLM/API integration
+## 2. Problem Statement
 
-No free-text questions
+Certification preparation and technical knowledge retention are high-value activities with poor tooling:
 
-No explanations/rationales shown in UI (fields reserved in data model)
+- **Cloud quiz platforms** require accounts, subscriptions, and internet access.
+- **Flashcard apps** lack structured MCQ support (multi-select, rationale, typed answers).
+- **Static PDF/doc dumps** provide no feedback loop, no tracking, and no adaptivity.
+- **Team knowledge sharing** has no standard, portable format for question banks.
 
-1. User stories
-MVP
+Engineers need a tool that fits into their existing workflow: terminal-first, file-based, version-controllable, and zero-configuration.
 
-As a user, I can import a question pack file and store questions locally.
+---
 
-As a user, I can launch a TUI, pick a topic, pick session length, and answer questions.
+## 3. Product Vision
 
-As a user, I see immediate correctness feedback and a session summary.
+**golearn** turns structured question packs into an adaptive, trackable, terminal-based learning engine.
 
-As a user, my attempts are recorded (correctness + time).
+### Value Proposition
 
-As a user, I can export my questions back to a canonical pack file.
+| Pillar                | Description                                                                 |
+|-----------------------|-----------------------------------------------------------------------------|
+| **Local-first**       | Runs entirely offline. Data stored in a single SQLite file. No accounts.    |
+| **Developer-grade**   | Terminal UI. YAML/JSON packs. Git-friendly. CI-integrable.                  |
+| **Adaptive learning** | Prioritises unseen and weak questions. Tracks accuracy over time.           |
+| **Portable packs**    | Import/export canonical YAML or JSON. Share via Git, email, or workspace.   |
+| **Deterministic**     | Stable content hashing. Byte-identical exports. Reproducible deduplication. |
 
-Later
+---
 
-Generate new questions via LLM and store them the same way.
+## 4. Target Personas
 
-Use embeddings similarity to detect duplicates / cluster topics.
+### 4.1 Individual Certification Candidate
 
-Sync exports to Databricks workspace (CLI wrapper around databricks workspace import etc.).
+**Profile:** Data engineer preparing for Databricks Professional Data Engineer, AWS Solutions Architect, or similar certifications.
 
-2. Core constraints
+**Needs:**
+- Practice hundreds of MCQs locally without distraction
+- Track weak areas across multiple study sessions
+- Use curated, high-confidence question packs
 
-Language: Go
+**golearn fit:** Import a certification pack, launch the TUI, practice daily. The selection engine surfaces questions you got wrong before.
 
-UI: TUI (Bubble Tea recommended)
+### 4.2 Engineering Team Lead
 
-Question types: only multiple-choice variations
+**Profile:** Technical lead maintaining a team knowledge base for onboarding and internal assessments.
 
-single_select (exactly 1 correct)
+**Needs:**
+- Create and share standardised question packs
+- Version-control questions alongside documentation
+- Verify team understanding of key technologies
 
-multi_select (>=1 correct)
+**golearn fit:** Author packs in YAML, commit to a shared repository, team members import and practice independently.
 
-(optional) true_false as single_select with two choices
+### 4.3 Self-Directed Learner
 
-Validation: Every stored question must have a correct answer key.
+**Profile:** Developer learning a new technology (Go, Kubernetes, Spark) through structured recall practice.
 
-Persistence: SQLite database.
+**Needs:**
+- Create personal question banks from documentation
+- Quickly test understanding with immediate feedback
+- Export and refine packs as knowledge deepens
 
-Deduplication: prevent duplicate questions using a stable content hash.
+**golearn fit:** Write questions in YAML as you read docs, import them, practice in the TUI, export refined packs.
 
-Export: canonical format; stable choice IDs; future-proof for explanations.
+---
 
-3. Commands
-CLI
+## 5. Core MVP Capabilities
 
-learnkit tui
+### 5.1 Question Pack Import
 
-Launch TUI.
+- Parse YAML and JSON pack files (single file or directory)
+- Validate every question against 7 structural rules (type, prompt, choices, correct IDs)
+- Normalise text (whitespace trim, line-ending canonicalisation)
+- Compute stable SHA-256 content hash for deduplication
+- Upsert topics by slug; skip duplicate questions by hash
+- Report import summary (inserted, duplicates, validation errors)
 
-learnkit import <path> [--format yaml|json]
+### 5.2 Adaptive Practice Sessions
 
-Import one file or a directory of pack files.
+- Select questions using a three-tier priority policy:
+  1. **Unseen** questions (zero prior attempts) — shuffled
+  2. **Weak** questions (highest wrong rate) — sorted by error rate descending
+  3. **Random fill** from remaining — shuffled
+- No duplicates within a session
+- Immediate correctness feedback after each answer
+- Session summary with total answered, correct count, and accuracy percentage
 
-learnkit export <topic-slug> --out <path> [--format yaml|json]
+### 5.3 Interactive Terminal UI (Bubble Tea)
 
-Export canonical pack for a topic.
+- **Topic select** — browse topics with question counts and accuracy stats
+- **Session config** — adjust number of questions before starting
+- **Question screen** — navigate choices with keyboard, toggle selections, submit
+- **Feedback screen** — correct/incorrect indicator with correct answer display
+- **Summary screen** — session results with option to return to topic select
 
-Optional later:
+### 5.4 Pack Export
 
-learnkit stats
+- Export any topic to canonical YAML or JSON format
+- Deterministic ordering: `created_at ASC`, content hash for tie-breaking
+- Only include optional fields when they have meaningful values
+- Byte-stable output: same data produces identical file content
+- Format auto-detection from output file extension
 
-learnkit review --weak --n 10
+### 5.5 CLI Interface
 
-4. TUI specification
-Screens
+| Command                                      | Description                              |
+|----------------------------------------------|------------------------------------------|
+| `golearn import <path>`                      | Import pack file or directory            |
+| `golearn tui`                                | Launch interactive terminal UI           |
+| `golearn run <topic-slug> [--n N]`           | Text-mode practice session               |
+| `golearn export <slug> --out <path>`         | Export topic to pack file                |
+| `golearn help`                               | Display usage and examples               |
 
-Topic Select
+Global flag: `--db <path>` overrides the default database location (`~/.golearn/golearn.db`).
 
-list topics (from DB)
+---
 
-show counts: total questions, accuracy (optional)
+## 6. Differentiation
 
-select topic to continue
+| Feature                | golearn            | Anki         | Cloud quiz platforms |
+|------------------------|--------------------|--------------|----------------------|
+| MCQ with multi-select  | ✅                 | ❌           | ✅                   |
+| Local-first / offline  | ✅                 | ✅           | ❌                   |
+| Terminal-native        | ✅                 | ❌           | ❌                   |
+| YAML/JSON packs        | ✅                 | ❌           | ❌                   |
+| Git-friendly format    | ✅                 | ❌           | ❌                   |
+| Deterministic export   | ✅                 | ❌           | ❌                   |
+| Content deduplication  | ✅ (SHA-256 hash)  | ❌           | ❌                   |
+| Adaptive selection     | ✅                 | ✅ (SRS)     | Varies               |
+| Zero configuration     | ✅                 | ❌           | ❌                   |
+| Free / no account      | ✅                 | Freemium     | ❌                   |
 
-Session Config
+---
 
-choose number of questions (default 10)
+## 7. Technical Foundation
 
-choose mode:
+### Architecture
 
-Practice (default): immediate correctness feedback
+Hexagonal (ports & adapters) architecture with clear separation:
 
-Exam (later): hide correctness until end
-
-start session
-
-Question Screen
-
-show optional intro/description block
-
-show prompt
-
-show choices
-
-controls:
-
-Up/Down or j/k to navigate
-
-Space to toggle selection (multi-select)
-
-Enter to submit
-
-s skip
-
-q quit session
-
-submission:
-
-lock answer
-
-show “Correct/Incorrect”
-
-no explanation displayed in MVP
-
-press Enter to proceed
-
-Summary Screen
-
-total questions answered
-
-correct count, accuracy %
-
-list of missed question counts (optional)
-
-option: “Back to topics”
-
-Session logic
-
-Each session is stored with an ID.
-
-Each asked question creates an attempt record:
-
-selected choices
-
-correct boolean
-
-latency
-
-skipped flag
-
-5. Data model
-Domain entities
-
-Topic
-
-id (uuid/int)
-
-slug (string, unique, stable)
-
-name (string)
-
-Question
-
-id (uuid/int)
-
-topic_id
-
-type (single_select | multi_select)
-
-intro (optional string)
-
-prompt (string)
-
-choices (ordered list)
-
-correct_choice_ids (list of choice IDs)
-
-tags (optional)
-
-difficulty (optional int)
-
-rationale (reserved for later)
-
-correct (optional string)
-
-per_choice (optional map choice_id -> string)
-
-source (string, e.g. manual:file, later llm:provider:model)
-
-source_ref (optional string: file path, url, etc.)
-
-confidence (float 0..1, default 1.0 for manual)
-
-hash (string, unique) = stable hash of normalized content
-
-created_at
-
-Session
-
-id
-
-topic_id
-
-mode (practice | exam)
-
-requested_n
-
-started_at
-
-ended_at
-
-Attempt
-
-id
-
-session_id
-
-question_id
-
-selected_choice_ids (list)
-
-correct (bool)
-
-skipped (bool)
-
-latency_ms (int)
-
-created_at
-
-6. SQLite schema (logical)
-
-Tables:
-
-topics
-
-id PK
-
-slug UNIQUE
-
-name
-
-questions
-
-id PK
-
-topic_id FK
-
-type
-
-intro
-
-prompt
-
-choices_json
-
-correct_choice_ids_json
-
-tags_json
-
-difficulty
-
-rationale_correct
-
-rationale_per_choice_json
-
-source
-
-source_ref
-
-confidence
-
-hash UNIQUE
-
-created_at
-
-sessions
-
-id PK
-
-topic_id FK
-
-mode
-
-requested_n
-
-started_at
-
-ended_at
-
-attempts
-
-id PK
-
-session_id FK
-
-question_id FK
-
-selected_choice_ids_json
-
-correct
-
-skipped
-
-latency_ms
-
-created_at
-
-Indexes:
-
-questions(topic_id)
-
-attempts(question_id)
-
-attempts(session_id)
-
-questions(hash) unique
-
-Migrations:
-
-Use a minimal migration mechanism (e.g., golang-migrate or embedded SQL files executed in order).
-
-7. Question pack file format (canonical)
-
-Support YAML and JSON with the same fields.
-
-Pack structure
-
-pack_version: string (e.g. "0.1.0")
-
-topic:
-
-slug: string
-
-name: string
-
-metadata (optional):
-
-author
-
-created_at
-
-source
-
-questions: list of MCQs
-
-Question structure
-
-id (optional stable string; if absent, system generates)
-
-type: single_select | multi_select
-
-intro (optional)
-
-prompt
-
-choices: ordered list of { id, text }
-
-id must be stable (e.g., "A", "B", "C" or "1", "2")
-
-correct_choice_ids: list of choice IDs
-
-tags (optional list)
-
-difficulty (optional int)
-
-rationale (optional, reserved)
-
-correct (optional string)
-
-per_choice (optional map of choice_id -> string)
-
-source (optional)
-
-confidence (optional float 0..1)
-
-Example YAML
-pack_version: "0.1.0"
-topic:
-  slug: "go-basics"
-  name: "Go Basics"
-questions:
-  - type: "single_select"
-    intro: "Consider the following Go snippet."
-    prompt: "What does `defer` do?"
-    choices:
-      - { id: "A", text: "Executes immediately" }
-      - { id: "B", text: "Schedules execution when the surrounding function returns" }
-      - { id: "C", text: "Pauses the goroutine" }
-    correct_choice_ids: ["B"]
-    tags: ["functions"]
-    difficulty: 1
-
-8. Import rules
-
-Import behavior:
-
-Accept a file or directory.
-
-Parse YAML/JSON packs.
-
-Validate each question:
-
-type is supported
-
-=2 choices
-
-choice IDs are unique
-
-correct_choice_ids non-empty
-
-for single_select: exactly one correct id
-
-correct ids must exist in choices
-
-Normalize:
-
-trim whitespace
-
-canonicalize line endings
-
-preserve choice order
-
-Compute hash:
-
-hash of (topic_slug + type + intro + prompt + choices ids+text + correct_choice_ids sorted)
-
-Dedupe:
-
-if hash exists, skip insert and report as duplicate
-
-Upsert topic by slug.
-
-Errors:
-
-On invalid pack, show file path + question index + field that failed.
-
-9. Export rules
-
-Export behavior:
-
-Export by topic_slug.
-
-Output canonical pack format with stable choice IDs.
-
-Include pack_version, topic info, and questions in deterministic order:
-
-default order: created_at asc or prompt asc (choose one and document)
-
-Include source/confidence fields from DB when present.
-
-Rationale fields included if stored, but empty/omitted in MVP.
-
-10. Selection policy (which questions to ask)
-
-MVP selection:
-
-Inputs: topic_id, n
-
-Rank questions by priority score:
-
-unseen questions first
-
-then previously incorrect more often
-
-then random fill
-
-Ensure no duplicates within a session.
-
-Implementation detail:
-
-compute per-question stats from attempts:
-
-attempts_count
-
-wrong_count
-
-last_attempt_at
-
-choose:
-
-unseen bucket (attempts_count == 0) random sample
-
-weak bucket (wrong rate high) random weighted
-
-fill remainder random
-
-11. Architecture
-Project layout
-cmd/learnkit/main.go
-
+```
+cmd/golearn/          CLI entrypoint and command routing
 internal/
-  domain/
-    models.go
-    validation.go
-    hashing.go
-
-  ports/
-    repositories.go
-    sources.go
-    selector.go
-
-  app/
-    import_pack.go
-    export_pack.go
-    start_session.go
-    record_attempt.go
-    select_questions.go
-
+  domain/             Pure types, validation, hashing, correctness evaluation
+  ports/              Interfaces for repositories and pack sources
+  app/                Use cases: import, export, session engine, selector
   adapters/
-    sqlite/
-      db.go
-      migrations/
-      topic_repo.go
-      question_repo.go
-      session_repo.go
-      attempt_repo.go
-    pack/
-      yaml.go
-      json.go
-      normalize.go
-    tui/
-      app.go
-      screens_*.go
+    sqlite/           Persistence (WAL mode, FK enforcement, migrations)
+    pack/             YAML/JSON file reader
+    tui/              Bubble Tea terminal UI
+```
 
-Ports (interfaces)
+### Persistence
 
-Repositories
+- **Engine:** SQLite via `modernc.org/sqlite` (CGo-free, zero external dependencies)
+- **WAL mode:** Enabled by default for concurrent reader safety
+- **Schema:** 4 tables (`topics`, `questions`, `sessions`, `attempts`) with foreign keys and indexes
+- **Migrations:** Sequential, version-tracked, embedded in the binary
 
-TopicRepository
+### Determinism Guarantees
 
-UpsertBySlug(slug, name) -> topic
+- **Hashing:** SHA-256 over normalised content with null-byte field separators
+- **Export ordering:** `created_at ASC` with content hash as tie-breaker
+- **Selection:** Seeded PRNG for reproducible question ordering in tests
+- **Deduplication:** Hash-based, immune to field ordering or whitespace variation
 
-List() -> []topic
+---
 
-QuestionRepository
+## 8. Example Use Cases
 
-InsertMany([]Question) (inserted, skippedDuplicates)
+### Certification Preparation
 
-ListByTopic(topicID) -> []Question
+```bash
+# Import the Databricks PDE practice pack
+golearn import examples/databricks-pde.yaml
 
-GetByIDs([]id) -> []Question
+# Practice 15 questions in the TUI
+golearn tui
+# → Select "Databricks Professional Data Engineer"
+# → Set question count to 15
+# → Practice with adaptive selection
+```
 
-SessionRepository
+### Team Knowledge Base
 
-Create(Session) -> id
+```bash
+# Author questions in YAML alongside your docs
+vim packs/kubernetes-networking.yaml
 
-Finish(id)
+# Import into your local database
+golearn import packs/
 
-AttemptRepository
+# After refinement, export the canonical version
+golearn export kubernetes-networking --out packs/kubernetes-networking.yaml
 
-Record(Attempt)
+# Commit to shared repo for team use
+git add packs/ && git commit -m "Add K8s networking MCQs"
+```
 
-StatsByTopic(topicID) -> per-question stats
+### Personal Study Loop
 
-PackSource (file)
+```bash
+# Quick practice session from the terminal
+golearn run go-basics --n 10
 
-ReadPack(path) -> Pack
+# Review accuracy over time in the TUI
+golearn tui
+# → Topic list shows per-topic accuracy %
+```
 
-WritePack(path, pack)
+---
 
-Selector
+## 9. Deployment Scenarios
 
-Select(topicID, n) -> []QuestionID
+| Scenario               | Method                                              |
+|------------------------|------------------------------------------------------|
+| **Local workstation**  | `go install` or `make build` → single binary         |
+| **CI training check**  | Import pack + run session in headless mode (planned)  |
+| **Team distribution**  | Share packs via Git repo; each member imports locally |
+| **Databricks workspace** | Export packs → upload to workspace files (planned)  |
 
-Future reserved ports (not implemented):
+---
 
-QuestionGenerator (LLM)
+## 10. Roadmap
 
-SimilarityIndex (embeddings)
+### Phase 1 — MVP (Complete)
 
-Adapters
+- [x] Pack import with validation and deduplication
+- [x] SQLite persistence with WAL mode
+- [x] Session engine with adaptive question selection
+- [x] Bubble Tea interactive TUI
+- [x] Pack export with deterministic ordering
+- [x] CLI with import, run, tui, export, help commands
+- [x] 15+ unit and integration tests
 
-SQLite adapter implements repos.
+### Phase 2 — Polish & CI (Current: Q1 2026)
 
-Pack adapter handles YAML/JSON.
+- [x] `golangci-lint` configuration
+- [ ] GitHub Actions CI pipeline (`make check`)
+- [ ] `golearn stats` command for per-topic statistics
+- [ ] Enhanced TUI styling with Lipgloss
+- [ ] Exam mode (deferred feedback until session end)
 
-TUI adapter calls app layer use-cases.
+### Phase 3 — Content & Community (Q2 2026)
 
-12. Quality gates
+- [ ] Pack marketplace / curated pack repository
+- [ ] Pack metadata: author, license, version history
+- [ ] Question tagging and filtered practice sessions
+- [ ] Spaced repetition scheduling (SRS)
+- [ ] Session history and trend visualisation
 
-go test ./... must pass
+### Phase 4 — Enterprise & Integration (H2 2026)
 
-deterministic export
+- [ ] LLM-assisted question generation (draft → validate → insert)
+- [ ] Embedding-based near-duplicate detection
+- [ ] Multi-user team dashboards (via shared SQLite or API)
+- [ ] Databricks workspace sync (export → workspace files API)
+- [ ] Rationale display (`:why` command in TUI)
+- [ ] Custom scoring models (weighted difficulty, time penalties)
 
-import validation errors are actionable
+---
 
-TUI usable with keyboard only
+## 11. Expansion Opportunities
 
-13. Future work (explicit)
+### LLM Question Generation
 
-LLM generation adapter:
+Future integration with language models to generate draft questions from documentation:
 
-Generate drafts -> validate -> insert -> sessions draw from DB
+1. User provides a documentation URL or text passage
+2. LLM generates candidate MCQs in pack format
+3. golearn validates, hashes, and stores them with `source: "llm:<provider>:<model>"`
+4. User reviews and adjusts confidence scores
+5. Questions enter the regular practice rotation
 
-Explanations/rationales:
+The data model already reserves `source`, `source_ref`, and `confidence` fields for this workflow. The `confidence` field (0.0–1.0) allows lower trust for generated questions.
 
-show on demand (:why) or after question
+### Team Knowledge Assessment
 
-Embeddings similarity:
+With pack sharing and per-user databases, teams can:
 
-duplicate detection beyond hash
+- Maintain canonical question banks per technology area
+- Track individual and team-wide accuracy trends
+- Identify knowledge gaps across the organisation
+- Integrate practice sessions into onboarding workflows
 
-topic clustering
+---
 
-Databricks sync:
+## 12. Quality & Testing
 
-learnkit export to a local folder + CLI command to push to Databricks workspace
+| Guarantee                          | Implementation                                      |
+|------------------------------------|------------------------------------------------------|
+| All tests deterministic            | Fixed PRNG seeds, no time-dependent assertions        |
+| Export byte-stability              | Verified by roundtrip tests (import → export → diff)  |
+| Deduplication correctness          | SHA-256 hash with normalised content inputs           |
+| Validation completeness            | 7 rules with table-driven tests for each rule         |
+| Zero external runtime dependencies | CGo-free SQLite, stdlib JSON, pure Go YAML parser     |
+
+---
+
+## 13. Non-Goals (Explicit)
+
+The following are intentionally excluded from the current scope:
+
+- Free-text questions or essay-style answers
+- Cloud synchronisation or user accounts
+- Real-time multiplayer / competitive modes
+- Mobile or web interfaces
+- Question difficulty auto-calibration
+- Analytics dashboards beyond CLI/TUI summary stats
+
+These may be reconsidered in future phases based on user demand.
+
+---
+
+*This specification describes golearn as of MVP completion (February 2026). It serves as the authoritative product reference for feature planning, stakeholder communication, and contributor onboarding.*

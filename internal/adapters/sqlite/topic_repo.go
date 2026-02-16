@@ -38,6 +38,20 @@ func (r *TopicRepo) UpsertBySlug(slug, name string) (*domain.Topic, error) {
 	return &t, nil
 }
 
+// GetBySlug returns a single topic by slug, or nil if not found.
+func (r *TopicRepo) GetBySlug(slug string) (*domain.Topic, error) {
+	var t domain.Topic
+	err := r.db.QueryRow("SELECT id, slug, name FROM topics WHERE slug = ?", slug).
+		Scan(&t.ID, &t.Slug, &t.Name)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("get topic by slug %q: %w", slug, err)
+	}
+	return &t, nil
+}
+
 // List returns all topics ordered by slug.
 func (r *TopicRepo) List() ([]domain.Topic, error) {
 	rows, err := r.db.Query("SELECT id, slug, name FROM topics ORDER BY slug")

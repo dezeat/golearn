@@ -57,16 +57,9 @@ func (e *SessionEngine) StartSession(topicSlug string, n int, mode string) (int6
 	}
 
 	// Resolve topic by slug.
-	topics, err := e.topics.List()
+	topic, err := e.topics.GetBySlug(topicSlug)
 	if err != nil {
-		return 0, fmt.Errorf("list topics: %w", err)
-	}
-	var topic *domain.Topic
-	for i := range topics {
-		if topics[i].Slug == topicSlug {
-			topic = &topics[i]
-			break
-		}
+		return 0, fmt.Errorf("get topic %q: %w", topicSlug, err)
 	}
 	if topic == nil {
 		return 0, fmt.Errorf("topic %q not found", topicSlug)

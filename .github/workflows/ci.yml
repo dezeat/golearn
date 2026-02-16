@@ -1,0 +1,44 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: Build & Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Format check
+        run: test -z "$(gofmt -l .)" || { echo "Files need formatting:"; gofmt -l .; exit 1; }
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Lint
+        uses: golangci/golangci-lint-action@v6
+        with:
+          version: latest
+
+      - name: Test
+        run: go test ./... -v -count=1
+
+      - name: Build
+        run: go build -o ./bin/golearn ./cmd/golearn
+
+      - name: Smoke test — import + export roundtrip
+        run: |
+          ./bin/golearn import examples/mvp-basics.yaml
+          ./bin/golearn export mvp-basics --out /tmp/export-test.yaml
+          ./bin/golearn import /tmp/export-test.yaml

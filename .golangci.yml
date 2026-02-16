@@ -1,0 +1,45 @@
+# golangci-lint configuration for golearn.
+# Run: golangci-lint run ./...
+
+run:
+  timeout: 3m
+
+linters:
+  enable:
+    - errcheck
+    - govet
+    - staticcheck
+    - unused
+    - ineffassign
+    - gosimple
+    - gocritic
+    - misspell
+    - gofmt
+  disable:
+    - depguard
+
+linters-settings:
+  gocritic:
+    enabled-checks:
+      - dupImport
+      - ifElseChain
+      - nestingReduce
+      - truncateCmp
+      - unnamedResult
+  misspell:
+    locale: US
+  errcheck:
+    check-type-assertions: true
+
+issues:
+  exclude-rules:
+    # Allow unchecked errors in test files — common for defer db.Close().
+    - path: _test\.go
+      linters:
+        - errcheck
+    # Allow unchecked Rollback in deferred calls.
+    - text: "Error return value of .*(Rollback|Close).*is not checked"
+      linters:
+        - errcheck
+  max-issues-per-linter: 50
+  max-same-issues: 5
