@@ -34,6 +34,44 @@ All core capabilities are implemented, tested, and documented.
 
 ## Changelog
 
+### 2026-02-17 — Phase 5: UX Polish + Explained Pack + Question Standard
+
+- Created `examples/databricks-pde-explained.yaml`: 15-question PDE pack with full rationale
+  - 10 single_select + 5 multi_select questions
+  - Every question includes `rationale.correct` and `rationale.per_choice` explanations
+  - Topics: Auto Loader schema, Delta ACID, OPTIMIZE+ZORDER, VACUUM, CDF, checkpointing,
+    watermarks, trigger modes, Unity Catalog permissions, medallion architecture,
+    isolation levels, deletion vectors, stream-static joins, MERGE, table constraints
+  - All answers sourced from official Databricks documentation
+- Upgraded TUI to quiz-show review mode:
+  - After submitting: full question + choices remain visible with colour-coded feedback
+  - Green ✔ for correct choices, red ✘ for incorrect selected choices
+  - Press 'e' to toggle per-choice explanations and rationale
+  - Explicit enter required to proceed to next question
+  - Uses Lip Gloss styling for visual clarity
+- Added ASCII intro splash screen on TUI startup (press any key to continue)
+- Improved session summary:
+  - Shows accuracy %, average response time
+  - Shows count of wrong questions with review suggestion
+  - Press 'r' from summary to replay wrong questions in review mode
+- Added review mode: replays only incorrectly answered questions from last session
+- Fixed export to include rationale data (was previously omitted)
+- Created `doc/QUESTIONS.md`: formal question authoring standard
+  - Question philosophy, structure rules, explanation rules
+  - Tone guidelines, validation checklist, reference policy
+  - Gold standard example question
+- Added 8 new tests (37 total):
+  - `TestImport_PDEExplainedPack`: validates pack imports with rationale integrity
+  - `TestExportRoundtrip_WithRationale`: verifies rationale survives export/reimport
+  - `TestReviewState_ExplanationToggle`: TUI explanation toggle state logic
+  - `TestReviewState_CorrectFeedback`: correct answer visual feedback
+  - `TestReviewState_IncorrectFeedback`: incorrect answer visual feedback
+  - `TestReviewState_SkippedFeedback`: skipped answer visual feedback
+  - `TestIntroScreen`: ASCII intro screen renders
+  - `TestReviewSessionSetup`: review session initialisation
+- Updated README with new pack, TUI features, QUESTIONS.md doc link
+- All 37 tests pass, `make check` green
+
 ### 2026-02-16 — Phase 4: Polish + Product Reframe + Content Expansion
 
 - Replaced `doc/SPEC.md` with business-unit product specification:
@@ -142,4 +180,3 @@ All core capabilities are implemented, tested, and documented.
 |-----|------------------|-----------------------------------------------------|----------|
 | D3  | Export versioning | Pack format `0.1.0`; import accepts any version string. Version-aware parsing needed if schema evolves. | Low |
 | D7  | Session state    | Session engine holds in-memory queue; one active session per engine instance. Intentional MVP constraint. | Low |
-| D8  | TUI testing      | TUI screens have no unit tests (Bubble Tea model testing) | Medium |

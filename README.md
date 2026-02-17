@@ -92,11 +92,12 @@ See [doc/PROJECT.md](doc/PROJECT.md) for the full schema and validation rules.
 
 ## Example Packs
 
-| Pack                          | Questions | Description                                |
-|-------------------------------|-----------|--------------------------------------------|
-| `examples/go-basics.yaml`    | 3         | Go language fundamentals                   |
-| `examples/mvp-basics.yaml`   | 10        | Mixed topics (Go, CLI, databases, general) |
-| `examples/databricks-pde.yaml` | 30      | Databricks Professional Data Engineer prep |
+| Pack                                    | Questions | Description                                        |
+|-----------------------------------------|-----------|----------------------------------------------------|
+| `examples/go-basics.yaml`              | 3         | Go language fundamentals                           |
+| `examples/mvp-basics.yaml`             | 10        | Mixed topics (Go, CLI, databases, general)         |
+| `examples/databricks-pde.yaml`         | 30        | Databricks Professional Data Engineer prep         |
+| `examples/databricks-pde-explained.yaml`| 15       | Databricks PDE with per-choice explanations        |
 
 ### Professional Data Engineer — Practice Pack
 
@@ -117,6 +118,24 @@ All answers are based on official Databricks documentation with `source_ref` lin
 ./bin/golearn import examples/databricks-pde.yaml
 ./bin/golearn tui
 # → Select "Databricks Professional Data Engineer"
+```
+
+### Databricks Professional Data Engineer — Explained Practice Pack
+
+The `databricks-pde-explained.yaml` pack contains 15 exam-style questions with
+**full per-choice explanations**. Each answer option includes a rationale explaining
+why it is correct or incorrect — optimised for deep learning, not just answer checking.
+
+Topics covered: Auto Loader, Delta Lake ACID, OPTIMIZE + ZORDER, VACUUM, Change Data
+Feed, Structured Streaming checkpointing, watermarks, trigger modes, Unity Catalog
+permissions, medallion architecture, isolation levels, deletion vectors, stream-static
+joins, MERGE semantics, and Delta table constraints.
+
+```bash
+./bin/golearn import examples/databricks-pde-explained.yaml
+./bin/golearn tui
+# → Select "Databricks PDE — Explained Practice"
+# → Answer a question → see quiz-show feedback → press 'e' for explanations
 ```
 
 ## Import
@@ -158,10 +177,12 @@ examples/bad.yaml: question[2].choices: must have >= 2 choices, got 1
 ```
 
 The TUI provides:
+- **ASCII intro** — polished splash screen on startup
 - **Topic select** — browse topics with question counts and accuracy
 - **Session config** — choose number of questions
 - **Question screen** — navigate choices with ↑/↓, toggle with space, submit with enter
-- **Summary** — view total answered, correct count, and accuracy %
+- **Quiz-show review** — colour-coded feedback with ✔/✘ markers, press 'e' for explanations
+- **Summary** — accuracy %, average response time, review wrong questions with 'r'
 
 ## Documentation
 
@@ -171,6 +192,7 @@ The TUI provides:
 | [doc/WORKFLOW.md](doc/WORKFLOW.md)    | Agent workflow and code standards     |
 | [doc/PROGRESS.md](doc/PROGRESS.md)   | Status, changelog, milestones         |
 | [doc/SPEC.md](doc/SPEC.md)           | Product specification                 |
+| [doc/QUESTIONS.md](doc/QUESTIONS.md)  | Question authoring standard           |
 
 ## License
 

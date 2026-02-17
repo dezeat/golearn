@@ -98,6 +98,10 @@ func (s *ExportService) Export(topicSlug, outPath, format string) error {
 		if q.SourceRef != "" {
 			pq.SourceRef = q.SourceRef
 		}
+		if q.Rationale.Correct != "" || len(q.Rationale.PerChoice) > 0 {
+			rat := q.Rationale
+			pq.Rationale = &rat
+		}
 		if q.Confidence != 1.0 {
 			conf := q.Confidence
 			pq.Confidence = &conf
@@ -192,6 +196,10 @@ func (s *ExportService) ExportToBytes(topicSlug, format string) ([]byte, error) 
 		}
 		if q.SourceRef != "" {
 			pq.SourceRef = q.SourceRef
+		}
+		if q.Rationale.Correct != "" || len(q.Rationale.PerChoice) > 0 {
+			rat := q.Rationale
+			pq.Rationale = &rat
 		}
 		if q.Confidence != 1.0 {
 			conf := q.Confidence

@@ -236,3 +236,137 @@ func TestIntegration_ImportAndSession(t *testing.T) {
 		}
 	}
 }
+
+// TestImport_PDEExplainedPack validates that the databricks-pde-explained.yaml
+// pack imports cleanly and has the expected number of questions.
+func TestImport_PDEExplainedPack(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "pde_explained.db")
+	db, err := sqlite.Open(dbPath)
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	defer db.Close()
+
+	topicRepo := sqlite.NewTopicRepo(db)
+	questionRepo := sqlite.NewQuestionRepo(db)
+
+	reader := pack.NewReader()
+	importSvc := app.NewImportService(reader, topicRepo, questionRepo)
+
+	result, err := importSvc.Import("../../examples/databricks-pde-explained.yaml")
+	if err != nil {
+		t.Fatalf("import pde-explained: %v", err)
+	}
+	if result.Inserted != 15 {
+		t.Errorf("expected 15 inserted, got %d", result.Inserted)
+	}
+	if result.Duplicates != 0 {
+		t.Errorf("expected 0 duplicates, got %d", result.Duplicates)
+	}
+	if len(result.Errors) > 0 {
+		t.Errorf("unexpected errors: %v", result.Errors)
+	}
+
+	// Verify questions have rationale data.
+	topic, err := topicRepo.GetBySlug("databricks-pde-explained")
+	if err != nil {
+		t.Fatalf("get topic: %v", err)
+	}
+	questions, err := questionRepo.ListByTopic(topic.ID)
+	if err != nil {
+		t.Fatalf("list questions: %v", err)
+	}
+
+	for _, q := range questions {
+		if q.Rationale.Correct == "" {
+			t.Errorf("question %q missing rationale.correct", q.Prompt[:40])
+		}
+		if len(q.Rationale.PerChoice) == 0 {
+			t.Errorf("question %q missing rationale.per_choice", q.Prompt[:40])
+		}
+		// Every choice should have a per_choice explanation.
+		for _, c := range q.Choices {
+			if _, ok := q.Rationale.PerChoice[c.ID]; !ok {
+				t.Errorf("question %q missing per_choice explanation for %s", q.Prompt[:40], c.ID)
+			}
+		}
+	}
+
+	// Re-import should produce all duplicates.
+	result2, err := importSvc.Import("../../examples/databricks-pde-explained.yaml")
+	if err != nil {
+		t.Fatalf("re-import: %v", err)
+	}
+	if result2.Inserted != 0 {
+		t.Errorf("re-import: expected 0 inserts, got %d", result2.Inserted)
+	}
+	if result2.Duplicates != 15 {
+		t.Errorf("re-import: expected 15 duplicates, got %d", result2.Duplicates)
+	}
+}
+
+// TestExportRoundtrip_WithRationale verifies that rationale survives export/reimport.
+func TestExportRoundtrip_WithRationale(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "rationale_roundtrip.db")
+	db, err := sqlite.Open(dbPath)
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	defer db.Close()
+
+	topicRepo := sqlite.NewTopicRepo(db)
+	questionRepo := sqlite.NewQuestionRepo(db)
+
+	reader := pack.NewReader()
+	importSvc := app.NewImportService(reader, topicRepo, questionRepo)
+
+	if _, err := importSvc.Import("../../examples/databricks-pde-explained.yaml"); err != nil {
+		t.Fatalf("import: %v", err)
+	}
+
+	// Export.
+	exportPath := filepath.Join(t.TempDir(), "exported_rationale.yaml")
+	exportSvc := app.NewExportService(topicRepo, questionRepo)
+	if err := exportSvc.Export("databricks-pde-explained", exportPath, "yaml"); err != nil {
+		t.Fatalf("export: %v", err)
+	}
+
+	// Import into a fresh DB to verify rationale survived.
+	dbPath2 := filepath.Join(t.TempDir(), "rationale_roundtrip2.db")
+	db2, err := sqlite.Open(dbPath2)
+	if err != nil {
+		t.Fatalf("open db2: %v", err)
+	}
+	defer db2.Close()
+
+	topicRepo2 := sqlite.NewTopicRepo(db2)
+	questionRepo2 := sqlite.NewQuestionRepo(db2)
+	importSvc2 := app.NewImportService(reader, topicRepo2, questionRepo2)
+
+	result, err := importSvc2.Import(exportPath)
+	if err != nil {
+		t.Fatalf("re-import: %v", err)
+	}
+	if result.Inserted != 15 {
+		t.Errorf("expected 15 inserted from exported file, got %d", result.Inserted)
+	}
+
+	// Verify rationale preserved.
+	topic, err := topicRepo2.GetBySlug("databricks-pde-explained")
+	if err != nil {
+		t.Fatalf("get topic: %v", err)
+	}
+	questions, err := questionRepo2.ListByTopic(topic.ID)
+	if err != nil {
+		t.Fatalf("list questions: %v", err)
+	}
+
+	for _, q := range questions {
+		if q.Rationale.Correct == "" {
+			t.Errorf("exported question %q lost rationale.correct", q.Prompt[:40])
+		}
+		if len(q.Rationale.PerChoice) == 0 {
+			t.Errorf("exported question %q lost rationale.per_choice", q.Prompt[:40])
+		}
+	}
+}

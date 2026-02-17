@@ -1,10 +1,11 @@
 // Package tui implements the Bubble Tea terminal UI for golearn.
 //
 // The TUI provides an interactive experience for practising MCQs:
+//   - ASCII intro splash screen
 //   - Topic selection screen
 //   - Session configuration screen
-//   - Question answering screen (with immediate feedback)
-//   - Session summary screen
+//   - Question answering screen with quiz-show feedback
+//   - Session summary screen with review option
 package tui
 
 import (
@@ -12,11 +13,23 @@ import (
 	"fmt"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 
 	"github.com/dezeat/golearn/internal/adapters/sqlite"
 	"github.com/dezeat/golearn/internal/app"
 	"github.com/dezeat/golearn/internal/domain"
 	"github.com/dezeat/golearn/internal/ports"
+)
+
+// Styles used across TUI screens.
+var (
+	styleCorrect   = lipgloss.NewStyle().Foreground(lipgloss.Color("10")) // green
+	styleIncorrect = lipgloss.NewStyle().Foreground(lipgloss.Color("9"))  // red
+	styleSelected  = lipgloss.NewStyle().Foreground(lipgloss.Color("12")) // blue
+	styleExplain   = lipgloss.NewStyle().Foreground(lipgloss.Color("8"))  // dim
+	styleBold      = lipgloss.NewStyle().Bold(true)
+	styleHeader    = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("14")) // cyan
+	styleDim       = lipgloss.NewStyle().Foreground(lipgloss.Color("8"))
 )
 
 // Run launches the TUI application. It owns the DB connection and
@@ -84,11 +97,12 @@ type topicInfo struct {
 type screen int
 
 const (
-	screenTopicSelect screen = iota
-	screenSessionConfig
-	screenQuestion
-	screenFeedback // brief feedback shown after each answer
-	screenSummary
+	screenIntro         screen = iota // ASCII splash screen
+	screenTopicSelect                 // topic selection
+	screenSessionConfig               // session configuration
+	screenQuestion                    // answering a question
+	screenReview                      // quiz-show review mode (replaces screenFeedback)
+	screenSummary                     // session summary
 )
 
 // model is the root Bubble Tea model that holds all TUI state.
@@ -123,9 +137,21 @@ type model struct {
 	lastCorrect     bool            // result of last submission
 	lastSkipped     bool
 
+	// Review mode state
+	showExplanations bool // toggled by 'e' in review mode
+
 	// Summary state
 	answered     int
 	correctCount int
+	totalLatency int // cumulative latency in milliseconds
+
+	// Track wrong questions for review
+	wrongQuestions []domain.Question
+
+	// Review session mode: only replay wrong questions
+	reviewMode   bool
+	reviewQueue  []domain.Question
+	reviewCursor int
 
 	// Window size
 	width  int
@@ -146,7 +172,7 @@ func newModel(
 		questionRepo:  questionRepo,
 		sessionRepo:   sessionRepo,
 		attemptRepo:   attemptRepo,
-		screen:        screenTopicSelect,
+		screen:        screenIntro,
 		questionCount: 10,
 		selected:      make(map[string]bool),
 	}

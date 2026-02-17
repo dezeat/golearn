@@ -6,6 +6,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/dezeat/golearn/internal/app"
+	"github.com/dezeat/golearn/internal/domain"
 )
 
 // Init implements tea.Model. It returns no initial command.
@@ -31,14 +32,16 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 
 	switch m.screen {
+	case screenIntro:
+		return m.updateIntro(msg)
 	case screenTopicSelect:
 		return m.updateTopicSelect(msg)
 	case screenSessionConfig:
 		return m.updateSessionConfig(msg)
 	case screenQuestion:
 		return m.updateQuestion(msg)
-	case screenFeedback:
-		return m.updateFeedback(msg)
+	case screenReview:
+		return m.updateReview(msg)
 	case screenSummary:
 		return m.updateSummary(msg)
 	}
@@ -53,19 +56,32 @@ func (m model) View() string {
 	}
 
 	switch m.screen {
+	case screenIntro:
+		return m.viewIntro()
 	case screenTopicSelect:
 		return m.viewTopicSelect()
 	case screenSessionConfig:
 		return m.viewSessionConfig()
 	case screenQuestion:
 		return m.viewQuestion()
-	case screenFeedback:
-		return m.viewFeedback()
+	case screenReview:
+		return m.viewReview()
 	case screenSummary:
 		return m.viewSummary()
 	}
 
 	return ""
+}
+
+// --- Intro ---
+
+func (m model) updateIntro(msg tea.Msg) (tea.Model, tea.Cmd) {
+	switch msg.(type) {
+	case tea.KeyMsg:
+		// Any key press moves to topic select.
+		m.screen = screenTopicSelect
+	}
+	return m, nil
 }
 
 // --- Topic Select ---
@@ -138,6 +154,9 @@ func (m model) updateSessionConfig(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.questionNum = 0
 			m.answered = 0
 			m.correctCount = 0
+			m.totalLatency = 0
+			m.wrongQuestions = nil
+			m.reviewMode = false
 
 			// Advance to the first question.
 			m.advanceQuestion()
@@ -183,12 +202,15 @@ func (m model) updateQuestion(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "s":
 			// Skip this question.
 			if m.currentQuestion != nil {
-				_, _ = m.engine.RecordAttempt(m.currentQuestion.ID, nil, true, 0)
+				if !m.reviewMode {
+					_, _ = m.engine.RecordAttempt(m.currentQuestion.ID, nil, true, 0)
+				}
 				m.answered++
 				m.lastSkipped = true
 				m.lastCorrect = false
 				m.submitted = true
-				m.screen = screenFeedback
+				m.showExplanations = false
+				m.screen = screenReview
 			}
 		case "enter":
 			if m.currentQuestion != nil && len(m.selected) > 0 {
@@ -199,18 +221,28 @@ func (m model) updateQuestion(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 
 				latencyMs := int(time.Since(m.questionStarted()).Milliseconds())
-				correct, _ := m.engine.RecordAttempt(
-					m.currentQuestion.ID, selectedIDs, false, latencyMs,
-				)
+				if !m.reviewMode {
+					correct, _ := m.engine.RecordAttempt(
+						m.currentQuestion.ID, selectedIDs, false, latencyMs,
+					)
+					m.lastCorrect = correct
+				} else {
+					// In review mode, evaluate locally.
+					m.lastCorrect = domain.EvaluateCorrectness(selectedIDs, m.currentQuestion.CorrectChoiceIDs)
+				}
 
 				m.answered++
-				m.lastCorrect = correct
+				m.totalLatency += latencyMs
 				m.lastSkipped = false
 				m.submitted = true
-				if correct {
+				if m.lastCorrect {
 					m.correctCount++
+				} else if !m.reviewMode {
+					// Track wrong questions only in normal mode.
+					m.wrongQuestions = append(m.wrongQuestions, *m.currentQuestion)
 				}
-				m.screen = screenFeedback
+				m.showExplanations = false
+				m.screen = screenReview
 			}
 		}
 	}
@@ -221,6 +253,11 @@ func (m model) updateQuestion(msg tea.Msg) (tea.Model, tea.Cmd) {
 var questionStartedAt time.Time
 
 func (m *model) advanceQuestion() {
+	// In review mode, use the review queue instead of the engine.
+	if m.reviewMode {
+		m.advanceReviewQuestion()
+		return
+	}
 	q := m.engine.GetNextQuestion()
 	if q == nil {
 		_ = m.engine.EndSession()
@@ -232,6 +269,7 @@ func (m *model) advanceQuestion() {
 	m.choiceCursor = 0
 	m.selected = make(map[string]bool)
 	m.submitted = false
+	m.showExplanations = false
 	m.screen = screenQuestion
 	questionStartedAt = time.Now()
 }
@@ -240,12 +278,15 @@ func (m model) questionStarted() time.Time {
 	return questionStartedAt
 }
 
-// --- Feedback ---
+// --- Review (quiz-show feedback) ---
 
-func (m model) updateFeedback(msg tea.Msg) (tea.Model, tea.Cmd) {
+func (m model) updateReview(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		switch msg.String() {
+		case "e":
+			// Toggle explanations.
+			m.showExplanations = !m.showExplanations
 		case "enter", " ":
 			// Advance to next question.
 			m.advanceQuestion()
@@ -269,6 +310,11 @@ func (m model) updateSummary(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "enter", "b":
 			// Back to topic select.
 			m.screen = screenTopicSelect
+		case "r":
+			// Review mode: replay wrong questions.
+			if len(m.wrongQuestions) > 0 {
+				m.startReviewSession()
+			}
 		}
 	}
 	return m, nil

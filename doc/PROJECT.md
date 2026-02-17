@@ -140,8 +140,8 @@ migration tool dependencies while supporting future schema evolution.
 | `correct_choice_ids` | `[]string`         | yes      | References `Choice.id`; validated          |
 | `tags`               | `[]string`         | no       | Freeform topic tags                        |
 | `difficulty`         | int                | no       | 1–5 scale (convention)                     |
-| `rationale.correct`  | string             | no       | **Reserved** — not shown in MVP UI         |
-| `rationale.per_choice` | map[string]string | no      | **Reserved** — keyed by choice ID          |
+| `rationale.correct`  | string             | no       | Shown in TUI review mode via 'e' toggle   |
+| `rationale.per_choice` | map[string]string | no      | Per-choice explanations, keyed by choice ID |
 | `source`             | string             | no       | Provenance, e.g. `manual:file`             |
 | `source_ref`         | string             | no       | File path, URL, etc.                       |
 | `confidence`         | float64            | no       | `0.0–1.0`; defaults to `1.0` for manual   |
