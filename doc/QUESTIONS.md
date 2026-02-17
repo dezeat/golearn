@@ -50,7 +50,13 @@ Each incorrect answer (distractor) must:
 - Choice text length should be **roughly balanced** — avoid one choice being 5× longer than others.
 - Avoid **"All of the above"** and **"None of the above"** — these are testing anti-patterns.
 - Minimum **2 choices**, recommended **4 choices** for single select statements.
-- Choice IDs should use uppercase letters: `A`, `B`, `C`, `D`, `E`.
+- Choice IDs are stable internal identifiers (not UI labels).
+- Recommended choice ID styles:
+  - Numeric strings: `"1"`, `"2"`, `"3"`
+  - Prefixed IDs: `"opt_1"`, `"opt_2"`
+  - Other short stable tokens
+- UI labels (`A/B/C/...`) are generated at render time from current display order (including shuffled order).
+- `Choice.id` must remain stable for `correct_choice_ids`, `rationale.per_choice`, hashing, and DB storage.
 
 ### Optional fields
 
@@ -72,10 +78,10 @@ Every question **MUST** include a `rationale` section:
 rationale:
   correct: "Explanation of why the correct concept is true."
   per_choice:
-    A: "Why this choice is correct or incorrect."
-    B: "Why this choice is correct or incorrect."
-    C: "Why this choice is correct or incorrect."
-    D: "Why this choice is correct or incorrect."
+    "1": "Why this choice is correct or incorrect."
+    "2": "Why this choice is correct or incorrect."
+    "3": "Why this choice is correct or incorrect."
+    "4": "Why this choice is correct or incorrect."
 ```
 
 ### Rules
@@ -84,6 +90,8 @@ rationale:
 - Wrong choices must explain **why they are wrong**, not just state "this is incorrect."
 - Explanations must reference **specific concepts** (e.g., "Auto Loader uses `cloudFiles` format to..."), not vague phrases (e.g., "this is not how it works").
 - Correct explanations should be self-contained — a reader should understand the answer without prior knowledge.
+- Explanation text must be content-only; do not start with prefixes like `Correct:`, `Incorrect:`, `✅`, or `❌`.
+- Each explanation should stand alone and be readable without an explicit correctness label.
 - Where possible, include `source_ref` pointing to official documentation.
 
 ### Anti-patterns to avoid
@@ -156,11 +164,11 @@ Preferred documentation sources:
     Delta transaction log.
   prompt: "What is the default retention threshold used by VACUUM on a Delta table?"
   choices:
-    - { id: "A", text: "24 hours" }
-    - { id: "B", text: "7 days" }
-    - { id: "C", text: "30 days" }
-    - { id: "D", text: "90 days" }
-  correct_choice_ids: ["B"]
+    - { id: "1", text: "24 hours" }
+    - { id: "2", text: "7 days" }
+    - { id: "3", text: "30 days" }
+    - { id: "4", text: "90 days" }
+  correct_choice_ids: ["2"]
   tags: ["delta-lake", "vacuum"]
   difficulty: 1
   rationale:
@@ -169,18 +177,18 @@ Preferred documentation sources:
       for VACUUM. Files older than this threshold that are no longer
       in the current table version can be deleted.
     per_choice:
-      A: >-
-        Incorrect. 24 hours is too short. Using such a low retention
+      "1": >-
+        24 hours is too short. Using such a low retention
         can break time travel and concurrent readers. The default is
         7 days.
-      B: >-
-        Correct. The default retention is 7 days (168 hours), providing
+      "2": >-
+        The default retention is 7 days (168 hours), providing
         a safe window for time travel queries and long-running jobs.
-      C: >-
-        Incorrect. 30 days is not the default. Users may configure
+      "3": >-
+        30 days is not the default. Users may configure
         longer retention, but the out-of-the-box setting is 7 days.
-      D: >-
-        Incorrect. 90 days is not the default retention period for
+      "4": >-
+        90 days is not the default retention period for
         VACUUM.
   source_ref: "https://docs.databricks.com/en/delta/vacuum.html"
 ```
@@ -189,6 +197,7 @@ This example demonstrates:
 
 - Clear, unambiguous prompt
 - Optional intro providing context
+- Stable internal choice IDs decoupled from UI labels
 - Four plausible choices with balanced length
 - Exactly one correct answer for `single_select`
 - Per-choice explanations that educate, not just evaluate

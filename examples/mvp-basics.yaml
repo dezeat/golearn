@@ -8,11 +8,11 @@ questions:
     intro: "In Go, multiple return values are a common pattern."
     prompt: "What is the idiomatic way to signal an error from a Go function?"
     choices:
-      - { id: "A", text: "Throw an exception" }
-      - { id: "B", text: "Return an error as the last return value" }
-      - { id: "C", text: "Set a global error variable" }
-      - { id: "D", text: "Use panic for all errors" }
-    correct_choice_ids: ["B"]
+      - { id: "1", text: "Throw an exception" }
+      - { id: "2", text: "Return an error as the last return value" }
+      - { id: "3", text: "Set a global error variable" }
+      - { id: "4", text: "Use panic for all errors" }
+    correct_choice_ids: ["2"]
     tags: ["go", "error-handling"]
     difficulty: 1
 
@@ -20,9 +20,9 @@ questions:
   - type: "single_select"
     prompt: "In most CLI tools, the flag '--help' is used to display usage information."
     choices:
-      - { id: "A", text: "True" }
-      - { id: "B", text: "False" }
-    correct_choice_ids: ["A"]
+      - { id: "1", text: "True" }
+      - { id: "2", text: "False" }
+    correct_choice_ids: ["1"]
     tags: ["cli"]
     difficulty: 1
 
@@ -31,11 +31,11 @@ questions:
     intro: "SQLite is a self-contained, serverless SQL database engine."
     prompt: "Which SQLite pragma enables Write-Ahead Logging for better concurrency?"
     choices:
-      - { id: "A", text: "PRAGMA journal_mode=DELETE" }
-      - { id: "B", text: "PRAGMA journal_mode=WAL" }
-      - { id: "C", text: "PRAGMA synchronous=OFF" }
-      - { id: "D", text: "PRAGMA cache_size=1000" }
-    correct_choice_ids: ["B"]
+      - { id: "1", text: "PRAGMA journal_mode=DELETE" }
+      - { id: "2", text: "PRAGMA journal_mode=WAL" }
+      - { id: "3", text: "PRAGMA synchronous=OFF" }
+      - { id: "4", text: "PRAGMA cache_size=1000" }
+    correct_choice_ids: ["2"]
     tags: ["database", "sqlite"]
     difficulty: 2
 
@@ -43,12 +43,12 @@ questions:
   - type: "single_select"
     prompt: "Which data structure uses FIFO (First-In, First-Out) ordering?"
     choices:
-      - { id: "A", text: "Stack" }
-      - { id: "B", text: "Queue" }
-      - { id: "C", text: "Binary tree" }
-      - { id: "D", text: "Hash map" }
-      - { id: "E", text: "Linked list" }
-    correct_choice_ids: ["B"]
+      - { id: "1", text: "Stack" }
+      - { id: "2", text: "Queue" }
+      - { id: "3", text: "Binary tree" }
+      - { id: "4", text: "Hash map" }
+      - { id: "5", text: "Linked list" }
+    correct_choice_ids: ["2"]
     tags: ["data-structures"]
     difficulty: 1
 
@@ -57,11 +57,11 @@ questions:
     intro: "Go provides built-in concurrency primitives."
     prompt: "What is the primary mechanism for communication between goroutines in Go?"
     choices:
-      - { id: "A", text: "Shared memory with locks" }
-      - { id: "B", text: "Channels" }
-      - { id: "C", text: "Callbacks" }
-      - { id: "D", text: "Thread pools" }
-    correct_choice_ids: ["B"]
+      - { id: "1", text: "Shared memory with locks" }
+      - { id: "2", text: "Channels" }
+      - { id: "3", text: "Callbacks" }
+      - { id: "4", text: "Thread pools" }
+    correct_choice_ids: ["2"]
     tags: ["go", "concurrency"]
     difficulty: 2
 
@@ -69,11 +69,11 @@ questions:
   - type: "multi_select"
     prompt: "Which of the following are valid Go built-in types?"
     choices:
-      - { id: "A", text: "int" }
-      - { id: "B", text: "float64" }
-      - { id: "C", text: "char" }
-      - { id: "D", text: "bool" }
-    correct_choice_ids: ["A", "B", "D"]
+      - { id: "1", text: "int" }
+      - { id: "2", text: "float64" }
+      - { id: "3", text: "char" }
+      - { id: "4", text: "bool" }
+    correct_choice_ids: ["1", "2", "4"]
     tags: ["go", "types"]
     difficulty: 1
 
@@ -82,12 +82,12 @@ questions:
     intro: "SQL databases support various constraint types to enforce data integrity."
     prompt: "Which of these are valid SQL constraint types?"
     choices:
-      - { id: "A", text: "PRIMARY KEY" }
-      - { id: "B", text: "FOREIGN KEY" }
-      - { id: "C", text: "UNIQUE" }
-      - { id: "D", text: "SORTED" }
-      - { id: "E", text: "NOT NULL" }
-    correct_choice_ids: ["A", "B", "C", "E"]
+      - { id: "1", text: "PRIMARY KEY" }
+      - { id: "2", text: "FOREIGN KEY" }
+      - { id: "3", text: "UNIQUE" }
+      - { id: "4", text: "SORTED" }
+      - { id: "5", text: "NOT NULL" }
+    correct_choice_ids: ["1", "2", "3", "5"]
     tags: ["database", "sql"]
     difficulty: 2
 
@@ -95,11 +95,11 @@ questions:
   - type: "multi_select"
     prompt: "Which of these are common concurrency problems?"
     choices:
-      - { id: "A", text: "Deadlock" }
-      - { id: "B", text: "Race condition" }
-      - { id: "C", text: "Garbage collection" }
-      - { id: "D", text: "Starvation" }
-    correct_choice_ids: ["A", "B", "D"]
+      - { id: "1", text: "Deadlock" }
+      - { id: "2", text: "Race condition" }
+      - { id: "3", text: "Garbage collection" }
+      - { id: "4", text: "Starvation" }
+    correct_choice_ids: ["1", "2", "4"]
     tags: ["concurrency"]
     difficulty: 3
 
@@ -108,9 +108,9 @@ questions:
     intro: "Environment variables are commonly used to configure CLI applications."
     prompt: "Which of these are valid ways to pass configuration to a CLI tool?"
     choices:
-      - { id: "A", text: "Command-line flags" }
-      - { id: "B", text: "Environment variables" }
-    correct_choice_ids: ["A", "B"]
+      - { id: "1", text: "Command-line flags" }
+      - { id: "2", text: "Environment variables" }
+    correct_choice_ids: ["1", "2"]
     tags: ["cli", "configuration"]
     difficulty: 1
 
@@ -118,10 +118,10 @@ questions:
   - type: "multi_select"
     prompt: "Which of these are considered good software engineering practices?"
     choices:
-      - { id: "A", text: "Writing unit tests" }
-      - { id: "B", text: "Using version control" }
-      - { id: "C", text: "Hardcoding credentials in source" }
-      - { id: "D", text: "Code review before merging" }
-    correct_choice_ids: ["A", "B", "D"]
+      - { id: "1", text: "Writing unit tests" }
+      - { id: "2", text: "Using version control" }
+      - { id: "3", text: "Hardcoding credentials in source" }
+      - { id: "4", text: "Code review before merging" }
+    correct_choice_ids: ["1", "2", "4"]
     tags: ["best-practices"]
     difficulty: 1

@@ -80,7 +80,7 @@ golearn/
 ├── examples/
 │   ├── go-basics.yaml             # 3-question sample pack
 │   ├── mvp-basics.yaml            # 10-question mixed pack
-│   └── databricks-pde.yaml        # 30-question PDE certification pack
+│   └── databricks-pde-explained-2.yaml  # 30-question PDE certification pack
 ├── doc/
 │   ├── WORKFLOW.md                # agent workflow and code standards
 │   ├── PROJECT.md                 # this file — technical specification
@@ -168,8 +168,10 @@ Development-phase compatibility rule:
 
 | Field  | Type   | Required | Notes                            |
 |--------|--------|----------|----------------------------------|
-| `id`   | string | yes      | Stable, question-local (e.g. `"A"`, `"B"`) |
+| `id`   | string | yes      | Stable, question-local internal ID (e.g. `"1"`, `"2"`, `"opt_1"`) |
 | `text`  | string | yes      | The answer text                  |
+
+UI labels are generated at render time from the current displayed order (`A/B/C/...`), including shuffled sessions. `Choice.id` is never a UI label contract.
 
 ---
 
@@ -185,10 +187,10 @@ questions:
     intro: "Optional context."     # optional
     prompt: "The question text?"
     choices:
-      - { id: "A", text: "First option" }
-      - { id: "B", text: "Second option" }
-      - { id: "C", text: "Third option" }
-    correct_choice_ids: ["B"]
+      - { id: "1", text: "First option" }
+      - { id: "2", text: "Second option" }
+      - { id: "3", text: "Third option" }
+    correct_choice_ids: ["2"]
     tags: ["optional-tag"]         # optional
     difficulty: 2                  # optional
     source: "manual:file"          # optional

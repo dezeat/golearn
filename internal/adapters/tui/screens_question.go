@@ -59,7 +59,7 @@ func (m model) viewQuestion() string {
 			marker = "●"
 		}
 
-		choiceText := fmt.Sprintf("%s) %s", c.ID, c.Text)
+		choiceText := fmt.Sprintf("%s) %s", m.displayLabelForChoiceID(c.ID), c.Text)
 		wrappedLines := strings.Split(wrapText(choiceText, choiceCW), "\n")
 
 		b.WriteString(fmt.Sprintf("  %s%s %s\n", cursor, marker, wrappedLines[0]))
@@ -148,7 +148,7 @@ func (m model) viewReview() string {
 			selectIndicator = styleSelected.Render("▸")
 		}
 
-		choiceText := fmt.Sprintf("%s) %s", c.ID, c.Text)
+		choiceText := fmt.Sprintf("%s) %s", m.displayLabelForChoiceID(c.ID), c.Text)
 		wrappedLines := strings.Split(wrapText(choiceText, choiceCW), "\n")
 
 		for li, l := range wrappedLines {
@@ -166,7 +166,7 @@ func (m model) viewReview() string {
 		if m.showExplanations && q.Rationale.PerChoice != nil {
 			if explanation, ok := q.Rationale.PerChoice[c.ID]; ok {
 				expCW := m.contentWidth(7)
-				b.WriteString(styleExplain.Render(wrapAndIndent(explanation, expCW, "       ")) + "\n")
+				b.WriteString(styleExplain.Render(wrapAndIndent(sanitizeExplanation(explanation), expCW, "       ")) + "\n")
 			}
 		}
 	}
@@ -174,7 +174,7 @@ func (m model) viewReview() string {
 	// Show correct explanation if available and explanations toggled.
 	if m.showExplanations && q.Rationale.Correct != "" {
 		b.WriteString("\n" + styleBold.Render("  Explanation:") + "\n")
-		b.WriteString(styleExplain.Render(wrapAndIndent(q.Rationale.Correct, cw, "  ")) + "\n")
+		b.WriteString(styleExplain.Render(wrapAndIndent(sanitizeExplanation(q.Rationale.Correct), cw, "  ")) + "\n")
 	}
 
 	// Controls.
@@ -256,7 +256,7 @@ func (m model) viewReviewBrowse() string {
 			indicator = styleSelected.Render("▸")
 		}
 
-		choiceText := fmt.Sprintf("%s) %s", c.ID, c.Text)
+		choiceText := fmt.Sprintf("%s) %s", m.displayLabelForChoiceID(c.ID), c.Text)
 		wrappedLines := strings.Split(wrapText(choiceText, choiceCW), "\n")
 
 		for li, l := range wrappedLines {
@@ -274,7 +274,7 @@ func (m model) viewReviewBrowse() string {
 		if m.showExplanations && q.Rationale.PerChoice != nil {
 			if explanation, ok := q.Rationale.PerChoice[c.ID]; ok {
 				expCW := m.contentWidth(7)
-				b.WriteString(styleExplain.Render(wrapAndIndent(explanation, expCW, "       ")) + "\n")
+				b.WriteString(styleExplain.Render(wrapAndIndent(sanitizeExplanation(explanation), expCW, "       ")) + "\n")
 			}
 		}
 	}
@@ -282,7 +282,7 @@ func (m model) viewReviewBrowse() string {
 	// Correct explanation.
 	if m.showExplanations && q.Rationale.Correct != "" {
 		b.WriteString("\n" + styleBold.Render("  Explanation:") + "\n")
-		b.WriteString(styleExplain.Render(wrapAndIndent(q.Rationale.Correct, cw, "  ")) + "\n")
+		b.WriteString(styleExplain.Render(wrapAndIndent(sanitizeExplanation(q.Rationale.Correct), cw, "  ")) + "\n")
 	}
 
 	// Controls.

@@ -18,7 +18,7 @@ certification prep and learning new technologies.
 make build
 
 # Import the Databricks PDE certification practice pack (30 questions)
-./bin/golearn import examples/databricks-pde.yaml
+./bin/golearn import examples/databricks-pde-explained-2.yaml
 
 # Launch the interactive TUI
 ./bin/golearn tui
@@ -96,12 +96,12 @@ See [doc/PROJECT.md](doc/PROJECT.md) for the full schema and validation rules.
 |-----------------------------------------|-----------|----------------------------------------------------|
 | `examples/go-basics.yaml`              | 3         | Go language fundamentals                           |
 | `examples/mvp-basics.yaml`             | 10        | Mixed topics (Go, CLI, databases, general)         |
-| `examples/databricks-pde.yaml`         | 30        | Databricks Professional Data Engineer prep         |
+| `examples/databricks-pde-explained-2.yaml` | 30        | Databricks Professional Data Engineer prep         |
 | `examples/databricks-pde-explained.yaml`| 15       | Databricks PDE with per-choice explanations        |
 
 ### Professional Data Engineer — Practice Pack
 
-The `databricks-pde.yaml` pack contains 30 exam-style questions covering:
+The `databricks-pde-explained-2.yaml` pack contains 30 exam-style questions covering:
 
 - **Auto Loader** — file notification mode, schema inference
 - **Delta Lake** — transaction log, VACUUM, isolation levels, time travel
@@ -115,7 +115,7 @@ The `databricks-pde.yaml` pack contains 30 exam-style questions covering:
 All answers are based on official Databricks documentation with `source_ref` links.
 
 ```bash
-./bin/golearn import examples/databricks-pde.yaml
+./bin/golearn import examples/databricks-pde-explained-2.yaml
 ./bin/golearn tui
 # → Select "Databricks Professional Data Engineer"
 ```

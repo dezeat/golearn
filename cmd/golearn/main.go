@@ -99,7 +99,7 @@ func printUsage() {
 	fmt.Printf("  --db <path>    SQLite database path (default: %s)\n", sqlite.DefaultDBPath())
 	fmt.Println()
 	fmt.Println("Examples:")
-	fmt.Println("  golearn import examples/databricks-pde.yaml")
+	fmt.Println("  golearn import examples/databricks-pde-explained-2.yaml")
 	fmt.Println("  golearn tui")
 	fmt.Println("  golearn run databricks-pde --n 15")
 	fmt.Println("  golearn export databricks-pde --out backup.yaml")
@@ -286,7 +286,7 @@ func runSession(dbPath string, args []string) error {
 	}
 
 	fmt.Printf("Session %d started (topic: %s, questions: %d)\n", sessionID, topicSlug, engine.QueueLength())
-	fmt.Println("Enter choice IDs (e.g. A,C), 's' to skip, 'q' to quit.")
+	fmt.Println("Enter choice labels (e.g. A,C), 's' to skip, 'q' to quit.")
 	fmt.Println()
 
 	scanner := bufio.NewScanner(os.Stdin)
@@ -311,8 +311,15 @@ func runSession(dbPath string, args []string) error {
 		fmt.Printf("Q%d/%d: %s\n", questionNum, engine.QueueLength(), q.Prompt)
 
 		// Print choices.
-		for _, c := range sq.ShuffledChoices {
-			fmt.Printf("  %s) %s\n", c.ID, c.Text)
+		displayLabelByChoiceID := make(map[string]string, len(sq.ShuffledChoices))
+		choiceIDByDisplayLabel := make(map[string]string, len(sq.ShuffledChoices))
+		choiceIDByChoiceID := make(map[string]string, len(sq.ShuffledChoices))
+		for i, c := range sq.ShuffledChoices {
+			label := displayLabelForIndex(i)
+			displayLabelByChoiceID[c.ID] = label
+			choiceIDByDisplayLabel[label] = c.ID
+			choiceIDByChoiceID[strings.ToUpper(c.ID)] = c.ID
+			fmt.Printf("  %s) %s\n", label, c.Text)
 		}
 		fmt.Print("\nYour answer: ")
 
@@ -333,10 +340,19 @@ func runSession(dbPath string, args []string) error {
 		if !skipped {
 			parts := strings.Split(input, ",")
 			for _, p := range parts {
-				p = strings.TrimSpace(p)
-				if p != "" {
-					selectedIDs = append(selectedIDs, p)
+				normalized := strings.ToUpper(strings.TrimSpace(p))
+				if normalized == "" {
+					continue
 				}
+				if mappedID, ok := choiceIDByDisplayLabel[normalized]; ok {
+					selectedIDs = append(selectedIDs, mappedID)
+					continue
+				}
+				if mappedID, ok := choiceIDByChoiceID[normalized]; ok {
+					selectedIDs = append(selectedIDs, mappedID)
+					continue
+				}
+				selectedIDs = append(selectedIDs, strings.TrimSpace(p))
 			}
 		}
 
@@ -353,7 +369,19 @@ func runSession(dbPath string, args []string) error {
 			correctCount++
 			fmt.Println("  -> Correct!")
 		} else {
-			fmt.Printf("  -> Incorrect. Correct answer: %s\n", strings.Join(q.CorrectChoiceIDs, ", "))
+			correctSet := make(map[string]bool, len(q.CorrectChoiceIDs))
+			for _, cid := range q.CorrectChoiceIDs {
+				correctSet[cid] = true
+			}
+			labels := make([]string, 0, len(correctSet))
+			for _, c := range sq.ShuffledChoices {
+				if correctSet[c.ID] {
+					if label, ok := displayLabelByChoiceID[c.ID]; ok {
+						labels = append(labels, label)
+					}
+				}
+			}
+			fmt.Printf("  -> Incorrect. Correct answer: %s\n", strings.Join(labels, ", "))
 		}
 		fmt.Println()
 	}
@@ -375,6 +403,21 @@ func runSession(dbPath string, args []string) error {
 	}
 
 	return nil
+}
+
+func displayLabelForIndex(index int) string {
+	if index < 0 {
+		return ""
+	}
+
+	value := index + 1
+	label := ""
+	for value > 0 {
+		value--
+		label = string(rune('A'+(value%26))) + label
+		value /= 26
+	}
+	return label
 }
 
 func resolveCurrentUserID(userRepo *sqlite.UserRepo, configStore *localconfig.Store) (int64, error) {

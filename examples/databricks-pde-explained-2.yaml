@@ -1,0 +1,788 @@
+pack_version: 0.1.0
+topic:
+  slug: databricks-pde
+  name: Databricks Professional Data Engineer
+questions:
+- type: single_select
+  intro: Auto Loader incrementally processes new data files as they arrive in cloud storage.
+  prompt: Which Spark reader format does Auto Loader use in a Structured Streaming query?
+  choices:
+  - id: '1'
+    text: cloudFiles
+  - id: '2'
+    text: autoLoader
+  - id: '3'
+    text: deltaStream
+  - id: '4'
+    text: fileStream
+  correct_choice_ids:
+  - '1'
+  tags:
+  - auto-loader
+  - structured-streaming
+  difficulty: 1
+  source_ref: https://docs.databricks.com/en/ingestion/auto-loader/index.html
+  rationale:
+    correct: The best answer is 'cloudFiles' based on Databricks behavior described in the official documentation for this topic.
+    per_choice:
+      '1': cloudFiles aligns with the documented Databricks behavior expected by this question.
+      '2': autoLoader does not match the documented Databricks behavior for this scenario; review the referenced source.
+      '3': deltaStream does not match the documented Databricks behavior for this scenario; review the referenced source.
+      '4': fileStream does not match the documented Databricks behavior for this scenario; review the referenced source.
+- type: single_select
+  intro: Auto Loader supports two modes for detecting new files.
+  prompt: Which Auto Loader file notification mode uses cloud events to detect new files instead of listing the directory?
+  choices:
+  - id: '1'
+    text: Directory listing mode
+  - id: '2'
+    text: File notification mode
+  - id: '3'
+    text: Trigger mode
+  - id: '4'
+    text: Polling mode
+  correct_choice_ids:
+  - '2'
+  tags:
+  - auto-loader
+  difficulty: 2
+  source_ref: https://docs.databricks.com/en/ingestion/auto-loader/file-notification-mode.html
+  rationale:
+    correct: The best answer is 'File notification mode' based on Databricks behavior described in the official documentation for this topic.
+    per_choice:
+      '1': Directory listing mode does not match the documented Databricks behavior for this scenario; review the referenced source.
+      '2': File notification mode aligns with the documented Databricks behavior expected by this question.
+      '3': Trigger mode does not match the documented Databricks behavior for this scenario; review the referenced source.
+      '4': Polling mode does not match the documented Databricks behavior for this scenario; review the referenced source.
+- type: single_select
+  prompt: What option in Auto Loader enables automatic inference and evolution of the schema as new data arrives?
+  choices:
+  - id: '1'
+    text: cloudFiles.inferColumnTypes
+  - id: '2'
+    text: cloudFiles.schemaEvolutionMode
+  - id: '3'
+    text: cloudFiles.schemaLocation
+  - id: '4'
+    text: cloudFiles.autoSchema
+  correct_choice_ids:
+  - '1'
+  tags:
+  - auto-loader
+  - schema-evolution
+  difficulty: 2
+  source_ref: https://docs.databricks.com/en/ingestion/auto-loader/schema.html
+  rationale:
+    correct: The best answer is 'cloudFiles.inferColumnTypes' based on Databricks behavior described in the official documentation for this topic.
+    per_choice:
+      '1': cloudFiles.inferColumnTypes aligns with the documented Databricks behavior expected by this question.
+      '2': cloudFiles.schemaEvolutionMode does not match the documented Databricks behavior for this scenario; review the referenced source.
+      '3': cloudFiles.schemaLocation does not match the documented Databricks behavior for this scenario; review the referenced source.
+      '4': cloudFiles.autoSchema does not match the documented Databricks behavior for this scenario; review the referenced source.
+- type: single_select
+  intro: Delta Lake stores metadata in a transaction log directory.
+  prompt: What is the name of the directory where Delta Lake stores its transaction log?
+  choices:
+  - id: '1'
+    text: _delta_log
+  - id: '2'
+    text: _transaction_log
+  - id: '3'
+    text: _metadata
+  - id: '4'
+    text: _commits
+  correct_choice_ids:
+  - '1'
+  tags:
+  - delta-lake
+  - transaction-log
+  difficulty: 1
+  source_ref: https://docs.databricks.com/en/delta/index.html
+  rationale:
+    correct: The best answer is '_delta_log' based on Databricks behavior described in the official documentation for this topic.
+    per_choice:
+      '1': _delta_log aligns with the documented Databricks behavior expected by this question.
+      '2': _transaction_log does not match the documented Databricks behavior for this scenario; review the referenced source.
+      '3': _metadata does not match the documented Databricks behavior for this scenario; review the referenced source.
+      '4': _commits does not match the documented Databricks behavior for this scenario; review the referenced source.
+- type: single_select
+  prompt: How often does Delta Lake create a checkpoint file to summarize the transaction log?
+  choices:
+  - id: '1'
+    text: Every 5 commits
+  - id: '2'
+    text: Every 10 commits
+  - id: '3'
+    text: Every 50 commits
+  - id: '4'
+    text: Every 100 commits
+  correct_choice_ids:
+  - '2'
+  tags:
+  - delta-lake
+  - checkpointing
+  difficulty: 2
+  source_ref: https://docs.databricks.com/en/delta/index.html
+  rationale:
+    correct: The best answer is 'Every 10 commits' based on Databricks behavior described in the official documentation for this topic.
+    per_choice:
+      '1': Every 5 commits does not match the documented Databricks behavior for this scenario; review the referenced source.
+      '2': Every 10 commits aligns with the documented Databricks behavior expected by this question.
+      '3': Every 50 commits does not match the documented Databricks behavior for this scenario; review the referenced source.
+      '4': Every 100 commits does not match the documented Databricks behavior for this scenario; review the referenced source.
+- type: single_select
+  intro: Delta Lake provides ACID transactions on data lakes.
+  prompt: Which isolation level does Delta Lake use by default for write operations?
+  choices:
+  - id: '1'
+    text: Read Committed
+  - id: '2'
+    text: Serializable
+  - id: '3'
+    text: WriteSerializable
+  - id: '4'
+    text: Snapshot Isolation
+  correct_choice_ids:
+  - '3'
+  tags:
+  - delta-lake
+  - isolation-levels
+  difficulty: 3
+  source_ref: https://docs.databricks.com/en/delta/isolation-level.html
+  rationale:
+    correct: The best answer is 'WriteSerializable' based on Databricks behavior described in the official documentation for this topic.
+    per_choice:
+      '1': Read Committed does not match the documented Databricks behavior for this scenario; review the referenced source.
+      '2': Serializable does not match the documented Databricks behavior for this scenario; review the referenced source.
+      '3': WriteSerializable aligns with the documented Databricks behavior expected by this question.
+      '4': Snapshot Isolation does not match the documented Databricks behavior for this scenario; review the referenced source.
+- type: single_select
+  prompt: What happens when you run VACUUM on a Delta table with a retention period of 0 hours?
+  choices:
+  - id: '1'
+    text: It deletes all data files
+  - id: '2'
+    text: It fails with an error unless you set spark.databricks.delta.retentionDurationCheck.enabled to false
+  - id: '3'
+    text: It only removes the transaction log
+  - id: '4'
+    text: It automatically sets retention to 7 days
+  correct_choice_ids:
+  - '2'
+  tags:
+  - delta-lake
+  - vacuum
+  difficulty: 3
+  source_ref: https://docs.databricks.com/en/delta/vacuum.html
+  rationale:
+    correct: The best answer is 'It fails with an error unless you set spark.databricks.delta.retentionDurationCheck.enabled to false' based on Databricks behavior described in the official documentation for this topic.
+    per_choice:
+      '1': It deletes all data files does not match the documented Databricks behavior for this scenario; review the referenced source.
+      '2': It fails with an error unless you set spark.databricks.delta.retentionDurationCheck.enabled to false aligns with the documented Databricks behavior expected by this question.
+      '3': It only removes the transaction log does not match the documented Databricks behavior for this scenario; review the referenced source.
+      '4': It automatically sets retention to 7 days does not match the documented Databricks behavior for this scenario; review the referenced source.
+- type: single_select
+  prompt: What is the default retention period for VACUUM on a Delta table?
+  choices:
+  - id: '1'
+    text: 24 hours
+  - id: '2'
+    text: 48 hours
+  - id: '3'
+    text: 7 days
+  - id: '4'
+    text: 30 days
+  correct_choice_ids:
+  - '3'
+  tags:
+  - delta-lake
+  - vacuum
+  difficulty: 2
+  source_ref: https://docs.databricks.com/en/delta/vacuum.html
+  rationale:
+    correct: The best answer is '7 days' based on Databricks behavior described in the official documentation for this topic.
+    per_choice:
+      '1': 24 hours does not match the documented Databricks behavior for this scenario; review the referenced source.
+      '2': 48 hours does not match the documented Databricks behavior for this scenario; review the referenced source.
+      '3': 7 days aligns with the documented Databricks behavior expected by this question.
+      '4': 30 days does not match the documented Databricks behavior for this scenario; review the referenced source.
+- type: single_select
+  intro: OPTIMIZE compacts small files in a Delta table for better read performance.
+  prompt: What does ZORDER BY do when used with the OPTIMIZE command on a Delta table?
+  choices:
+  - id: '1'
+    text: Sorts data globally across all files
+  - id: '2'
+    text: Co-locates related data in the same set of files to improve data skipping
+  - id: '3'
+    text: Creates a secondary index on the specified columns
+  - id: '4'
+    text: Partitions the table by the specified columns
+  correct_choice_ids:
+  - '2'
+  tags:
+  - delta-lake
+  - zorder
+  - optimization
+  difficulty: 2
+  source_ref: https://docs.databricks.com/en/delta/optimize.html
+  rationale:
+    correct: The best answer is 'Co-locates related data in the same set of files to improve data skipping' based on Databricks behavior described in the official documentation for this topic.
+    per_choice:
+      '1': Sorts data globally across all files does not match the documented Databricks behavior for this scenario; review the referenced source.
+      '2': Co-locates related data in the same set of files to improve data skipping aligns with the documented Databricks behavior expected by this question.
+      '3': Creates a secondary index on the specified columns does not match the documented Databricks behavior for this scenario; review the referenced source.
+      '4': Partitions the table by the specified columns does not match the documented Databricks behavior for this scenario; review the referenced source.
+- type: single_select
+  prompt: Which Delta Lake feature automatically compacts small files without requiring manual OPTIMIZE commands?
+  choices:
+  - id: '1'
+    text: Auto Compaction
+  - id: '2'
+    text: Auto Loader
+  - id: '3'
+    text: Z-Ordering
+  - id: '4'
+    text: Data Skipping
+  correct_choice_ids:
+  - '1'
+  tags:
+  - delta-lake
+  - optimization
+  - auto-compaction
+  difficulty: 2
+  source_ref: https://docs.databricks.com/en/delta/optimize.html
+  rationale:
+    correct: The best answer is 'Auto Compaction' based on Databricks behavior described in the official documentation for this topic.
+    per_choice:
+      '1': Auto Compaction aligns with the documented Databricks behavior expected by this question.
+      '2': Auto Loader does not match the documented Databricks behavior for this scenario; review the referenced source.
+      '3': Z-Ordering does not match the documented Databricks behavior for this scenario; review the referenced source.
+      '4': Data Skipping does not match the documented Databricks behavior for this scenario; review the referenced source.
+- type: single_select
+  intro: Structured Streaming uses checkpointing to track the progress of a streaming query.
+  prompt: What is the purpose of the checkpoint location in a Structured Streaming query?
+  choices:
+  - id: '1'
+    text: To store the output data
+  - id: '2'
+    text: To track query progress and enable fault-tolerant recovery
+  - id: '3'
+    text: To cache intermediate results in memory
+  - id: '4'
+    text: To store the query execution plan
+  correct_choice_ids:
+  - '2'
+  tags:
+  - structured-streaming
+  - checkpointing
+  difficulty: 2
+  source_ref: https://docs.databricks.com/en/structured-streaming/index.html
+  rationale:
+    correct: The best answer is 'To track query progress and enable fault-tolerant recovery' based on Databricks behavior described in the official documentation for this topic.
+    per_choice:
+      '1': To store the output data does not match the documented Databricks behavior for this scenario; review the referenced source.
+      '2': To track query progress and enable fault-tolerant recovery aligns with the documented Databricks behavior expected by this question.
+      '3': To cache intermediate results in memory does not match the documented Databricks behavior for this scenario; review the referenced source.
+      '4': To store the query execution plan does not match the documented Databricks behavior for this scenario; review the referenced source.
+- type: single_select
+  prompt: In Structured Streaming, which output mode writes only the rows that have changed since the last trigger?
+  choices:
+  - id: '1'
+    text: Complete mode
+  - id: '2'
+    text: Append mode
+  - id: '3'
+    text: Update mode
+  - id: '4'
+    text: Delta mode
+  correct_choice_ids:
+  - '3'
+  tags:
+  - structured-streaming
+  - output-modes
+  difficulty: 2
+  source_ref: https://docs.databricks.com/en/structured-streaming/index.html
+  rationale:
+    correct: The best answer is 'Update mode' based on Databricks behavior described in the official documentation for this topic.
+    per_choice:
+      '1': Complete mode does not match the documented Databricks behavior for this scenario; review the referenced source.
+      '2': Append mode does not match the documented Databricks behavior for this scenario; review the referenced source.
+      '3': Update mode aligns with the documented Databricks behavior expected by this question.
+      '4': Delta mode does not match the documented Databricks behavior for this scenario; review the referenced source.
+- type: single_select
+  intro: Watermarks allow Structured Streaming to handle late-arriving data.
+  prompt: What does a watermark define in a Structured Streaming query?
+  choices:
+  - id: '1'
+    text: The maximum number of records to process per batch
+  - id: '2'
+    text: The threshold for how late data can arrive and still be included in stateful aggregations
+  - id: '3'
+    text: The frequency at which checkpoint files are created
+  - id: '4'
+    text: The partition strategy for the output table
+  correct_choice_ids:
+  - '2'
+  tags:
+  - structured-streaming
+  - watermarks
+  difficulty: 3
+  source_ref: https://docs.databricks.com/en/structured-streaming/watermarks.html
+  rationale:
+    correct: The best answer is 'The threshold for how late data can arrive and still be included in stateful aggregations' based on Databricks behavior described in the official documentation for this topic.
+    per_choice:
+      '1': The maximum number of records to process per batch does not match the documented Databricks behavior for this scenario; review the referenced source.
+      '2': The threshold for how late data can arrive and still be included in stateful aggregations aligns with the documented Databricks behavior expected by this question.
+      '3': The frequency at which checkpoint files are created does not match the documented Databricks behavior for this scenario; review the referenced source.
+      '4': The partition strategy for the output table does not match the documented Databricks behavior for this scenario; review the referenced source.
+- type: single_select
+  prompt: Which trigger option in Structured Streaming processes all available data in a single batch and then stops?
+  choices:
+  - id: '1'
+    text: trigger(processingTime='1 second')
+  - id: '2'
+    text: trigger(once=True)
+  - id: '3'
+    text: trigger(availableNow=True)
+  - id: '4'
+    text: trigger(continuous='1 second')
+  correct_choice_ids:
+  - '3'
+  tags:
+  - structured-streaming
+  - triggers
+  difficulty: 3
+  source_ref: https://docs.databricks.com/en/structured-streaming/triggers.html
+  rationale:
+    correct: The best answer is 'trigger(availableNow=True)' based on Databricks behavior described in the official documentation for this topic.
+    per_choice:
+      '1': trigger(processingTime='1 second') does not match the documented Databricks behavior for this scenario; review the referenced source.
+      '2': trigger(once=True) does not match the documented Databricks behavior for this scenario; review the referenced source.
+      '3': trigger(availableNow=True) aligns with the documented Databricks behavior expected by this question.
+      '4': trigger(continuous='1 second') does not match the documented Databricks behavior for this scenario; review the referenced source.
+- type: single_select
+  intro: Change Data Feed (CDF) records row-level changes to a Delta table.
+  prompt: Which table property must be set to enable Change Data Feed on a Delta table?
+  choices:
+  - id: '1'
+    text: delta.enableChangeDataCapture
+  - id: '2'
+    text: delta.enableChangeDataFeed
+  - id: '3'
+    text: delta.trackChanges
+  - id: '4'
+    text: delta.cdc.enabled
+  correct_choice_ids:
+  - '2'
+  tags:
+  - change-data-feed
+  - delta-lake
+  difficulty: 2
+  source_ref: https://docs.databricks.com/en/delta/delta-change-data-feed.html
+  rationale:
+    correct: The best answer is 'delta.enableChangeDataFeed' based on Databricks behavior described in the official documentation for this topic.
+    per_choice:
+      '1': delta.enableChangeDataCapture does not match the documented Databricks behavior for this scenario; review the referenced source.
+      '2': delta.enableChangeDataFeed aligns with the documented Databricks behavior expected by this question.
+      '3': delta.trackChanges does not match the documented Databricks behavior for this scenario; review the referenced source.
+      '4': delta.cdc.enabled does not match the documented Databricks behavior for this scenario; review the referenced source.
+- type: single_select
+  prompt: When reading from a CDF-enabled Delta table, which column indicates whether a row was inserted, updated, or deleted?
+  choices:
+  - id: '1'
+    text: _change_type
+  - id: '2'
+    text: _operation
+  - id: '3'
+    text: _action
+  - id: '4'
+    text: _cdc_type
+  correct_choice_ids:
+  - '1'
+  tags:
+  - change-data-feed
+  - delta-lake
+  difficulty: 2
+  source_ref: https://docs.databricks.com/en/delta/delta-change-data-feed.html
+  rationale:
+    correct: The best answer is '_change_type' based on Databricks behavior described in the official documentation for this topic.
+    per_choice:
+      '1': _change_type aligns with the documented Databricks behavior expected by this question.
+      '2': _operation does not match the documented Databricks behavior for this scenario; review the referenced source.
+      '3': _action does not match the documented Databricks behavior for this scenario; review the referenced source.
+      '4': _cdc_type does not match the documented Databricks behavior for this scenario; review the referenced source.
+- type: single_select
+  intro: Unity Catalog provides a unified governance model for data and AI assets.
+  prompt: What is the three-level namespace hierarchy used by Unity Catalog?
+  choices:
+  - id: '1'
+    text: workspace.database.table
+  - id: '2'
+    text: catalog.schema.table
+  - id: '3'
+    text: account.catalog.table
+  - id: '4'
+    text: metastore.database.object
+  correct_choice_ids:
+  - '2'
+  tags:
+  - unity-catalog
+  - governance
+  difficulty: 1
+  source_ref: https://docs.databricks.com/en/data-governance/unity-catalog/index.html
+  rationale:
+    correct: The best answer is 'catalog.schema.table' based on Databricks behavior described in the official documentation for this topic.
+    per_choice:
+      '1': workspace.database.table does not match the documented Databricks behavior for this scenario; review the referenced source.
+      '2': catalog.schema.table aligns with the documented Databricks behavior expected by this question.
+      '3': account.catalog.table does not match the documented Databricks behavior for this scenario; review the referenced source.
+      '4': metastore.database.object does not match the documented Databricks behavior for this scenario; review the referenced source.
+- type: single_select
+  prompt: In Unity Catalog, what is a metastore?
+  choices:
+  - id: '1'
+    text: A compute cluster for running queries
+  - id: '2'
+    text: The top-level container for metadata that maps to a cloud storage location
+  - id: '3'
+    text: A secret scope for storing credentials
+  - id: '4'
+    text: A workspace-level configuration for access control
+  correct_choice_ids:
+  - '2'
+  tags:
+  - unity-catalog
+  - governance
+  difficulty: 2
+  source_ref: https://docs.databricks.com/en/data-governance/unity-catalog/index.html
+  rationale:
+    correct: The best answer is 'The top-level container for metadata that maps to a cloud storage location' based on Databricks behavior described in the official documentation for this topic.
+    per_choice:
+      '1': A compute cluster for running queries does not match the documented Databricks behavior for this scenario; review the referenced source.
+      '2': The top-level container for metadata that maps to a cloud storage location aligns with the documented Databricks behavior expected by this question.
+      '3': A secret scope for storing credentials does not match the documented Databricks behavior for this scenario; review the referenced source.
+      '4': A workspace-level configuration for access control does not match the documented Databricks behavior for this scenario; review the referenced source.
+- type: single_select
+  intro: The medallion architecture organises data into layers of increasing quality.
+  prompt: In the Bronze/Silver/Gold medallion architecture, what is the primary purpose of the Bronze layer?
+  choices:
+  - id: '1'
+    text: Store fully transformed, business-level aggregates
+  - id: '2'
+    text: Store raw, unprocessed data as ingested from source systems
+  - id: '3'
+    text: Store cleaned and conformed data with enforced schemas
+  - id: '4'
+    text: Store machine learning model outputs
+  correct_choice_ids:
+  - '2'
+  tags:
+  - medallion-architecture
+  difficulty: 1
+  source_ref: https://docs.databricks.com/en/lakehouse/medallion.html
+  rationale:
+    correct: The best answer is 'Store raw, unprocessed data as ingested from source systems' based on Databricks behavior described in the official documentation for this topic.
+    per_choice:
+      '1': Store fully transformed, business-level aggregates does not match the documented Databricks behavior for this scenario; review the referenced source.
+      '2': Store raw, unprocessed data as ingested from source systems aligns with the documented Databricks behavior expected by this question.
+      '3': Store cleaned and conformed data with enforced schemas does not match the documented Databricks behavior for this scenario; review the referenced source.
+      '4': Store machine learning model outputs does not match the documented Databricks behavior for this scenario; review the referenced source.
+- type: single_select
+  prompt: Which medallion layer typically applies data quality rules, deduplication, and schema enforcement?
+  choices:
+  - id: '1'
+    text: Bronze
+  - id: '2'
+    text: Silver
+  - id: '3'
+    text: Gold
+  - id: '4'
+    text: Platinum
+  correct_choice_ids:
+  - '2'
+  tags:
+  - medallion-architecture
+  difficulty: 1
+  source_ref: https://docs.databricks.com/en/lakehouse/medallion.html
+  rationale:
+    correct: The best answer is 'Silver' based on Databricks behavior described in the official documentation for this topic.
+    per_choice:
+      '1': Bronze does not match the documented Databricks behavior for this scenario; review the referenced source.
+      '2': Silver aligns with the documented Databricks behavior expected by this question.
+      '3': Gold does not match the documented Databricks behavior for this scenario; review the referenced source.
+      '4': Platinum does not match the documented Databricks behavior for this scenario; review the referenced source.
+- type: multi_select
+  intro: Delta Live Tables (DLT) is a declarative framework for building reliable data pipelines.
+  prompt: Which of the following are valid dataset types in a Delta Live Tables pipeline?
+  choices:
+  - id: '1'
+    text: Streaming tables
+  - id: '2'
+    text: Materialized views
+  - id: '3'
+    text: Temporary views
+  - id: '4'
+    text: External tables
+  correct_choice_ids:
+  - '1'
+  - '2'
+  tags:
+  - dlt
+  - delta-live-tables
+  difficulty: 2
+  source_ref: https://docs.databricks.com/en/delta-live-tables/index.html
+  rationale:
+    correct: 'The correct set is: Streaming tables; Materialized views. These selections align with documented Databricks semantics for this topic.'
+    per_choice:
+      '1': Streaming tables aligns with the documented Databricks behavior expected by this question.
+      '2': Materialized views aligns with the documented Databricks behavior expected by this question.
+      '3': Temporary views does not match the documented Databricks behavior for this scenario; review the referenced source.
+      '4': External tables does not match the documented Databricks behavior for this scenario; review the referenced source.
+- type: single_select
+  prompt: In Delta Live Tables, what decorator is used to define a materialized view in Python?
+  choices:
+  - id: '1'
+    text: '@dlt.table'
+  - id: '2'
+    text: '@dlt.view'
+  - id: '3'
+    text: '@dlt.materialized_view'
+  - id: '4'
+    text: '@dlt.dataset'
+  correct_choice_ids:
+  - '1'
+  tags:
+  - dlt
+  - delta-live-tables
+  difficulty: 2
+  source_ref: https://docs.databricks.com/en/delta-live-tables/python-ref.html
+  rationale:
+    correct: The best answer is '@dlt.table' based on Databricks behavior described in the official documentation for this topic.
+    per_choice:
+      '1': '@dlt.table aligns with the documented Databricks behavior expected by this question.'
+      '2': '@dlt.view does not match the documented Databricks behavior for this scenario; review the referenced source.'
+      '3': '@dlt.materialized_view does not match the documented Databricks behavior for this scenario; review the referenced source.'
+      '4': '@dlt.dataset does not match the documented Databricks behavior for this scenario; review the referenced source.'
+- type: multi_select
+  intro: Partitioning divides a table's data into separate directories based on column values.
+  prompt: Which of the following are best practices for partitioning Delta tables?
+  choices:
+  - id: '1'
+    text: Partition on low-cardinality columns commonly used in query filters
+  - id: '2'
+    text: Partition on high-cardinality columns like user IDs for maximum granularity
+  - id: '3'
+    text: Ensure each partition contains at least 1 GB of data
+  - id: '4'
+    text: Avoid partitioning small tables where data skipping is sufficient
+  correct_choice_ids:
+  - '1'
+  - '3'
+  - '4'
+  tags:
+  - delta-lake
+  - partitioning
+  difficulty: 3
+  source_ref: https://docs.databricks.com/en/tables/partitions.html
+  rationale:
+    correct: 'The correct set is: Partition on low-cardinality columns commonly used in query filters; Ensure each partition contains at least 1 GB of data; Avoid partitioning small tables where data skipping is sufficient. These selections align with documented Databricks semantics for this topic.'
+    per_choice:
+      '1': Partition on low-cardinality columns commonly used in query filters aligns with the documented Databricks behavior expected by this question.
+      '2': Partition on high-cardinality columns like user IDs for maximum granularity does not match the documented Databricks behavior for this scenario; review the referenced source.
+      '3': Ensure each partition contains at least 1 GB of data aligns with the documented Databricks behavior expected by this question.
+      '4': Avoid partitioning small tables where data skipping is sufficient aligns with the documented Databricks behavior expected by this question.
+- type: multi_select
+  prompt: Which of the following are valid values for the _change_type column in a Delta table's Change Data Feed?
+  choices:
+  - id: '1'
+    text: insert
+  - id: '2'
+    text: update_preimage
+  - id: '3'
+    text: update_postimage
+  - id: '4'
+    text: delete
+  - id: '5'
+    text: upsert
+  correct_choice_ids:
+  - '1'
+  - '2'
+  - '3'
+  - '4'
+  tags:
+  - change-data-feed
+  - cdc
+  difficulty: 3
+  source_ref: https://docs.databricks.com/en/delta/delta-change-data-feed.html
+  rationale:
+    correct: 'The correct set is: insert; update_preimage; update_postimage; delete. These selections align with documented Databricks semantics for this topic.'
+    per_choice:
+      '1': insert aligns with the documented Databricks behavior expected by this question.
+      '2': update_preimage aligns with the documented Databricks behavior expected by this question.
+      '3': update_postimage aligns with the documented Databricks behavior expected by this question.
+      '4': delete aligns with the documented Databricks behavior expected by this question.
+      '5': upsert does not match the documented Databricks behavior for this scenario; review the referenced source.
+- type: multi_select
+  intro: Delta Live Tables supports the APPLY CHANGES INTO syntax for processing CDC feeds.
+  prompt: Which clauses are required when using APPLY CHANGES INTO in Delta Live Tables?
+  choices:
+  - id: '1'
+    text: KEYS
+  - id: '2'
+    text: SEQUENCE BY
+  - id: '3'
+    text: PARTITION BY
+  - id: '4'
+    text: STORED AS
+  correct_choice_ids:
+  - '1'
+  - '2'
+  tags:
+  - dlt
+  - cdc
+  difficulty: 3
+  source_ref: https://docs.databricks.com/en/delta-live-tables/cdc.html
+  rationale:
+    correct: 'The correct set is: KEYS; SEQUENCE BY. These selections align with documented Databricks semantics for this topic.'
+    per_choice:
+      '1': KEYS aligns with the documented Databricks behavior expected by this question.
+      '2': SEQUENCE BY aligns with the documented Databricks behavior expected by this question.
+      '3': PARTITION BY does not match the documented Databricks behavior for this scenario; review the referenced source.
+      '4': STORED AS does not match the documented Databricks behavior for this scenario; review the referenced source.
+- type: multi_select
+  prompt: Which of the following operations can be used to improve query performance on a Delta table?
+  choices:
+  - id: '1'
+    text: OPTIMIZE
+  - id: '2'
+    text: ZORDER BY
+  - id: '3'
+    text: VACUUM
+  - id: '4'
+    text: ANALYZE TABLE ... COMPUTE STATISTICS
+  correct_choice_ids:
+  - '1'
+  - '2'
+  - '4'
+  tags:
+  - delta-lake
+  - optimization
+  difficulty: 2
+  source_ref: https://docs.databricks.com/en/delta/optimize.html
+  rationale:
+    correct: 'The correct set is: OPTIMIZE; ZORDER BY; ANALYZE TABLE ... COMPUTE STATISTICS. These selections align with documented Databricks semantics for this topic.'
+    per_choice:
+      '1': OPTIMIZE aligns with the documented Databricks behavior expected by this question.
+      '2': ZORDER BY aligns with the documented Databricks behavior expected by this question.
+      '3': VACUUM does not match the documented Databricks behavior for this scenario; review the referenced source.
+      '4': ANALYZE TABLE ... COMPUTE STATISTICS aligns with the documented Databricks behavior expected by this question.
+- type: multi_select
+  intro: Time travel allows querying previous versions of a Delta table.
+  prompt: Which of the following are valid ways to query a previous version of a Delta table?
+  choices:
+  - id: '1'
+    text: SELECT * FROM table VERSION AS OF 5
+  - id: '2'
+    text: SELECT * FROM table TIMESTAMP AS OF '2024-01-01'
+  - id: '3'
+    text: SELECT * FROM table@v5
+  - id: '4'
+    text: SELECT * FROM table ROLLBACK TO 5
+  correct_choice_ids:
+  - '1'
+  - '2'
+  tags:
+  - delta-lake
+  - time-travel
+  difficulty: 2
+  source_ref: https://docs.databricks.com/en/delta/history.html
+  rationale:
+    correct: 'The correct set is: SELECT * FROM table VERSION AS OF 5; SELECT * FROM table TIMESTAMP AS OF ''2024-01-01''. These selections align with documented Databricks semantics for this topic.'
+    per_choice:
+      '1': SELECT * FROM table VERSION AS OF 5 aligns with the documented Databricks behavior expected by this question.
+      '2': SELECT * FROM table TIMESTAMP AS OF '2024-01-01' aligns with the documented Databricks behavior expected by this question.
+      '3': SELECT * FROM table@v5 does not match the documented Databricks behavior for this scenario; review the referenced source.
+      '4': SELECT * FROM table ROLLBACK TO 5 does not match the documented Databricks behavior for this scenario; review the referenced source.
+- type: multi_select
+  prompt: Which of the following are true about using Delta Lake as a streaming source?
+  choices:
+  - id: '1'
+    text: Delta tables can be used as both streaming sources and sinks
+  - id: '2'
+    text: The maxFilesPerTrigger option limits the number of new files processed per micro-batch
+  - id: '3'
+    text: Streaming from a Delta table requires enabling Change Data Feed
+  - id: '4'
+    text: Delta's transaction log ensures exactly-once processing guarantees
+  correct_choice_ids:
+  - '1'
+  - '2'
+  - '4'
+  tags:
+  - structured-streaming
+  - delta-lake
+  difficulty: 3
+  source_ref: https://docs.databricks.com/en/structured-streaming/delta-lake.html
+  rationale:
+    correct: 'The correct set is: Delta tables can be used as both streaming sources and sinks; The maxFilesPerTrigger option limits the number of new files processed per micro-batch; Delta''s transaction log ensures exactly-once processing guarantees. These selections align with documented Databricks semantics for this topic.'
+    per_choice:
+      '1': Delta tables can be used as both streaming sources and sinks aligns with the documented Databricks behavior expected by this question.
+      '2': The maxFilesPerTrigger option limits the number of new files processed per micro-batch aligns with the documented Databricks behavior expected by this question.
+      '3': Streaming from a Delta table requires enabling Change Data Feed does not match the documented Databricks behavior for this scenario; review the referenced source.
+      '4': Delta's transaction log ensures exactly-once processing guarantees aligns with the documented Databricks behavior expected by this question.
+- type: multi_select
+  prompt: When using foreachBatch with a Structured Streaming query writing to Delta Lake, which of the following are true?
+  choices:
+  - id: '1'
+    text: foreachBatch provides the batch DataFrame and a unique batch ID
+  - id: '2'
+    text: You can perform multiple write operations within a single foreachBatch call
+  - id: '3'
+    text: foreachBatch guarantees idempotent writes automatically without additional logic
+  - id: '4'
+    text: You can use the batch ID with Delta merge operations to achieve exactly-once semantics
+  correct_choice_ids:
+  - '1'
+  - '2'
+  - '4'
+  tags:
+  - structured-streaming
+  - delta-lake
+  difficulty: 4
+  source_ref: https://docs.databricks.com/en/structured-streaming/foreach.html
+  rationale:
+    correct: 'The correct set is: foreachBatch provides the batch DataFrame and a unique batch ID; You can perform multiple write operations within a single foreachBatch call; You can use the batch ID with Delta merge operations to achieve exactly-once semantics. These selections align with documented Databricks semantics for this topic.'
+    per_choice:
+      '1': foreachBatch provides the batch DataFrame and a unique batch ID aligns with the documented Databricks behavior expected by this question.
+      '2': You can perform multiple write operations within a single foreachBatch call aligns with the documented Databricks behavior expected by this question.
+      '3': foreachBatch guarantees idempotent writes automatically without additional logic does not match the documented Databricks behavior for this scenario; review the referenced source.
+      '4': You can use the batch ID with Delta merge operations to achieve exactly-once semantics aligns with the documented Databricks behavior expected by this question.
+- type: multi_select
+  intro: Delta Live Tables supports data quality constraints through expectations.
+  prompt: Which actions can a DLT expectation take when a record violates a data quality rule?
+  choices:
+  - id: '1'
+    text: Track the violation in metrics but allow the record
+  - id: '2'
+    text: Drop the violating record
+  - id: '3'
+    text: Fail the pipeline
+  - id: '4'
+    text: Quarantine the record to a separate error table automatically
+  correct_choice_ids:
+  - '1'
+  - '2'
+  - '3'
+  tags:
+  - dlt
+  - data-quality
+  difficulty: 3
+  source_ref: https://docs.databricks.com/en/delta-live-tables/expectations.html
+  rationale:
+    correct: 'The correct set is: Track the violation in metrics but allow the record; Drop the violating record; Fail the pipeline. These selections align with documented Databricks semantics for this topic.'
+    per_choice:
+      '1': Track the violation in metrics but allow the record aligns with the documented Databricks behavior expected by this question.
+      '2': Drop the violating record aligns with the documented Databricks behavior expected by this question.
+      '3': Fail the pipeline aligns with the documented Databricks behavior expected by this question.
+      '4': Quarantine the record to a separate error table automatically does not match the documented Databricks behavior for this scenario; review the referenced source.

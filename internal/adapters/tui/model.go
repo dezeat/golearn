@@ -457,6 +457,7 @@ func (m *model) advanceQuestion() {
 		return
 	}
 	m.currentQuestion = q
+	m.setDisplayLabelMapping(q.ShuffledChoices)
 	m.questionNum++
 	m.choiceCursor = 0
 	m.selected = make(map[string]bool)
@@ -502,6 +503,7 @@ func (m model) updateReviewBrowse(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.reviewCursor < len(m.reviewQueue)-1 {
 				m.reviewCursor++
 				m.showExplanations = false
+				m.setDisplayLabelMapping(m.reviewQueue[m.reviewCursor].Question.Choices)
 			} else {
 				m.screen = m.reviewReturnScreen
 			}

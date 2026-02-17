@@ -52,6 +52,7 @@ func TestReviewState_ExplanationToggle(t *testing.T) {
 
 	// Toggle explanations on.
 	m.showExplanations = true
+	m.setDisplayLabelMapping(m.currentQuestion.ShuffledChoices)
 	viewWithExplanations := m.viewReview()
 	if viewWithExplanations == view {
 		t.Error("expected view to change when explanations are toggled on")
@@ -70,6 +71,86 @@ func TestReviewState_ExplanationToggle(t *testing.T) {
 	viewOff := m.viewReview()
 	if containsSubstring(viewOff, "A is correct because") {
 		t.Error("expected rationale.correct text to be hidden when explanations off")
+	}
+}
+
+func TestQuestionView_UsesDisplayLabelsFromShuffledOrder(t *testing.T) {
+	m := model{
+		screen:         screenQuestion,
+		questionNum:    1,
+		totalQuestions: 1,
+		choiceCursor:   0,
+		width:          80,
+		currentQuestion: &app.SessionQuestion{
+			Question: &domain.Question{
+				Type:   domain.SingleSelect,
+				Prompt: "Pick one",
+			},
+			ShuffledChoices: []domain.Choice{
+				{ID: "C", Text: "First shown"},
+				{ID: "A", Text: "Second shown"},
+				{ID: "B", Text: "Third shown"},
+			},
+		},
+		selected: map[string]bool{},
+	}
+
+	m.setDisplayLabelMapping(m.currentQuestion.ShuffledChoices)
+	view := m.viewQuestion()
+
+	if !containsSubstring(view, "A) First shown") {
+		t.Fatalf("expected first rendered choice to use display label A; got:\n%s", view)
+	}
+	if !containsSubstring(view, "B) Second shown") {
+		t.Fatalf("expected second rendered choice to use display label B; got:\n%s", view)
+	}
+	if !containsSubstring(view, "C) Third shown") {
+		t.Fatalf("expected third rendered choice to use display label C; got:\n%s", view)
+	}
+	if containsSubstring(view, "C) First shown") {
+		t.Fatalf("did not expect internal ID label rendering after shuffle; got:\n%s", view)
+	}
+}
+
+func TestReviewView_ShuffledLabelsUseInternalExplanationLookup(t *testing.T) {
+	m := model{
+		screen:           screenReview,
+		submitted:        true,
+		showExplanations: true,
+		width:            80,
+		currentQuestion: &app.SessionQuestion{
+			Question: &domain.Question{
+				Prompt:           "Pick one",
+				CorrectChoiceIDs: []string{"A"},
+				Rationale: domain.Rationale{
+					Correct: "Correct: because of root cause",
+					PerChoice: map[string]string{
+						"C": "Incorrect: rationale for C",
+						"A": "Correct: rationale for A",
+						"B": "Incorrect: rationale for B",
+					},
+				},
+			},
+			ShuffledChoices: []domain.Choice{
+				{ID: "C", Text: "First shown"},
+				{ID: "A", Text: "Second shown"},
+				{ID: "B", Text: "Third shown"},
+			},
+		},
+		selected: map[string]bool{"A": true},
+	}
+
+	m.setDisplayLabelMapping(m.currentQuestion.ShuffledChoices)
+	view := m.viewReview()
+
+	if !containsSubstring(view, "A) First shown") {
+		t.Fatalf("expected display labels to follow shuffled order; got:\n%s", view)
+	}
+	if !containsSubstring(view, "rationale for C") {
+		t.Fatalf("expected explanation lookup by internal choice ID after shuffle; got:\n%s", view)
+	}
+	if containsSubstring(view, "Correct: because of root cause") || containsSubstring(view, "Incorrect: rationale for C") {
+		t.Fatalf("expected explanation prefixes to be sanitized; got:\n%s", view)
 	}
 }
 

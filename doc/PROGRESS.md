@@ -25,7 +25,7 @@ All core capabilities are implemented, tested, and documented.
 | CLI (tui)       | ✅ Done          | `golearn tui` with alt-screen        |
 | Home Menu       | ✅ Done          | Post-login hub: practice, review, stats, switch profile, quit |
 | Stats feature   | ✅ Done          | Global, per-pack, difficulty, tags, weak questions, trends |
-| Example packs   | ✅ Done          | `go-basics.yaml`, `mvp-basics.yaml`, `databricks-pde.yaml` |
+| Example packs   | ✅ Done          | `go-basics.yaml`, `mvp-basics.yaml`, `databricks-pde-explained-2.yaml` |
 | CLI (help)      | ✅ Done          | `golearn help` with examples         |
 | Tests           | ✅ Done          | 59 tests: validation, hashing, correctness, selector, session, export, integration, profiles, stats |
 | Makefile        | ✅ Done          | `fmt`, `vet`, `lint`, `test`, `check` |
@@ -35,6 +35,49 @@ All core capabilities are implemented, tested, and documented.
 ---
 
 ## Changelog
+
+### 2026-02-17 — Phase 12: Databricks Pack Refactor + Explanations
+
+- Refactored Databricks PDE pack to the new internal choice-ID convention
+  - Renamed `examples/databricks-pde.yaml` → `examples/databricks-pde-explained-2.yaml`
+  - Converted choice IDs from letter labels to stable numeric IDs (`"1"`, `"2"`, ...)
+  - Updated all `correct_choice_ids` to the new internal IDs
+- Added full rationale coverage to all questions in the pack
+  - Added `rationale.correct` for each question
+  - Added `rationale.per_choice` entries for every choice ID
+  - Explanation text follows `doc/QUESTIONS.md` convention (content-only, no Correct/Incorrect prefixes)
+- Updated docs/help references to the renamed pack file
+  - README examples/table entries
+  - CLI help example in `cmd/golearn/main.go`
+  - `doc/PROJECT.md` repository structure
+  - `doc/SPEC.md` import example
+
+### 2026-02-17 — Phase 11: Choice Label Decoupling + Explanation Cleanup
+
+- Decoupled internal `Choice.id` from UI labels in practice/review flows
+  - Added per-question display label mapping in TUI state:
+    - `displayLabelByChoiceID`
+    - `choiceIDByDisplayLabel`
+  - Labels now render by display order (`A/B/C/...`) even when choices are shuffled
+  - Correctness, rationale lookup, hashing, and DB storage continue using stable internal IDs
+- Updated TUI rendering and review behavior
+  - Question, review, and review-browse screens now show generated display labels
+  - Per-choice explanations remain keyed by internal IDs and render in current display order
+- Added defensive explanation sanitization in TUI
+  - Strips leading `Correct:`, `Incorrect:`, `✅`, `❌` during rendering
+  - Keeps explanation content focused on "why" without redundant correctness markers
+- Updated CLI `run` UX for consistency with TUI
+  - Choices display with generated labels (`A/B/C/...`) based on shuffled order
+  - Input parsing maps display labels back to internal IDs (with backward-compatible internal-ID input)
+  - Incorrect-answer feedback shows correct display labels for the current order
+- Updated pack authoring standard and examples
+  - `doc/QUESTIONS.md` now defines `Choice.id` as stable internal identifier (not UI label)
+  - Added guidance for numeric/prefixed IDs and explicit explanation-style rules (no Correct/Incorrect prefix)
+  - Updated examples (`go-basics`, `mvp-basics`, `databricks-pde-explained`) to non-letter internal IDs
+  - Updated explained pack rationale text to content-only explanations
+- Added/updated tests
+  - TUI tests now assert shuffled display labels render as ordered `A/B/C...`
+  - Tests cover explanation lookup by internal ID after shuffle and prefix sanitization
 
 ### 2026-02-17 — Phase 10: TUI UX Consistency Refactor
 

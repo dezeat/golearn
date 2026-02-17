@@ -186,7 +186,7 @@ internal/
 
 ```bash
 # Import the Databricks PDE practice pack
-golearn import examples/databricks-pde.yaml
+golearn import examples/databricks-pde-explained-2.yaml
 
 # Practice 15 questions in the TUI
 golearn tui

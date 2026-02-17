@@ -207,14 +207,16 @@ type model struct {
 	engine *app.SessionEngine
 
 	// Question screen state
-	currentQuestion *app.SessionQuestion
-	questionNum     int // 1-based index
-	totalQuestions  int
-	choiceCursor    int             // which choice is highlighted
-	selected        map[string]bool // toggled choices for multi_select
-	submitted       bool            // whether answer has been submitted
-	lastCorrect     bool            // result of last submission
-	lastSkipped     bool
+	currentQuestion        *app.SessionQuestion
+	questionNum            int // 1-based index
+	totalQuestions         int
+	choiceCursor           int             // which choice is highlighted
+	selected               map[string]bool // toggled choices for multi_select
+	displayLabelByChoiceID map[string]string
+	choiceIDByDisplayLabel map[string]string
+	submitted              bool // whether answer has been submitted
+	lastCorrect            bool // result of last submission
+	lastSkipped            bool
 
 	// Review mode state
 	showExplanations bool // toggled by 'e' in review mode
