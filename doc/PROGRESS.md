@@ -11,9 +11,9 @@ All core capabilities are implemented, tested, and documented.
 | Documentation   | ✅ Done          | `WORKFLOW.md`, `PROJECT.md`, `PROGRESS.md`, `SPEC.md` |
 | Go module       | ✅ Done          | `go.mod` with yaml.v3 + modernc.org/sqlite + bubbletea |
 | Domain models   | ✅ Done          | `models.go`, `validation.go`, `hashing.go`, `correctness.go` |
-| Ports/interfaces| ✅ Done          | `repositories.go`, `sources.go`      |
+| Ports/interfaces| ✅ Done          | `repositories.go` (incl. StatsRepository), `sources.go` |
 | Pack reader     | ✅ Done          | YAML + JSON parsing                  |
-| SQLite adapter  | ✅ Done          | DB open, WAL, FK, migrations, all repos |
+| SQLite adapter  | ✅ Done          | DB open, WAL, FK, migrations, all repos incl. stats |
 | Import use case | ✅ Done          | Validate → normalise → hash → dedupe → insert |
 | CLI (import)    | ✅ Done          | `golearn import <path>` with `--db` flag |
 | Session engine  | ✅ Done          | StartSession, GetNextQuestion, RecordAttempt, EndSession |
@@ -21,11 +21,13 @@ All core capabilities are implemented, tested, and documented.
 | CLI (run)       | ✅ Done          | `golearn run <topic-slug> --n N`     |
 | Export use case | ✅ Done          | Deterministic ordering, YAML + JSON output |
 | CLI (export)    | ✅ Done          | `golearn export <slug> --out <path> [--format]` |
-| Bubble Tea TUI  | ✅ Done          | Profile menu, topic select, config, question, feedback, summary |
+| Bubble Tea TUI  | ✅ Done          | Profile menu, home menu, topic select, config, question, feedback, summary, stats |
 | CLI (tui)       | ✅ Done          | `golearn tui` with alt-screen        |
+| Home Menu       | ✅ Done          | Post-login hub: practice, review, stats, switch profile, quit |
+| Stats feature   | ✅ Done          | Global, per-pack, difficulty, tags, weak questions, trends |
 | Example packs   | ✅ Done          | `go-basics.yaml`, `mvp-basics.yaml`, `databricks-pde.yaml` |
 | CLI (help)      | ✅ Done          | `golearn help` with examples         |
-| Tests           | ✅ Done          | 46 tests: validation, hashing, correctness, selector, session, export, integration, profiles |
+| Tests           | ✅ Done          | 59 tests: validation, hashing, correctness, selector, session, export, integration, profiles, stats |
 | Makefile        | ✅ Done          | `fmt`, `vet`, `lint`, `test`, `check` |
 | Lint config     | ✅ Done          | `.golangci.yml` with sensible rules  |
 | CI pipeline     | ✅ Done          | GitHub Actions workflow (`.github/workflows/ci.yml`) |
@@ -33,6 +35,57 @@ All core capabilities are implemented, tested, and documented.
 ---
 
 ## Changelog
+
+### 2026-02-17 — Phase 8: Stats Feature + Home Menu Navigation
+
+- Added post-login Home Menu with 5 options:
+  - Start Practice, Review Wrong Answers, Stats, Switch Profile, Quit
+  - Profile login/register now routes to Home Menu instead of direct topic select
+  - Topic select and review browse navigate back to Home Menu
+- Implemented `StatsRepository` interface in `ports/repositories.go`:
+  - `GlobalStats`: overall accuracy, answered/skipped, latency, most practiced, weakest topic
+  - `TopicSummary`: per-topic coverage, accuracy, attempts, latency, last practiced
+  - `DifficultyStats`: per-difficulty-bucket breakdown (Easy/Medium/Hard/Unrated)
+  - `TagStats`: per-tag accuracy with minimum attempts filter
+  - `WeakQuestions`: worst-performing questions ranked by wrong rate
+  - `SessionTrend` / `SessionTrendGlobal`: accuracy per session for sparkline
+- Implemented `sqlite/stats_repo.go` with SQL aggregate queries
+  - All queries filtered by `user_id` for multi-user isolation
+  - Difficulty bucketing: 1–2 → Easy, 3 → Medium, 4–5 → Hard, 0/NULL → Unrated
+  - Tag stats use Go-side JSON array parsing (SQLite compatibility)
+  - Weak questions exclude 100%-correct questions
+- Added 3 new TUI screens:
+  - Global Stats: accuracy, time, trend sparkline, most/weakest packs
+  - Pack Stats List: fixed-column table of all packs with accuracy/attempts
+  - Pack Detail Stats: header metrics, difficulty breakdown, weak/strong tags,
+    weakest questions list, session trend sparkline with delta
+- Updated Summary screen with navigable menu:
+  - Review incorrect questions (if any)
+  - View stats for this pack → Pack Detail Stats
+  - Back to Home
+- Added sparkline rendering with Unicode blocks (▁▂▃▄▅▆▇█)
+  - Trend delta indicator (↑/↓/→) comparing first to last session
+- Added 6 new stats aggregation tests:
+  - `TestStatsRepo_MultiUserIsolation`: two-user same-topic correctness isolation
+  - `TestStatsRepo_DifficultyBucketing`: difficulty 1–5 + 0 mapping verification
+  - `TestStatsRepo_SessionTrend`: multi-session ascending accuracy verification
+  - `TestStatsRepo_WeakQuestions`: wrong_rate ordering + minAttempts filter
+  - `TestStatsRepo_TopicSummary_Coverage`: coverage %, seen questions
+  - `TestStatsRepo_GlobalStats_Skipped`: skipped excluded from accuracy
+- Added 7 new TUI tests:
+  - `TestHomeMenuView`: home menu options rendering
+  - `TestHomeMenuNavigation`: cursor movement
+  - `TestSparkline`: sparkline rendering (4 sub-tests)
+  - `TestTrendDelta`: delta formatting (4 sub-tests)
+  - `TestTruncate`: string truncation
+  - `TestStatsGlobalViewEmpty`: empty state for global stats
+  - `TestSummaryViewHasStatsOption`: stats + home options in summary
+- Updated `doc/PROJECT.md`:
+  - Added Home Menu navigation flow
+  - Added Stats metrics definitions
+  - Added difficulty bucketing mapping
+  - Updated repository structure (stats_repo.go, screens_stats.go)
+- `make check` passes
 
 ### 2026-02-17 — Phase 7: Local Multi-User Profiles
 

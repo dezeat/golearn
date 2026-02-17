@@ -179,7 +179,8 @@ func TestProfileLoginSetsCurrentUserID(t *testing.T) {
 	}
 
 	ctx := app.NewUserContext(0)
-	m := newModel(topicRepo, questionRepo, sessionRepo, attemptRepo, userRepo, configStore, ctx)
+	statsRepo := sqlite.NewStatsRepo(db)
+	m := newModel(topicRepo, questionRepo, sessionRepo, attemptRepo, userRepo, statsRepo, configStore, ctx)
 	m.screen = screenProfileLogin
 	m.profiles = []domain.User{*alice}
 	m.profileLoginCursor = 0
@@ -190,8 +191,8 @@ func TestProfileLoginSetsCurrentUserID(t *testing.T) {
 	if ctx.CurrentUserID() != alice.ID {
 		t.Fatalf("expected current user id %d, got %d", alice.ID, ctx.CurrentUserID())
 	}
-	if nm.screen != screenTopicSelect {
-		t.Fatalf("expected transition to topic select, got screen %d", nm.screen)
+	if nm.screen != screenHomeMenu {
+		t.Fatalf("expected transition to home menu, got screen %d", nm.screen)
 	}
 }
 
@@ -348,5 +349,141 @@ func TestContentWidth(t *testing.T) {
 	m.width = 25
 	if cw := m.contentWidth(10); cw != 20 {
 		t.Errorf("expected 20 (min), got %d", cw)
+	}
+}
+
+// --- Home Menu tests ---
+
+func TestHomeMenuView(t *testing.T) {
+	m := model{
+		screen:      screenHomeMenu,
+		currentUser: &domain.User{Handle: "alice", DisplayName: "Alice"},
+		width:       80,
+	}
+
+	view := m.viewHomeMenu()
+	if !containsSubstring(view, "Home") {
+		t.Error("expected Home in header")
+	}
+	if !containsSubstring(view, "Start Practice") {
+		t.Error("expected Start Practice option")
+	}
+	if !containsSubstring(view, "Stats") {
+		t.Error("expected Stats option")
+	}
+	if !containsSubstring(view, "Switch Profile") {
+		t.Error("expected Switch Profile option")
+	}
+	if !containsSubstring(view, "Quit") {
+		t.Error("expected Quit option")
+	}
+}
+
+func TestHomeMenuNavigation(t *testing.T) {
+	m := model{
+		screen:         screenHomeMenu,
+		currentUser:    &domain.User{Handle: "test"},
+		homeMenuCursor: 0,
+		selected:       make(map[string]bool),
+	}
+
+	// Down key should move cursor.
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyDown})
+	nm := updated.(model)
+	if nm.homeMenuCursor != 1 {
+		t.Errorf("cursor after down: got %d, want 1", nm.homeMenuCursor)
+	}
+}
+
+// --- Stats Sparkline tests ---
+
+func TestSparkline(t *testing.T) {
+	tests := []struct {
+		name   string
+		values []float64
+		want   string
+	}{
+		{"empty", nil, "—"},
+		{"all zeros", []float64{0, 0, 0}, "▁▁▁"},
+		{"all 100", []float64{100, 100, 100}, "███"},
+		{"ascending", []float64{0, 50, 100}, "▁▄█"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := sparkline(tt.values)
+			if got != tt.want {
+				t.Errorf("sparkline(%v) = %q, want %q", tt.values, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestTrendDelta(t *testing.T) {
+	tests := []struct {
+		name   string
+		values []float64
+		want   string
+	}{
+		{"single", []float64{50}, ""},
+		{"increase", []float64{40, 80}, " ↑40%"},
+		{"decrease", []float64{80, 60}, " ↓20%"},
+		{"same", []float64{50, 50}, " →0%"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := trendDelta(tt.values)
+			if got != tt.want {
+				t.Errorf("trendDelta(%v) = %q, want %q", tt.values, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestTruncate(t *testing.T) {
+	if truncate("hello world", 5) != "hell…" {
+		t.Errorf("expected 'hell…', got %q", truncate("hello world", 5))
+	}
+	if truncate("hi", 5) != "hi" {
+		t.Errorf("expected 'hi', got %q", truncate("hi", 5))
+	}
+}
+
+// --- Global Stats View test ---
+
+func TestStatsGlobalViewEmpty(t *testing.T) {
+	m := model{
+		screen:      screenStatsGlobal,
+		currentUser: &domain.User{Handle: "test"},
+		statsGlobal: nil,
+		width:       80,
+	}
+	view := m.viewStatsGlobal()
+	if !containsSubstring(view, "No stats data") {
+		t.Error("expected empty state message for global stats")
+	}
+}
+
+// --- Summary Screen Updated ---
+
+func TestSummaryViewHasStatsOption(t *testing.T) {
+	m := model{
+		screen: screenSummary,
+		width:  80,
+		selectedTopic: topicInfo{
+			Topic: domain.Topic{Name: "Test Topic"},
+		},
+		answered:      5,
+		correctCount:  3,
+		totalLatency:  5000,
+		wrongAnswers:  nil,
+		summaryCursor: 0,
+	}
+
+	view := m.viewSummary()
+	if !containsSubstring(view, "View stats for this pack") {
+		t.Error("expected stats option in summary view")
+	}
+	if !containsSubstring(view, "Back to Home") {
+		t.Error("expected home option in summary view")
 	}
 }

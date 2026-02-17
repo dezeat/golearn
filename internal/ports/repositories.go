@@ -70,3 +70,87 @@ type AttemptRepository interface {
 	// questions in a topic, keyed by question ID.
 	StatsByTopic(userID, topicID int64) (map[int64]QuestionStats, error)
 }
+
+// GlobalStats holds aggregated metrics across all topics for a user.
+type GlobalStats struct {
+	TotalAnswered      int
+	TotalSkipped       int
+	AccuracyPct        float64 // excludes skipped
+	AvgLatencySeconds  float64 // excludes skipped
+	TotalTimeSeconds   float64 // sum of all latency
+	MostPracticedTopic string  // topic name, by attempt count
+	WeakestTopic       string  // topic name, by lowest accuracy (min attempts threshold)
+}
+
+// TopicSummary holds per-topic stats for a user.
+type TopicSummary struct {
+	TopicID           int64
+	TopicName         string
+	TotalQuestions    int
+	SeenQuestions     int
+	CoveragePct       float64
+	AttemptsAnswered  int
+	AttemptsSkipped   int
+	AccuracyPct       float64
+	AvgLatencySeconds float64
+	LastPracticedAt   string // formatted datetime or empty
+}
+
+// DifficultyBucket labels for stats breakdown.
+const (
+	DifficultyEasy    = "Easy"
+	DifficultyMedium  = "Medium"
+	DifficultyHard    = "Hard"
+	DifficultyUnrated = "Unrated"
+)
+
+// DifficultyStat holds stats for one difficulty bucket.
+type DifficultyStat struct {
+	Bucket            string
+	AttemptsAnswered  int
+	AccuracyPct       float64
+	AvgLatencySeconds float64
+}
+
+// TagStat holds stats for one question tag.
+type TagStat struct {
+	Tag              string
+	AttemptsAnswered int
+	AccuracyPct      float64
+}
+
+// QuestionWeakStat holds weak-question stats for ranking.
+type QuestionWeakStat struct {
+	QuestionID       int64
+	PromptPreview    string
+	AttemptsAnswered int
+	WrongRate        float64
+	LastAttemptAt    string
+}
+
+// StatsRepository provides user-scoped aggregated statistics.
+type StatsRepository interface {
+	// GlobalStats returns overall metrics for a user.
+	GlobalStats(userID int64) (*GlobalStats, error)
+
+	// TopicSummary returns per-topic stats for a user.
+	TopicSummary(userID, topicID int64) (*TopicSummary, error)
+
+	// TopicSummaries returns stats for all topics for a user.
+	TopicSummaries(userID int64) ([]TopicSummary, error)
+
+	// DifficultyStats returns per-difficulty-bucket stats for a user+topic.
+	DifficultyStats(userID, topicID int64) ([]DifficultyStat, error)
+
+	// TagStats returns per-tag stats for a user+topic (minAttempts filter).
+	TagStats(userID, topicID int64, minAttempts int) ([]TagStat, error)
+
+	// WeakQuestions returns worst-performing questions for a user+topic.
+	WeakQuestions(userID, topicID int64, minAttempts, limit int) ([]QuestionWeakStat, error)
+
+	// SessionTrend returns accuracy per session for the last N sessions.
+	SessionTrend(userID, topicID int64, limitN int) ([]float64, error)
+
+	// SessionTrendGlobal returns accuracy per session across all topics for last N sessions.
+	SessionTrendGlobal(userID int64, limitN int) ([]float64, error)
+}

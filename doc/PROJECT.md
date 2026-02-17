@@ -50,7 +50,7 @@ golearn/
 │   │   ├── hashing.go             # stable SHA-256 content hashing + normalisation
 │   │   └── correctness.go         # order-insensitive answer evaluation
 │   ├── ports/                     # interfaces (driven + driving)
-│   │   ├── repositories.go        # TopicRepo, QuestionRepo, SessionRepo, AttemptRepo
+│   │   ├── repositories.go        # TopicRepo, QuestionRepo, SessionRepo, AttemptRepo, StatsRepo
 │   │   └── sources.go             # PackReader interface
 │   ├── app/                       # use cases / application services
 │   │   ├── import_pack.go         # parse → validate → normalise → hash → persist
@@ -64,7 +64,9 @@ golearn/
 │       │   ├── question_repo.go   # InsertMany (batch + dedupe), ListByTopic
 │       │   ├── session_repo.go    # Create, Finish
 │       │   ├── attempt_repo.go    # Record, StatsByTopic
-│       │   └── sqlite_test.go     # integration tests
+│       │   ├── stats_repo.go      # StatsRepository: aggregated user-scoped stats
+│       │   ├── sqlite_test.go     # integration tests
+│       │   └── stats_test.go      # stats aggregation tests
 │       ├── pack/
 │       │   └── reader.go          # YAML + JSON parser, directory support
 │       └── tui/
@@ -73,7 +75,8 @@ golearn/
 │           ├── screens_topic.go   # topic selection view
 │           ├── screens_session.go # session configuration view
 │           ├── screens_question.go # question + feedback views
-│           └── screens_summary.go # session summary view
+│           ├── screens_summary.go # session summary view
+│           └── screens_stats.go   # stats screens (global, pack list, pack detail) + home menu
 ├── examples/
 │   ├── go-basics.yaml             # 3-question sample pack
 │   ├── mvp-basics.yaml            # 10-question mixed pack
@@ -314,9 +317,76 @@ intentional MVP constraint — the engine is lightweight and instantiated per se
 |--------------------------|----------------------------------------------------------------|
 | **LLM adapter**          | Generate draft questions via LLM → validate → insert into DB  |
 | **Embeddings similarity**| Detect near-duplicate questions; cluster topics                |
-| **Rationale display**    | Show explanation on demand or after answering                  |
 | **Spaced repetition**    | SRS scheduling based on attempt history                        |
 | **Exam mode**            | Deferred feedback until session end                            |
-| **Stats command**        | `golearn stats` for per-topic statistics                       |
+
+---
+
+## TUI Navigation
+
+### Home Menu
+
+After login/register, users land on the Home Menu:
+
+```
+1) Start Practice     → Topic Select → Session Config → Quiz → Summary
+2) Review Wrong       → Browse incorrect from last session (disabled if none)
+3) Stats              → Global Stats → Pack List → Pack Detail
+4) Switch Profile     → Profile Menu (login/register)
+5) Quit
+```
+
+### Summary Screen
+
+After completing a session, the summary shows:
+
+- Review incorrect questions (if any)
+- View stats for this pack → Pack Detail Stats
+- Back to Home
+
+---
+
+## Stats Feature
+
+### Metrics
+
+All stats are **user-scoped** — switching profile changes all stats displays.
+
+| Metric               | Scope     | Definition                                                |
+|----------------------|-----------|-----------------------------------------------------------|
+| Accuracy %           | Global/Topic | `correct / answered * 100` (skipped excluded)          |
+| Avg response time    | Global/Topic | `sum(latency_ms) / answered` for non-skipped attempts  |
+| Total time           | Global    | `sum(latency_ms)` across all non-skipped attempts         |
+| Coverage %           | Topic     | `distinct_questions_attempted / total_questions * 100`    |
+| Most practiced       | Global    | Topic with most non-skipped attempts                      |
+| Weakest              | Global    | Topic with lowest accuracy (minimum 5 attempts)           |
+
+### Difficulty Bucketing
+
+Questions have an optional `difficulty` field (integer 1–5):
+
+| Difficulty Value | Bucket   |
+|-----------------|----------|
+| 1–2             | Easy     |
+| 3               | Medium   |
+| 4–5             | Hard     |
+| 0 / NULL        | Unrated  |
+
+### Tag Stats
+
+Tags are per-question freeform labels. Tag stats aggregate across all questions
+sharing a tag within a topic. Minimum attempts threshold (default: 5) filters
+out tags with insufficient data.
+
+### Weak Questions
+
+Questions ranked by wrong rate (descending). Only questions with at least
+`minAttempts` (default: 3) non-skipped attempts and at least one wrong answer
+are included.
+
+### Session Trend
+
+A sparkline showing accuracy per completed session, ordered chronologically.
+Uses Unicode block characters: `▁▂▃▄▅▆▇█` mapped to 0–100%.
 
 These are out of scope for MVP but the data model reserves the necessary fields.

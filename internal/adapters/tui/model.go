@@ -6,6 +6,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/dezeat/golearn/internal/app"
+	"github.com/dezeat/golearn/internal/ports"
 )
 
 // Init implements tea.Model. It returns no initial command.
@@ -37,6 +38,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.updateProfileLogin(msg)
 	case screenProfileRegister:
 		return m.updateProfileRegister(msg)
+	case screenHomeMenu:
+		return m.updateHomeMenu(msg)
 	case screenTopicSelect:
 		return m.updateTopicSelect(msg)
 	case screenSessionConfig:
@@ -49,6 +52,12 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.updateReviewBrowse(msg)
 	case screenSummary:
 		return m.updateSummary(msg)
+	case screenStatsGlobal:
+		return m.updateStatsGlobal(msg)
+	case screenStatsPackList:
+		return m.updateStatsPackList(msg)
+	case screenStatsPackDetail:
+		return m.updateStatsPackDetail(msg)
 	}
 
 	return m, nil
@@ -67,6 +76,8 @@ func (m model) View() string {
 		return m.viewProfileLogin()
 	case screenProfileRegister:
 		return m.viewProfileRegister()
+	case screenHomeMenu:
+		return m.viewHomeMenu()
 	case screenTopicSelect:
 		return m.viewTopicSelect()
 	case screenSessionConfig:
@@ -79,6 +90,12 @@ func (m model) View() string {
 		return m.viewReviewBrowse()
 	case screenSummary:
 		return m.viewSummary()
+	case screenStatsGlobal:
+		return m.viewStatsGlobal()
+	case screenStatsPackList:
+		return m.viewStatsPackList()
+	case screenStatsPackDetail:
+		return m.viewStatsPackDetail()
 	}
 
 	return ""
@@ -137,7 +154,8 @@ func (m model) updateProfileMenu(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.profileError = "Failed to load topics"
 					return m, nil
 				}
-				m.screen = screenTopicSelect
+				m.homeMenuCursor = 0
+				m.screen = screenHomeMenu
 			}
 		}
 	}
@@ -173,7 +191,8 @@ func (m model) updateProfileLogin(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 			m.profileError = ""
-			m.screen = screenTopicSelect
+			m.homeMenuCursor = 0
+			m.screen = screenHomeMenu
 		}
 	}
 	return m, nil
@@ -236,7 +255,8 @@ func (m model) updateProfileRegister(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.profileError = "Failed to load topics"
 				return m, nil
 			}
-			m.screen = screenTopicSelect
+			m.homeMenuCursor = 0
+			m.screen = screenHomeMenu
 			return m, nil
 		}
 
@@ -262,8 +282,8 @@ func (m model) updateTopicSelect(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyMsg:
 		switch msg.String() {
 		case "q", "esc":
-			m.quitting = true
-			return m, tea.Quit
+			m.homeMenuCursor = 0
+			m.screen = screenHomeMenu
 		case "up", "k":
 			if m.topicCursor > 0 {
 				m.topicCursor--
@@ -482,7 +502,8 @@ func (m model) updateReviewBrowse(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "e":
 			m.showExplanations = !m.showExplanations
 		case "q", "esc":
-			m.screen = screenTopicSelect
+			m.homeMenuCursor = 0
+			m.screen = screenHomeMenu
 		}
 	}
 	return m, nil
@@ -497,12 +518,38 @@ func (m model) updateSummary(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "q", "esc":
 			m.quitting = true
 			return m, tea.Quit
-		case "enter", "b":
-			// Back to topic select.
-			_ = m.reloadTopicsForCurrentUser()
-			m.screen = screenTopicSelect
+		case "up", "k":
+			if m.summaryCursor > 0 {
+				m.summaryCursor--
+			}
+		case "down", "j":
+			maxCursor := 2 // stats, home
+			if len(m.wrongAnswers) > 0 {
+				maxCursor = 3 // review, stats, home
+			}
+			if m.summaryCursor < maxCursor {
+				m.summaryCursor++
+			}
+		case "enter":
+			options := m.summaryOptions()
+			if m.summaryCursor >= len(options) {
+				break
+			}
+			switch options[m.summaryCursor] {
+			case "Review incorrect questions":
+				if len(m.wrongAnswers) > 0 {
+					m.startReviewSession()
+				}
+			case "View stats for this pack":
+				m.loadPackDetailStats(m.selectedTopic.Topic.ID)
+				m.screen = screenStatsPackDetail
+			case "Back to Home":
+				_ = m.reloadTopicsForCurrentUser()
+				m.homeMenuCursor = 0
+				m.screen = screenHomeMenu
+			}
 		case "r":
-			// Review mode: browse wrong answers (read-only).
+			// Quick shortcut: review wrong answers.
 			if len(m.wrongAnswers) > 0 {
 				m.startReviewSession()
 			}
@@ -524,4 +571,187 @@ func (m model) contentWidth(padding int) int {
 		cw = 20
 	}
 	return cw
+}
+
+// summaryOptions returns the menu items for the summary screen.
+func (m model) summaryOptions() []string {
+	var opts []string
+	if len(m.wrongAnswers) > 0 {
+		opts = append(opts, "Review incorrect questions")
+	}
+	opts = append(opts, "View stats for this pack", "Back to Home")
+	return opts
+}
+
+// --- Home Menu ---
+
+func (m model) homeMenuOptions() []string {
+	opts := []string{"Start Practice", "Review Wrong Answers", "Stats", "Switch Profile", "Quit"}
+	return opts
+}
+
+func (m model) updateHomeMenu(msg tea.Msg) (tea.Model, tea.Cmd) {
+	switch msg := msg.(type) {
+	case tea.KeyMsg:
+		switch msg.String() {
+		case "q":
+			m.quitting = true
+			return m, tea.Quit
+		case "up", "k":
+			if m.homeMenuCursor > 0 {
+				m.homeMenuCursor--
+			}
+		case "down", "j":
+			if m.homeMenuCursor < len(m.homeMenuOptions())-1 {
+				m.homeMenuCursor++
+			}
+		case "enter":
+			options := m.homeMenuOptions()
+			if m.homeMenuCursor >= len(options) {
+				return m, nil
+			}
+			switch options[m.homeMenuCursor] {
+			case "Start Practice":
+				m.screen = screenTopicSelect
+			case "Review Wrong Answers":
+				if len(m.wrongAnswers) > 0 {
+					m.startReviewSession()
+				}
+			case "Stats":
+				m.loadGlobalStats()
+				m.screen = screenStatsGlobal
+			case "Switch Profile":
+				m.profileMenuCursor = 0
+				m.screen = screenProfileMenu
+			case "Quit":
+				m.quitting = true
+				return m, tea.Quit
+			}
+		}
+	}
+	return m, nil
+}
+
+// --- Stats screens ---
+
+func (m *model) loadGlobalStats() {
+	if m.statsRepo == nil || m.userCtx == nil {
+		return
+	}
+	uid := m.userCtx.CurrentUserID()
+	gs, err := m.statsRepo.GlobalStats(uid)
+	if err != nil {
+		m.statsError = err.Error()
+		m.statsGlobal = nil
+		return
+	}
+	m.statsGlobal = gs
+	m.statsError = ""
+
+	// Load trend for global or most practiced topic.
+	trend, _ := m.statsRepo.SessionTrendGlobal(uid, 10)
+	m.statsGlobalTrend = trend
+}
+
+func (m *model) loadPackListStats() {
+	if m.statsRepo == nil || m.userCtx == nil {
+		return
+	}
+	uid := m.userCtx.CurrentUserID()
+	packs, err := m.statsRepo.TopicSummaries(uid)
+	if err != nil {
+		m.statsError = err.Error()
+		m.statsPacks = nil
+		return
+	}
+	m.statsPacks = packs
+	m.statsError = ""
+	m.statsPackCursor = 0
+}
+
+func (m *model) loadPackDetailStats(topicID int64) {
+	if m.statsRepo == nil || m.userCtx == nil {
+		return
+	}
+	uid := m.userCtx.CurrentUserID()
+	ts, err := m.statsRepo.TopicSummary(uid, topicID)
+	if err != nil {
+		m.statsError = err.Error()
+		m.statsDetail = nil
+		return
+	}
+	m.statsDetail = ts
+	m.statsError = ""
+
+	m.statsDifficulty, _ = m.statsRepo.DifficultyStats(uid, topicID)
+
+	weakTags, _ := m.statsRepo.TagStats(uid, topicID, 5)
+	var weak, strong []ports.TagStat
+	for _, t := range weakTags {
+		if t.AccuracyPct < 70 {
+			weak = append(weak, t)
+		} else {
+			strong = append(strong, t)
+		}
+	}
+	m.statsWeakTags = weak
+	m.statsStrongTags = strong
+
+	m.statsWeakQs, _ = m.statsRepo.WeakQuestions(uid, topicID, 3, 10)
+	m.statsDetailTrend, _ = m.statsRepo.SessionTrend(uid, topicID, 10)
+}
+
+func (m model) updateStatsGlobal(msg tea.Msg) (tea.Model, tea.Cmd) {
+	switch msg := msg.(type) {
+	case tea.KeyMsg:
+		switch msg.String() {
+		case "q", "esc":
+			m.homeMenuCursor = 0
+			m.screen = screenHomeMenu
+		case "enter":
+			m.loadPackListStats()
+			m.screen = screenStatsPackList
+		}
+	}
+	return m, nil
+}
+
+func (m model) updateStatsPackList(msg tea.Msg) (tea.Model, tea.Cmd) {
+	switch msg := msg.(type) {
+	case tea.KeyMsg:
+		switch msg.String() {
+		case "q", "esc":
+			m.screen = screenStatsGlobal
+		case "up", "k":
+			if m.statsPackCursor > 0 {
+				m.statsPackCursor--
+			}
+		case "down", "j":
+			if m.statsPackCursor < len(m.statsPacks)-1 {
+				m.statsPackCursor++
+			}
+		case "enter":
+			if len(m.statsPacks) > 0 {
+				sel := m.statsPacks[m.statsPackCursor]
+				m.loadPackDetailStats(sel.TopicID)
+				m.screen = screenStatsPackDetail
+			}
+		}
+	}
+	return m, nil
+}
+
+func (m model) updateStatsPackDetail(msg tea.Msg) (tea.Model, tea.Cmd) {
+	switch msg := msg.(type) {
+	case tea.KeyMsg:
+		switch msg.String() {
+		case "b", "esc":
+			m.loadPackListStats()
+			m.screen = screenStatsPackList
+		case "q":
+			m.homeMenuCursor = 0
+			m.screen = screenHomeMenu
+		}
+	}
+	return m, nil
 }

@@ -48,6 +48,7 @@ func RunWithConfigPath(db *sql.DB, configPath string) error {
 	sessionRepo := sqlite.NewSessionRepo(db)
 	attemptRepo := sqlite.NewAttemptRepo(db)
 	userRepo := sqlite.NewUserRepo(db)
+	statsRepo := sqlite.NewStatsRepo(db)
 	configStore := localconfig.NewStore(configPath)
 
 	profiles, err := userRepo.List()
@@ -81,7 +82,7 @@ func RunWithConfigPath(db *sql.DB, configPath string) error {
 	}
 
 	userCtx := app.NewUserContext(currentUser.ID)
-	m := newModel(topicRepo, questionRepo, sessionRepo, attemptRepo, userRepo, configStore, userCtx)
+	m := newModel(topicRepo, questionRepo, sessionRepo, attemptRepo, userRepo, statsRepo, configStore, userCtx)
 	m.currentUser = currentUser
 	m.hasValidCurrentUser = hasContinue
 	m.profiles = profiles
@@ -150,12 +151,16 @@ const (
 	screenProfileMenu     screen = iota // profile menu with continue/login/register
 	screenProfileLogin                  // profile picker
 	screenProfileRegister               // profile registration form
+	screenHomeMenu                      // post-login home menu
 	screenTopicSelect                   // topic selection
 	screenSessionConfig                 // session configuration
 	screenQuestion                      // answering a question
 	screenReview                        // quiz-show review mode (replaces screenFeedback)
 	screenReviewBrowse                  // browse-only review of wrong answers
 	screenSummary                       // session summary
+	screenStatsGlobal                   // global stats overview
+	screenStatsPackList                 // per-pack stats list
+	screenStatsPackDetail               // single pack detail stats
 )
 
 // model is the root Bubble Tea model that holds all TUI state.
@@ -166,6 +171,7 @@ type model struct {
 	sessionRepo  ports.SessionRepository
 	attemptRepo  ports.AttemptRepository
 	userRepo     ports.UserRepository
+	statsRepo    ports.StatsRepository
 	configStore  *localconfig.Store
 	userCtx      app.CurrentUserProvider
 
@@ -184,6 +190,10 @@ type model struct {
 	registerHandle      string
 	registerDisplayName string
 	registerField       int
+
+	// Home menu state
+	homeMenuCursor      int
+	hasLastWrongAnswers bool // whether last completed session had wrong answers
 
 	// Topic select state
 	topics      []topicInfo
@@ -210,9 +220,10 @@ type model struct {
 	showExplanations bool // toggled by 'e' in review mode
 
 	// Summary state
-	answered     int
-	correctCount int
-	totalLatency int // cumulative latency in milliseconds
+	answered      int
+	correctCount  int
+	totalLatency  int // cumulative latency in milliseconds
+	summaryCursor int // for summary menu navigation
 
 	// Track wrong answers for review browse
 	wrongAnswers []wrongAnswer
@@ -220,6 +231,19 @@ type model struct {
 	// Review browse state
 	reviewQueue  []wrongAnswer
 	reviewCursor int
+
+	// Stats state
+	statsGlobal      *ports.GlobalStats
+	statsGlobalTrend []float64
+	statsPacks       []ports.TopicSummary
+	statsPackCursor  int
+	statsDetail      *ports.TopicSummary
+	statsDifficulty  []ports.DifficultyStat
+	statsWeakTags    []ports.TagStat
+	statsStrongTags  []ports.TagStat
+	statsWeakQs      []ports.QuestionWeakStat
+	statsDetailTrend []float64
+	statsError       string
 
 	// Window size
 	width  int
@@ -235,6 +259,7 @@ func newModel(
 	sessionRepo ports.SessionRepository,
 	attemptRepo ports.AttemptRepository,
 	userRepo ports.UserRepository,
+	statsRepo ports.StatsRepository,
 	configStore *localconfig.Store,
 	userCtx app.CurrentUserProvider,
 ) model {
@@ -244,6 +269,7 @@ func newModel(
 		sessionRepo:   sessionRepo,
 		attemptRepo:   attemptRepo,
 		userRepo:      userRepo,
+		statsRepo:     statsRepo,
 		configStore:   configStore,
 		userCtx:       userCtx,
 		screen:        screenProfileMenu,
