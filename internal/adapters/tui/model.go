@@ -53,6 +53,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.updateReviewBrowse(msg)
 	case screenSummary:
 		return m.updateSummary(msg)
+	case screenStatsMenu:
+		return m.updateStatsMenu(msg)
 	case screenStatsGlobal:
 		return m.updateStatsGlobal(msg)
 	case screenStatsPackList:
@@ -91,6 +93,8 @@ func (m model) View() string {
 		return m.viewReviewBrowse()
 	case screenSummary:
 		return m.viewSummary()
+	case screenStatsMenu:
+		return m.viewStatsMenu()
 	case screenStatsGlobal:
 		return m.viewStatsGlobal()
 	case screenStatsPackList:
@@ -320,46 +324,112 @@ func (m model) updateSessionConfig(msg tea.Msg) (tea.Model, tea.Cmd) {
 		switch {
 		case isBackKey(key):
 			m.screen = screenTopicSelect
+		case isUpNav(key):
+			if m.sessionConfigField > 0 {
+				m.sessionConfigField--
+			}
+		case isDownNav(key):
+			maxField := 1 // questions, mode
+			if m.sessionMode == app.ModeByDifficulty || m.sessionMode == app.ModeWeakest {
+				maxField = 2 // + sub-option
+			}
+			if m.sessionConfigField < maxField {
+				m.sessionConfigField++
+			}
 		case isAdjustUp(key):
-			if m.questionCount < m.selectedTopic.QuestionCount {
-				m.questionCount++
-			}
+			m.adjustSessionConfigField(1)
 		case isAdjustDown(key):
-			if m.questionCount > 1 {
-				m.questionCount--
-			}
+			m.adjustSessionConfigField(-1)
 		case isEnterKey(key):
-			// Start the session via the engine.
-			engine := app.NewSessionEngine(
-				m.topicRepo, m.questionRepo,
-				m.sessionRepo, m.attemptRepo,
-				m.userCtx,
-				nil, // time-seeded rng
-			)
-			_, err := engine.StartSession(
-				m.selectedTopic.Topic.Slug,
-				m.questionCount,
-				"practice",
-			)
-			if err != nil {
-				// On error, go back to topic select.
-				m.screen = screenTopicSelect
-				return m, nil
-			}
-
-			m.engine = engine
-			m.totalQuestions = engine.QueueLength()
-			m.questionNum = 0
-			m.answered = 0
-			m.correctCount = 0
-			m.totalLatency = 0
-			m.wrongAnswers = nil
-
-			// Advance to the first question.
-			m.advanceQuestion()
+			m.startConfiguredSession()
 		}
 	}
 	return m, nil
+}
+
+// adjustSessionConfigField adjusts the value of the currently focused field.
+// dir is +1 for right/up, -1 for left/down.
+func (m *model) adjustSessionConfigField(dir int) {
+	switch m.sessionConfigField {
+	case 0: // question count
+		m.questionCount += dir
+		if m.questionCount < 1 {
+			m.questionCount = 1
+		}
+		if m.questionCount > m.selectedTopic.QuestionCount {
+			m.questionCount = m.selectedTopic.QuestionCount
+		}
+	case 1: // mode
+		m.sessionModeCursor += dir
+		if m.sessionModeCursor < 0 {
+			m.sessionModeCursor = len(modeOptions) - 1
+		}
+		if m.sessionModeCursor >= len(modeOptions) {
+			m.sessionModeCursor = 0
+		}
+		m.sessionMode = modeOptions[m.sessionModeCursor]
+		// Reset sub-field cursor when mode changes.
+		m.sessionConfigField = 1
+	case 2: // sub-option
+		if m.sessionMode == app.ModeByDifficulty {
+			m.sessionDiffCursor += dir
+			if m.sessionDiffCursor < 0 {
+				m.sessionDiffCursor = len(difficultyOptions) - 1
+			}
+			if m.sessionDiffCursor >= len(difficultyOptions) {
+				m.sessionDiffCursor = 0
+			}
+			m.sessionDifficulty = difficultyOptions[m.sessionDiffCursor]
+		} else if m.sessionMode == app.ModeWeakest {
+			m.sessionWeakCursor += dir
+			if m.sessionWeakCursor < 0 {
+				m.sessionWeakCursor = len(weakestOptions) - 1
+			}
+			if m.sessionWeakCursor >= len(weakestOptions) {
+				m.sessionWeakCursor = 0
+			}
+			m.sessionWeakestSub = weakestOptions[m.sessionWeakCursor]
+		}
+	}
+}
+
+// startConfiguredSession builds a SessionConfig from the current UI state
+// and starts the session via the engine.
+func (m *model) startConfiguredSession() {
+	cfg := app.SessionConfig{
+		TopicSlug:  m.selectedTopic.Topic.Slug,
+		N:          m.questionCount,
+		Mode:       m.sessionMode,
+		Difficulty: m.sessionDifficulty,
+		WeakestSub: m.sessionWeakestSub,
+	}
+
+	engine := app.NewSessionEngine(
+		m.topicRepo, m.questionRepo,
+		m.sessionRepo, m.attemptRepo,
+		m.userCtx,
+		nil, // time-seeded rng
+	).WithStatsRepo(m.statsRepo)
+
+	_, err := engine.StartSessionWithConfig(cfg)
+	if err != nil {
+		// On error, go back to topic select.
+		m.screen = screenTopicSelect
+		return
+	}
+
+	m.engine = engine
+	m.totalQuestions = engine.QueueLength()
+	m.sessionModeLabel = app.ModeLabel(engine.ActiveMode(), engine.ActiveModeParams())
+	m.sessionModeNote = engine.ModeNote()
+	m.questionNum = 0
+	m.answered = 0
+	m.correctCount = 0
+	m.totalLatency = 0
+	m.wrongAnswers = nil
+
+	// Advance to the first question.
+	m.advanceQuestion()
 }
 
 // --- Question ---
@@ -630,8 +700,8 @@ func (m model) updateHomeMenu(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.startReviewSession(screenHomeMenu)
 				}
 			case "Stats":
-				m.loadGlobalStats()
-				m.screen = screenStatsGlobal
+				m.statsMenuCursor = 0
+				m.screen = screenStatsMenu
 			case "Switch Profile":
 				m.profileMenuCursor = 0
 				m.screen = screenProfileMenu
@@ -649,6 +719,48 @@ func (m model) updateHomeMenu(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 // --- Stats screens ---
+
+func (m model) statsMenuOptions() []string {
+	return []string{"Global Stats", "Stats by Pack", "Back"}
+}
+
+func (m model) updateStatsMenu(msg tea.Msg) (tea.Model, tea.Cmd) {
+	switch msg := msg.(type) {
+	case tea.KeyMsg:
+		key := msg.String()
+		switch {
+		case isBackKey(key):
+			m.homeMenuCursor = 0
+			m.screen = screenHomeMenu
+		case isUpNav(key):
+			if m.statsMenuCursor > 0 {
+				m.statsMenuCursor--
+			}
+		case isDownNav(key):
+			opts := m.statsMenuOptions()
+			if m.statsMenuCursor < len(opts)-1 {
+				m.statsMenuCursor++
+			}
+		case isEnterKey(key):
+			opts := m.statsMenuOptions()
+			if m.statsMenuCursor >= len(opts) {
+				return m, nil
+			}
+			switch opts[m.statsMenuCursor] {
+			case "Global Stats":
+				m.loadGlobalStats()
+				m.screen = screenStatsGlobal
+			case "Stats by Pack":
+				m.loadPackListStats()
+				m.screen = screenStatsPackList
+			case "Back":
+				m.homeMenuCursor = 0
+				m.screen = screenHomeMenu
+			}
+		}
+	}
+	return m, nil
+}
 
 func (m *model) loadGlobalStats() {
 	if m.statsRepo == nil || m.userCtx == nil {
@@ -680,6 +792,10 @@ func (m *model) loadPackListStats() {
 		m.statsPacks = nil
 		return
 	}
+
+	// Sort by attempts descending for the current user.
+	sortPacksByAttempts(packs)
+
 	m.statsPacks = packs
 	m.statsError = ""
 	m.statsPackCursor = 0
@@ -723,11 +839,8 @@ func (m model) updateStatsGlobal(msg tea.Msg) (tea.Model, tea.Cmd) {
 		key := msg.String()
 		switch {
 		case isBackKey(key):
-			m.homeMenuCursor = 0
-			m.screen = screenHomeMenu
-		case isEnterKey(key):
-			m.loadPackListStats()
-			m.screen = screenStatsPackList
+			m.statsMenuCursor = 0
+			m.screen = screenStatsMenu
 		}
 	}
 	return m, nil
@@ -739,7 +852,8 @@ func (m model) updateStatsPackList(msg tea.Msg) (tea.Model, tea.Cmd) {
 		key := msg.String()
 		switch {
 		case isBackKey(key):
-			m.screen = screenStatsGlobal
+			m.statsMenuCursor = 0
+			m.screen = screenStatsMenu
 		case isUpNav(key):
 			if m.statsPackCursor > 0 {
 				m.statsPackCursor--
@@ -770,4 +884,13 @@ func (m model) updateStatsPackDetail(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	}
 	return m, nil
+}
+
+// sortPacksByAttempts sorts packs by AttemptsAnswered descending.
+func sortPacksByAttempts(packs []ports.TopicSummary) {
+	for i := 1; i < len(packs); i++ {
+		for j := i; j > 0 && packs[j].AttemptsAnswered > packs[j-1].AttemptsAnswered; j-- {
+			packs[j], packs[j-1] = packs[j-1], packs[j]
+		}
+	}
 }

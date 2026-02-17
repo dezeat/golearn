@@ -158,6 +158,7 @@ const (
 	screenReview                        // quiz-show review mode (replaces screenFeedback)
 	screenReviewBrowse                  // browse-only review of wrong answers
 	screenSummary                       // session summary
+	screenStatsMenu                     // stats menu: global / by pack / back
 	screenStatsGlobal                   // global stats overview
 	screenStatsPackList                 // per-pack stats list
 	screenStatsPackDetail               // single pack detail stats
@@ -200,8 +201,15 @@ type model struct {
 	topicCursor int
 
 	// Session config state
-	selectedTopic topicInfo
-	questionCount int // number of questions for the session
+	selectedTopic      topicInfo
+	questionCount      int // number of questions for the session
+	sessionMode        app.SelectionMode
+	sessionModeCursor  int    // cursor within mode picker
+	sessionDifficulty  string // "easy", "medium", "hard"
+	sessionDiffCursor  int
+	sessionWeakestSub  app.WeakestSubMode
+	sessionWeakCursor  int
+	sessionConfigField int // 0=questions, 1=mode, 2=sub-option (difficulty/weakest)
 
 	// Session engine
 	engine *app.SessionEngine
@@ -217,6 +225,8 @@ type model struct {
 	submitted              bool // whether answer has been submitted
 	lastCorrect            bool // result of last submission
 	lastSkipped            bool
+	sessionModeLabel       string // e.g. "Mode: Balanced"
+	sessionModeNote        string // informational note from selection
 
 	// Review mode state
 	showExplanations bool // toggled by 'e' in review mode
@@ -236,6 +246,7 @@ type model struct {
 	reviewReturnScreen screen
 
 	// Stats state
+	statsMenuCursor  int
 	statsGlobal      *ports.GlobalStats
 	statsGlobalTrend []float64
 	statsPacks       []ports.TopicSummary
@@ -267,17 +278,20 @@ func newModel(
 	userCtx app.CurrentUserProvider,
 ) model {
 	return model{
-		topicRepo:     topicRepo,
-		questionRepo:  questionRepo,
-		sessionRepo:   sessionRepo,
-		attemptRepo:   attemptRepo,
-		userRepo:      userRepo,
-		statsRepo:     statsRepo,
-		configStore:   configStore,
-		userCtx:       userCtx,
-		screen:        screenProfileMenu,
-		questionCount: 10,
-		selected:      make(map[string]bool),
+		topicRepo:         topicRepo,
+		questionRepo:      questionRepo,
+		sessionRepo:       sessionRepo,
+		attemptRepo:       attemptRepo,
+		userRepo:          userRepo,
+		statsRepo:         statsRepo,
+		configStore:       configStore,
+		userCtx:           userCtx,
+		screen:            screenProfileMenu,
+		questionCount:     10,
+		sessionMode:       app.ModeBalanced,
+		sessionDifficulty: "easy",
+		sessionWeakestSub: app.WeakestByQuestion,
+		selected:          make(map[string]bool),
 	}
 }
 

@@ -67,5 +67,5 @@ const (
 	footerMenuSubReview = "[↑/↓] Navigate   [Enter] Select   [R] Review   [Esc] Back"
 	footerQuiz          = "[↑/↓] Navigate   [Space] Toggle   [Enter] Submit   [Esc] Cancel   [S] Skip"
 	footerReview        = "[Enter] Next   [E] Toggle Explanation   [Esc] Back"
-	footerSessionConfig = "[←/→] Adjust   [Enter] Start   [Esc] Back"
+	footerSessionConfig = "[↑/↓] Navigate   [←/→] Adjust   [Enter] Start   [Esc] Back"
 )

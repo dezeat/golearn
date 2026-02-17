@@ -15,7 +15,16 @@ func (m model) viewQuestion() string {
 
 	header := fmt.Sprintf("golearn — Question %d/%d", m.questionNum, m.totalQuestions)
 	b.WriteString(styleHeader.Render(header) + "\n")
-	b.WriteString("════════════════════════\n\n")
+	b.WriteString("════════════════════════\n")
+
+	// Show mode context.
+	if m.sessionModeLabel != "" {
+		b.WriteString(styleDim.Render("  "+truncate(m.sessionModeLabel, m.contentWidth(2))) + "\n")
+	}
+	if m.sessionModeNote != "" {
+		b.WriteString(styleDim.Render("  "+truncate(m.sessionModeNote, m.contentWidth(2))) + "\n")
+	}
+	b.WriteString("\n")
 
 	if m.currentQuestion == nil {
 		b.WriteString("  No question loaded.\n")
@@ -81,7 +90,13 @@ func (m model) viewReview() string {
 
 	header := fmt.Sprintf("golearn — Question %d/%d — Review", m.questionNum, m.totalQuestions)
 	b.WriteString(styleHeader.Render(header) + "\n")
-	b.WriteString("════════════════════════\n\n")
+	b.WriteString("════════════════════════\n")
+
+	// Show mode context.
+	if m.sessionModeLabel != "" {
+		b.WriteString(styleDim.Render("  "+truncate(m.sessionModeLabel, m.contentWidth(2))) + "\n")
+	}
+	b.WriteString("\n")
 
 	if m.currentQuestion == nil {
 		b.WriteString("  No question loaded.\n")

@@ -77,13 +77,14 @@ type Question struct {
 
 // Session tracks a practice or exam run (stubbed for future use).
 type Session struct {
-	ID         int64      `json:"id"`
-	UserID     int64      `json:"user_id"`
-	TopicID    int64      `json:"topic_id"`
-	Mode       string     `json:"mode"`
-	RequestedN int        `json:"requested_n"`
-	StartedAt  time.Time  `json:"started_at"`
-	EndedAt    *time.Time `json:"ended_at,omitempty"`
+	ID             int64      `json:"id"`
+	UserID         int64      `json:"user_id"`
+	TopicID        int64      `json:"topic_id"`
+	Mode           string     `json:"mode"`
+	ModeParamsJSON string     `json:"mode_params_json,omitempty"`
+	RequestedN     int        `json:"requested_n"`
+	StartedAt      time.Time  `json:"started_at"`
+	EndedAt        *time.Time `json:"ended_at,omitempty"`
 }
 
 // Attempt records a single answer within a session (stubbed for future use).

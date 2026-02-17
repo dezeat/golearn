@@ -82,6 +82,20 @@ func (r *StatsRepo) GlobalStats(userID int64) (*ports.GlobalStats, error) {
 		return nil, fmt.Errorf("weakest topic: %w", err)
 	}
 
+	// Strongest topic (highest accuracy, minimum 5 answered attempts).
+	err = r.db.QueryRow(`
+		SELECT t.name FROM attempts a
+		JOIN questions q ON q.id = a.question_id
+		JOIN topics t ON t.id = q.topic_id
+		WHERE a.user_id = ? AND a.skipped = 0
+		GROUP BY t.id
+		HAVING COUNT(*) >= ?
+		ORDER BY (CAST(SUM(a.correct) AS REAL) / COUNT(*)) DESC
+		LIMIT 1`, userID, minForWeak).Scan(&gs.StrongestTopic)
+	if err != nil && err != sql.ErrNoRows {
+		return nil, fmt.Errorf("strongest topic: %w", err)
+	}
+
 	return gs, nil
 }
 

@@ -80,6 +80,7 @@ type GlobalStats struct {
 	TotalTimeSeconds   float64 // sum of all latency
 	MostPracticedTopic string  // topic name, by attempt count
 	WeakestTopic       string  // topic name, by lowest accuracy (min attempts threshold)
+	StrongestTopic     string  // topic name, by highest accuracy (min attempts threshold)
 }
 
 // TopicSummary holds per-topic stats for a user.

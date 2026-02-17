@@ -25,10 +25,15 @@ func (r *SessionRepo) Create(s *domain.Session) (int64, error) {
 		startedAt = time.Now().UTC()
 	}
 
+	modeParams := s.ModeParamsJSON
+	if modeParams == "" {
+		modeParams = "{}"
+	}
+
 	res, err := r.db.Exec(
-		`INSERT INTO sessions (user_id, topic_id, mode, requested_n, started_at)
-		 VALUES (?, ?, ?, ?, ?)`,
-		s.UserID, s.TopicID, s.Mode, s.RequestedN, startedAt,
+		`INSERT INTO sessions (user_id, topic_id, mode, mode_params_json, requested_n, started_at)
+		 VALUES (?, ?, ?, ?, ?, ?)`,
+		s.UserID, s.TopicID, s.Mode, modeParams, s.RequestedN, startedAt,
 	)
 	if err != nil {
 		return 0, fmt.Errorf("insert session: %w", err)

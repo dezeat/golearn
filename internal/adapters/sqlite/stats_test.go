@@ -503,3 +503,180 @@ func TestStatsRepo_GlobalStats_Skipped(t *testing.T) {
 		t.Errorf("accuracy: got %.0f, want 50", gs.AccuracyPct)
 	}
 }
+
+func TestStatsRepo_StrongestTopic(t *testing.T) {
+	_, topicRepo, qRepo, sessionRepo, attemptRepo, userRepo, statsRepo := setupStatsDB(t)
+
+	user, err := userRepo.Create("stronguser", "Strong User")
+	if err != nil {
+		t.Fatalf("create user: %v", err)
+	}
+
+	// Two topics: "Alpha" (100% accuracy, 5 attempts) and "Beta" (40% accuracy, 5 attempts).
+	topicA, err := topicRepo.UpsertBySlug("alpha", "Alpha")
+	if err != nil {
+		t.Fatalf("upsert alpha: %v", err)
+	}
+	topicB, err := topicRepo.UpsertBySlug("beta", "Beta")
+	if err != nil {
+		t.Fatalf("upsert beta: %v", err)
+	}
+
+	qA := insertQuestions(t, qRepo, topicA.ID, 5, func(i int, q *domain.Question) {
+		q.Hash = fmt.Sprintf("strong_a_%d", i)
+	})
+	qB := insertQuestions(t, qRepo, topicB.ID, 5, func(i int, q *domain.Question) {
+		q.Hash = fmt.Sprintf("strong_b_%d", i)
+	})
+
+	// Alpha: 5/5 correct = 100%.
+	sessA := &domain.Session{UserID: user.ID, TopicID: topicA.ID, Mode: "practice", RequestedN: 5, StartedAt: time.Now().UTC()}
+	sessAID, err := sessionRepo.Create(sessA)
+	if err != nil {
+		t.Fatalf("create alpha session: %v", err)
+	}
+	recordAttempts(t, attemptRepo, user.ID, sessAID, qA,
+		[]bool{true, true, true, true, true},
+		[]int{1000, 1000, 1000, 1000, 1000})
+	_ = sessionRepo.Finish(sessAID)
+
+	// Beta: 2/5 correct = 40%.
+	sessB := &domain.Session{UserID: user.ID, TopicID: topicB.ID, Mode: "practice", RequestedN: 5, StartedAt: time.Now().UTC()}
+	sessBID, err := sessionRepo.Create(sessB)
+	if err != nil {
+		t.Fatalf("create beta session: %v", err)
+	}
+	recordAttempts(t, attemptRepo, user.ID, sessBID, qB,
+		[]bool{true, true, false, false, false},
+		[]int{1000, 1000, 1000, 1000, 1000})
+	_ = sessionRepo.Finish(sessBID)
+
+	gs, err := statsRepo.GlobalStats(user.ID)
+	if err != nil {
+		t.Fatalf("global stats: %v", err)
+	}
+
+	if gs.StrongestTopic != "Alpha" {
+		t.Errorf("strongest: got %q, want %q", gs.StrongestTopic, "Alpha")
+	}
+	if gs.WeakestTopic != "Beta" {
+		t.Errorf("weakest: got %q, want %q", gs.WeakestTopic, "Beta")
+	}
+}
+
+func TestStatsRepo_StrongestTopic_BelowThreshold(t *testing.T) {
+	_, topicRepo, qRepo, sessionRepo, attemptRepo, userRepo, statsRepo := setupStatsDB(t)
+
+	user, err := userRepo.Create("threshuser", "Threshold User")
+	if err != nil {
+		t.Fatalf("create user: %v", err)
+	}
+
+	topic, err := topicRepo.UpsertBySlug("small-topic", "Small Topic")
+	if err != nil {
+		t.Fatalf("upsert topic: %v", err)
+	}
+
+	// Only 3 attempts — below the min 5 threshold.
+	qIDs := insertQuestions(t, qRepo, topic.ID, 3, func(i int, q *domain.Question) {
+		q.Hash = fmt.Sprintf("thresh_hash_%d", i)
+	})
+
+	sess := &domain.Session{UserID: user.ID, TopicID: topic.ID, Mode: "practice", RequestedN: 3, StartedAt: time.Now().UTC()}
+	sessID, err := sessionRepo.Create(sess)
+	if err != nil {
+		t.Fatalf("create session: %v", err)
+	}
+	recordAttempts(t, attemptRepo, user.ID, sessID, qIDs,
+		[]bool{true, true, true},
+		[]int{1000, 1000, 1000})
+	_ = sessionRepo.Finish(sessID)
+
+	gs, err := statsRepo.GlobalStats(user.ID)
+	if err != nil {
+		t.Fatalf("global stats: %v", err)
+	}
+
+	// Below threshold: both strongest and weakest should be empty.
+	if gs.StrongestTopic != "" {
+		t.Errorf("strongest should be empty below threshold, got %q", gs.StrongestTopic)
+	}
+	if gs.WeakestTopic != "" {
+		t.Errorf("weakest should be empty below threshold, got %q", gs.WeakestTopic)
+	}
+}
+
+func TestStatsRepo_StrongestTopic_MultiUser(t *testing.T) {
+	_, topicRepo, qRepo, sessionRepo, attemptRepo, userRepo, statsRepo := setupStatsDB(t)
+
+	alice, err := userRepo.Create("alice2", "Alice2")
+	if err != nil {
+		t.Fatalf("create alice: %v", err)
+	}
+	bob, err := userRepo.Create("bob2", "Bob2")
+	if err != nil {
+		t.Fatalf("create bob: %v", err)
+	}
+
+	topicX, err := topicRepo.UpsertBySlug("topic-x", "Topic X")
+	if err != nil {
+		t.Fatalf("upsert x: %v", err)
+	}
+	topicY, err := topicRepo.UpsertBySlug("topic-y", "Topic Y")
+	if err != nil {
+		t.Fatalf("upsert y: %v", err)
+	}
+
+	qX := insertQuestions(t, qRepo, topicX.ID, 5, func(i int, q *domain.Question) {
+		q.Hash = fmt.Sprintf("mu_x_%d", i)
+	})
+	qY := insertQuestions(t, qRepo, topicY.ID, 5, func(i int, q *domain.Question) {
+		q.Hash = fmt.Sprintf("mu_y_%d", i)
+	})
+
+	// Alice: 100% on X, 40% on Y → strongest=X, weakest=Y
+	for _, tc := range []struct {
+		user    *domain.User
+		topic   *domain.Topic
+		qIDs    []int64
+		correct []bool
+	}{
+		{alice, topicX, qX, []bool{true, true, true, true, true}},
+		{alice, topicY, qY, []bool{true, true, false, false, false}},
+		// Bob: 20% on X, 80% on Y → strongest=Y, weakest=X
+		{bob, topicX, qX, []bool{true, false, false, false, false}},
+		{bob, topicY, qY, []bool{true, true, true, true, false}},
+	} {
+		sess := &domain.Session{UserID: tc.user.ID, TopicID: tc.topic.ID, Mode: "practice", RequestedN: 5, StartedAt: time.Now().UTC()}
+		sessID, err := sessionRepo.Create(sess)
+		if err != nil {
+			t.Fatalf("create session: %v", err)
+		}
+		recordAttempts(t, attemptRepo, tc.user.ID, sessID, tc.qIDs,
+			tc.correct,
+			[]int{1000, 1000, 1000, 1000, 1000})
+		_ = sessionRepo.Finish(sessID)
+	}
+
+	aliceGS, err := statsRepo.GlobalStats(alice.ID)
+	if err != nil {
+		t.Fatalf("alice global: %v", err)
+	}
+	if aliceGS.StrongestTopic != "Topic X" {
+		t.Errorf("alice strongest: got %q, want %q", aliceGS.StrongestTopic, "Topic X")
+	}
+	if aliceGS.WeakestTopic != "Topic Y" {
+		t.Errorf("alice weakest: got %q, want %q", aliceGS.WeakestTopic, "Topic Y")
+	}
+
+	bobGS, err := statsRepo.GlobalStats(bob.ID)
+	if err != nil {
+		t.Fatalf("bob global: %v", err)
+	}
+	if bobGS.StrongestTopic != "Topic Y" {
+		t.Errorf("bob strongest: got %q, want %q", bobGS.StrongestTopic, "Topic Y")
+	}
+	if bobGS.WeakestTopic != "Topic X" {
+		t.Errorf("bob weakest: got %q, want %q", bobGS.WeakestTopic, "Topic X")
+	}
+}

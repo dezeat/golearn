@@ -96,6 +96,33 @@ func formatStatsTimestamp(raw string) string {
 	return raw
 }
 
+// --- Stats Menu ---
+
+func (m model) viewStatsMenu() string {
+	var b strings.Builder
+
+	m.writeCenteredLine(&b, styleHeader.Render("golearn — Stats"))
+	m.writeCenteredLine(&b, "═══════════════")
+	b.WriteString("\n")
+
+	if m.currentUser != nil {
+		m.writeCenteredLine(&b, fmt.Sprintf("Profile: %s", displayProfile(*m.currentUser)))
+		b.WriteString("\n")
+	}
+
+	opts := m.statsMenuOptions()
+	for i, opt := range opts {
+		cursor := "  "
+		if i == m.statsMenuCursor {
+			cursor = "▸ "
+		}
+		m.writeCenteredLine(&b, cursor+opt)
+	}
+
+	m.writeFooter(&b, footerMenuSub)
+	return b.String()
+}
+
 // --- Home Menu ---
 
 func (m model) viewHomeMenu() string {
@@ -222,6 +249,13 @@ func (m model) viewStatsGlobal() string {
 	}
 	if gs.WeakestTopic != "" {
 		b.WriteString(fmt.Sprintf("  Weakest pack:    %s\n", gs.WeakestTopic))
+	} else {
+		b.WriteString(fmt.Sprintf("  Weakest pack:    %s\n", styleDim.Render("N/A (not enough attempts)")))
+	}
+	if gs.StrongestTopic != "" {
+		b.WriteString(fmt.Sprintf("  Strongest pack:  %s\n", gs.StrongestTopic))
+	} else {
+		b.WriteString(fmt.Sprintf("  Strongest pack:  %s\n", styleDim.Render("N/A (not enough attempts)")))
 	}
 
 	// Trend sparkline.

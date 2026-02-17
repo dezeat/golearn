@@ -28,6 +28,7 @@ type SessionEngine struct {
 	questions ports.QuestionRepository
 	sessions  ports.SessionRepository
 	attempts  ports.AttemptRepository
+	stats     ports.StatsRepository // optional; needed for weakest-by-tag
 	userCtx   CurrentUserProvider
 
 	// In-memory state for the active session.
@@ -35,6 +36,11 @@ type SessionEngine struct {
 	queue     []SessionQuestion // ordered list of selected questions
 	cursor    int               // index of the next question to serve
 	rng       *rand.Rand
+
+	// Mode context for display.
+	activeMode       SelectionMode
+	activeModeParams ModeParams
+	modeNote         string // informational note from selector
 }
 
 // NewSessionEngine creates a session engine with the given dependencies.
@@ -63,32 +69,53 @@ func NewSessionEngine(
 	}
 }
 
+// WithStatsRepo sets an optional stats repository for weakest-by-tag selection.
+func (e *SessionEngine) WithStatsRepo(sr ports.StatsRepository) *SessionEngine {
+	e.stats = sr
+	return e
+}
+
 // StartSession validates the topic, selects questions, persists a session
-// row, and returns the session ID. mode should be "practice".
+// row, and returns the session ID. mode should be "balanced" (or legacy "practice").
+// This method uses Balanced mode for backward compatibility.
 func (e *SessionEngine) StartSession(topicSlug string, n int, mode string) (int64, error) {
-	if mode == "" {
-		mode = "practice"
+	if mode == "" || mode == "practice" {
+		mode = string(ModeBalanced)
+	}
+	return e.StartSessionWithConfig(SessionConfig{
+		TopicSlug: topicSlug,
+		N:         n,
+		Mode:      SelectionMode(mode),
+	})
+}
+
+// StartSessionWithConfig validates the topic, selects questions using the
+// specified mode, persists a session row, and returns the session ID.
+func (e *SessionEngine) StartSessionWithConfig(cfg SessionConfig) (int64, error) {
+	mode := cfg.Mode
+	if mode == "" || mode == "practice" {
+		mode = ModeBalanced
 	}
 	if e.userCtx.CurrentUserID() <= 0 {
 		return 0, fmt.Errorf("current user is not set")
 	}
 
 	// Resolve topic by slug.
-	topic, err := e.topics.GetBySlug(topicSlug)
+	topic, err := e.topics.GetBySlug(cfg.TopicSlug)
 	if err != nil {
-		return 0, fmt.Errorf("get topic %q: %w", topicSlug, err)
+		return 0, fmt.Errorf("get topic %q: %w", cfg.TopicSlug, err)
 	}
 	if topic == nil {
-		return 0, fmt.Errorf("topic %q not found", topicSlug)
+		return 0, fmt.Errorf("topic %q not found", cfg.TopicSlug)
 	}
 
 	// Load all questions for the topic.
 	allQuestions, err := e.questions.ListByTopic(topic.ID)
 	if err != nil {
-		return 0, fmt.Errorf("list questions for topic %q: %w", topicSlug, err)
+		return 0, fmt.Errorf("list questions for topic %q: %w", cfg.TopicSlug, err)
 	}
 	if len(allQuestions) == 0 {
-		return 0, fmt.Errorf("topic %q has no questions", topicSlug)
+		return 0, fmt.Errorf("topic %q has no questions", cfg.TopicSlug)
 	}
 
 	// Load attempt stats to inform selection policy.
@@ -97,8 +124,47 @@ func (e *SessionEngine) StartSession(topicSlug string, n int, mode string) (int6
 		return 0, fmt.Errorf("load attempt stats: %w", err)
 	}
 
-	// Select questions using the prioritisation policy.
-	selected := SelectQuestions(allQuestions, stats, n, e.rng)
+	// Select questions using the configured mode.
+	var selected []domain.Question
+	modeParams := ModeParams{}
+	modeNote := ""
+
+	switch mode {
+	case ModeByDifficulty:
+		modeParams.Difficulty = cfg.Difficulty
+		selected, modeNote = SelectByDifficulty(allQuestions, stats, cfg.N, cfg.Difficulty, e.rng)
+
+	case ModeWeakest:
+		modeParams.WeakestSub = cfg.WeakestSub
+		if cfg.WeakestSub == WeakestByTag {
+			// Load tag stats for weakest-by-tag selection.
+			var tagStats []ports.TagStat
+			if e.stats != nil {
+				tagStats, _ = e.stats.TagStats(e.userCtx.CurrentUserID(), topic.ID, 5)
+			}
+			result := SelectWeakestByTag(allQuestions, stats, tagStats, cfg.N, e.rng)
+			selected = result.Questions
+			modeNote = result.Note
+			modeParams.WeakestTag = result.Tag
+		} else {
+			result := SelectWeakestByQuestions(allQuestions, stats, cfg.N, 3, e.rng)
+			selected = result.Questions
+			modeNote = result.Note
+		}
+
+	default: // ModeBalanced
+		mode = ModeBalanced
+		selected = SelectQuestions(allQuestions, stats, cfg.N, e.rng)
+	}
+
+	if len(selected) == 0 {
+		return 0, fmt.Errorf("no questions selected for topic %q with mode %s", cfg.TopicSlug, mode)
+	}
+
+	e.activeMode = mode
+	e.activeModeParams = modeParams
+	e.modeNote = modeNote
+
 	e.queue = make([]SessionQuestion, 0, len(selected))
 	for i := range selected {
 		q := &selected[i]
@@ -116,11 +182,12 @@ func (e *SessionEngine) StartSession(topicSlug string, n int, mode string) (int6
 
 	// Persist the session row.
 	sess := &domain.Session{
-		UserID:     e.userCtx.CurrentUserID(),
-		TopicID:    topic.ID,
-		Mode:       mode,
-		RequestedN: n,
-		StartedAt:  time.Now().UTC(),
+		UserID:         e.userCtx.CurrentUserID(),
+		TopicID:        topic.ID,
+		Mode:           string(mode),
+		ModeParamsJSON: ModeParamsJSON(modeParams),
+		RequestedN:     cfg.N,
+		StartedAt:      time.Now().UTC(),
 	}
 	id, err := e.sessions.Create(sess)
 	if err != nil {
@@ -198,4 +265,19 @@ func (e *SessionEngine) EndSession() error {
 // QueueLength returns the total number of questions selected for this session.
 func (e *SessionEngine) QueueLength() int {
 	return len(e.queue)
+}
+
+// ActiveMode returns the resolved selection mode for the current session.
+func (e *SessionEngine) ActiveMode() SelectionMode {
+	return e.activeMode
+}
+
+// ActiveModeParams returns the resolved mode parameters for the current session.
+func (e *SessionEngine) ActiveModeParams() ModeParams {
+	return e.activeModeParams
+}
+
+// ModeNote returns any informational note from the selector (e.g., reduced N).
+func (e *SessionEngine) ModeNote() string {
+	return e.modeNote
 }

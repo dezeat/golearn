@@ -10,6 +10,7 @@ import (
 	"github.com/dezeat/golearn/internal/adapters/sqlite"
 	"github.com/dezeat/golearn/internal/app"
 	"github.com/dezeat/golearn/internal/domain"
+	"github.com/dezeat/golearn/internal/ports"
 )
 
 // TestReviewState_ExplanationToggle verifies that the showExplanations
@@ -603,5 +604,57 @@ func TestSummaryViewHasStatsOption(t *testing.T) {
 	}
 	if !containsSubstring(view, "Back to Home") {
 		t.Error("expected home option in summary view")
+	}
+}
+
+func TestSortPacksByAttempts(t *testing.T) {
+	packs := []ports.TopicSummary{
+		{TopicName: "Zero", AttemptsAnswered: 0},
+		{TopicName: "Medium", AttemptsAnswered: 10},
+		{TopicName: "High", AttemptsAnswered: 50},
+		{TopicName: "Low", AttemptsAnswered: 3},
+	}
+
+	sortPacksByAttempts(packs)
+
+	expected := []struct {
+		name     string
+		attempts int
+	}{
+		{"High", 50},
+		{"Medium", 10},
+		{"Low", 3},
+		{"Zero", 0},
+	}
+
+	for i, want := range expected {
+		if packs[i].TopicName != want.name {
+			t.Errorf("packs[%d]: got name %q, want %q", i, packs[i].TopicName, want.name)
+		}
+		if packs[i].AttemptsAnswered != want.attempts {
+			t.Errorf("packs[%d]: got attempts %d, want %d", i, packs[i].AttemptsAnswered, want.attempts)
+		}
+	}
+}
+
+func TestSortPacksByAttempts_Empty(t *testing.T) {
+	var packs []ports.TopicSummary
+	sortPacksByAttempts(packs) // should not panic
+	if len(packs) != 0 {
+		t.Errorf("expected empty, got %d", len(packs))
+	}
+}
+
+func TestSortPacksByAttempts_AlreadySorted(t *testing.T) {
+	packs := []ports.TopicSummary{
+		{TopicName: "A", AttemptsAnswered: 30},
+		{TopicName: "B", AttemptsAnswered: 20},
+		{TopicName: "C", AttemptsAnswered: 10},
+	}
+
+	sortPacksByAttempts(packs)
+
+	if packs[0].TopicName != "A" || packs[1].TopicName != "B" || packs[2].TopicName != "C" {
+		t.Errorf("already sorted list should remain unchanged")
 	}
 }

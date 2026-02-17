@@ -36,6 +36,36 @@ All core capabilities are implemented, tested, and documented.
 
 ## Changelog
 
+### 2026-02-18 — Phase 14: Question Selection Modes + Stats Menu Cleanup
+
+- Added question selection modes: **Balanced**, **By Difficulty**, **Weakest**
+  - Created `internal/app/selection_mode.go` with `SelectionMode` type, `SessionConfig`, `ModeParams`, `ModeLabel`, `ModeParamsJSON`
+  - Created `internal/app/selector_difficulty.go`: filters questions by difficulty bucket, then applies Balanced within
+  - Created `internal/app/selector_weakest.go`: two sub-modes — By Tag (lowest-accuracy tag) and By Question (highest wrong-rate questions)
+  - `SessionConfig` struct replaces ad-hoc mode strings for session creation
+  - Mode and params persisted in `mode_params_json` column on sessions table (migration v2)
+  - `StartSessionWithConfig` routes to correct selector; `StartSession` delegates for backward compat
+  - Added `WithStatsRepo` to session engine for weakest-by-tag stats lookup
+- Updated TUI session config to multi-field picker
+  - Three fields: Questions (◀ N ▶), Mode (◀ Balanced ▶), Sub-option (difficulty level / weakest sub-mode)
+  - ↑/↓ navigates fields, ←/→ adjusts values, Enter starts session
+  - Mode label and note displayed in question and review headers during quiz
+  - Footer updated to show new keybindings
+- Added Stats Menu screen between Home and stats views
+  - Three options: Global Stats / Stats by Pack / Back
+  - Home → Stats → Stats Menu → {Global, Pack List} → back to Stats Menu
+  - Replaced direct Home → Global Stats navigation
+- Updated global stats display
+  - Added strongest pack (highest accuracy, min 5 attempts)
+  - Shows "N/A (not enough attempts)" fallback for both weakest and strongest when below threshold
+- Pack list sorted by attempts descending (most practiced packs first)
+  - Added `sortPacksByAttempts` insertion-sort on `TopicSummary` slice
+- Added/updated tests
+  - `selector_mode_test.go`: 12 tests covering difficulty filtering, N reduction, balanced-within-bucket, deterministic seeding, weakest by questions/tag, fallback, tie-break, mode labels
+  - `stats_test.go`: 3 new tests — strongest topic selection, below-threshold empty, multi-user isolation of strongest/weakest
+  - `tui_test.go`: 3 new tests — sortPacksByAttempts (unsorted, empty, already-sorted)
+- `make check` passes (all 80+ tests green)
+
 ### 2026-02-17 — Phase 13: Difficulty Enum + Explanation Prefix + DB Reset
 
 - Refactored difficulty from numeric 1–5 scale to string enum: `easy | medium | hard`

@@ -262,4 +262,7 @@ var migrations = []string{
 	ON attempts(user_id, question_id, created_at);
 	CREATE INDEX IF NOT EXISTS idx_attempts_user_session
 	ON attempts(user_id, session_id);`,
+
+	// v2: add mode_params_json to sessions
+	`ALTER TABLE sessions ADD COLUMN mode_params_json TEXT NOT NULL DEFAULT '{}';`,
 }
