@@ -20,7 +20,11 @@ func (m model) viewQuestion() string {
 		return b.String()
 	}
 
-	q := m.currentQuestion
+	q := m.currentQuestion.Question
+	if q == nil {
+		b.WriteString("  No question loaded.\n")
+		return b.String()
+	}
 	cw := m.contentWidth(2)
 
 	// Show type hint.
@@ -43,7 +47,7 @@ func (m model) viewQuestion() string {
 	choiceCW := m.contentWidth(choicePad)
 	contIndent := "          " // 10 spaces
 
-	for i, c := range q.Choices {
+	for i, c := range m.currentQuestion.ShuffledChoices {
 		cursor := "  "
 		if i == m.choiceCursor {
 			cursor = "▸ "
@@ -82,7 +86,11 @@ func (m model) viewReview() string {
 		return b.String()
 	}
 
-	q := m.currentQuestion
+	q := m.currentQuestion.Question
+	if q == nil {
+		b.WriteString("  No question loaded.\n")
+		return b.String()
+	}
 	cw := m.contentWidth(2)
 
 	// Show prompt.
@@ -110,7 +118,7 @@ func (m model) viewReview() string {
 	choiceCW := m.contentWidth(choicePad)
 	contIndent := "        " // 8 spaces
 
-	for _, c := range q.Choices {
+	for _, c := range m.currentQuestion.ShuffledChoices {
 		isCorrect := correctSet[c.ID]
 		isSelected := m.selected[c.ID]
 

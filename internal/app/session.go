@@ -14,6 +14,14 @@ import (
 	"github.com/dezeat/golearn/internal/ports"
 )
 
+// SessionQuestion holds session-scoped display state for one question.
+// It preserves a pointer to the original question while allowing
+// per-session shuffled presentation of choices.
+type SessionQuestion struct {
+	Question        *domain.Question
+	ShuffledChoices []domain.Choice
+}
+
 // SessionEngine manages the lifecycle of a practice session.
 type SessionEngine struct {
 	topics    ports.TopicRepository
@@ -24,7 +32,7 @@ type SessionEngine struct {
 
 	// In-memory state for the active session.
 	sessionID int64
-	queue     []domain.Question // ordered list of selected questions
+	queue     []SessionQuestion // ordered list of selected questions
 	cursor    int               // index of the next question to serve
 	rng       *rand.Rand
 }
@@ -90,7 +98,20 @@ func (e *SessionEngine) StartSession(topicSlug string, n int, mode string) (int6
 	}
 
 	// Select questions using the prioritisation policy.
-	e.queue = SelectQuestions(allQuestions, stats, n, e.rng)
+	selected := SelectQuestions(allQuestions, stats, n, e.rng)
+	e.queue = make([]SessionQuestion, 0, len(selected))
+	for i := range selected {
+		q := &selected[i]
+		shuffled := make([]domain.Choice, len(q.Choices))
+		copy(shuffled, q.Choices)
+		e.rng.Shuffle(len(shuffled), func(i, j int) {
+			shuffled[i], shuffled[j] = shuffled[j], shuffled[i]
+		})
+		e.queue = append(e.queue, SessionQuestion{
+			Question:        q,
+			ShuffledChoices: shuffled,
+		})
+	}
 	e.cursor = 0
 
 	// Persist the session row.
@@ -109,15 +130,25 @@ func (e *SessionEngine) StartSession(topicSlug string, n int, mode string) (int6
 	return id, nil
 }
 
-// GetNextQuestion returns the next question in the queue, or nil when
-// all questions have been served.
-func (e *SessionEngine) GetNextQuestion() *domain.Question {
+// GetNextSessionQuestion returns the next session question in the queue,
+// or nil when all questions have been served.
+func (e *SessionEngine) GetNextSessionQuestion() *SessionQuestion {
 	if e.cursor >= len(e.queue) {
 		return nil
 	}
 	q := &e.queue[e.cursor]
 	e.cursor++
 	return q
+}
+
+// GetNextQuestion returns the original question for the next queue item.
+// Deprecated: prefer GetNextSessionQuestion() when rendering choices.
+func (e *SessionEngine) GetNextQuestion() *domain.Question {
+	sq := e.GetNextSessionQuestion()
+	if sq == nil {
+		return nil
+	}
+	return sq.Question
 }
 
 // RecordAttempt evaluates correctness and persists the attempt.
@@ -130,8 +161,8 @@ func (e *SessionEngine) RecordAttempt(
 	// Find the question to check correctness against.
 	var correctIDs []string
 	for i := range e.queue {
-		if e.queue[i].ID == questionID {
-			correctIDs = e.queue[i].CorrectChoiceIDs
+		if e.queue[i].Question != nil && e.queue[i].Question.ID == questionID {
+			correctIDs = e.queue[i].Question.CorrectChoiceIDs
 			break
 		}
 	}

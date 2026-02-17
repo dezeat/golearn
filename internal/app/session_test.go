@@ -3,12 +3,21 @@ package app_test
 import (
 	"math/rand"
 	"path/filepath"
+	"reflect"
 	"testing"
 
 	"github.com/dezeat/golearn/internal/adapters/sqlite"
 	"github.com/dezeat/golearn/internal/app"
 	"github.com/dezeat/golearn/internal/domain"
 )
+
+func choiceIDs(choices []domain.Choice) []string {
+	ids := make([]string, len(choices))
+	for i := range choices {
+		ids[i] = choices[i].ID
+	}
+	return ids
+}
 
 // setupTestDB opens a temp SQLite DB, seeds a topic + questions, and returns
 // all the repos plus the topic used for the test.
@@ -318,5 +327,113 @@ func TestAttemptStats_UserScoped(t *testing.T) {
 		if s.Wrong != 0 {
 			t.Fatalf("expected alice wrong=0, got %d", s.Wrong)
 		}
+	}
+}
+
+func TestSessionQuestion_ShuffleDeterministicWithSeed(t *testing.T) {
+	_, topicRepo, questionRepo, sessionRepo, attemptRepo, _, userID := setupTestDB(t)
+
+	buildOrders := func(seed int64) map[int64][]string {
+		rng := rand.New(rand.NewSource(seed))
+		engine := app.NewSessionEngine(topicRepo, questionRepo, sessionRepo, attemptRepo, app.NewUserContext(userID), rng)
+		if _, err := engine.StartSession("test-topic", 3, "practice"); err != nil {
+			t.Fatalf("StartSession: %v", err)
+		}
+		orders := map[int64][]string{}
+		for {
+			sq := engine.GetNextSessionQuestion()
+			if sq == nil || sq.Question == nil {
+				break
+			}
+			orders[sq.Question.ID] = choiceIDs(sq.ShuffledChoices)
+		}
+		_ = engine.EndSession()
+		return orders
+	}
+
+	seedA := buildOrders(99)
+	seedB := buildOrders(99)
+	if !reflect.DeepEqual(seedA, seedB) {
+		t.Fatalf("expected identical shuffled orders for same seed; got %#v vs %#v", seedA, seedB)
+	}
+}
+
+func TestSessionQuestion_ShuffleAndCorrectness_MultiSelect(t *testing.T) {
+	_, topicRepo, questionRepo, sessionRepo, attemptRepo, topic, userID := setupTestDB(t)
+
+	baseQuestions, err := questionRepo.ListByTopic(topic.ID)
+	if err != nil {
+		t.Fatalf("ListByTopic: %v", err)
+	}
+	originalByID := map[int64][]string{}
+	for i := range baseQuestions {
+		originalByID[baseQuestions[i].ID] = choiceIDs(baseQuestions[i].Choices)
+	}
+
+	engine := app.NewSessionEngine(
+		topicRepo,
+		questionRepo,
+		sessionRepo,
+		attemptRepo,
+		app.NewUserContext(userID),
+		rand.New(rand.NewSource(42)),
+	)
+	if _, err := engine.StartSession("test-topic", 3, "practice"); err != nil {
+		t.Fatalf("StartSession: %v", err)
+	}
+
+	seenDifferentOrder := false
+	seenMultiSelect := false
+
+	for {
+		sq := engine.GetNextSessionQuestion()
+		if sq == nil || sq.Question == nil {
+			break
+		}
+		qid := sq.Question.ID
+		if !reflect.DeepEqual(choiceIDs(sq.ShuffledChoices), originalByID[qid]) {
+			seenDifferentOrder = true
+		}
+
+		if sq.Question.Type == domain.MultiSelect {
+			seenMultiSelect = true
+			selected := make([]string, 0, len(sq.Question.CorrectChoiceIDs))
+			correctSet := map[string]bool{}
+			for _, id := range sq.Question.CorrectChoiceIDs {
+				correctSet[id] = true
+			}
+			for _, c := range sq.ShuffledChoices {
+				if correctSet[c.ID] {
+					selected = append(selected, c.ID)
+				}
+			}
+			correct, err := engine.RecordAttempt(sq.Question.ID, selected, false, 10)
+			if err != nil {
+				t.Fatalf("RecordAttempt multi-select: %v", err)
+			}
+			if !correct {
+				t.Fatal("expected multi-select answer to remain correct with shuffled display order")
+			}
+			continue
+		}
+
+		correct, err := engine.RecordAttempt(sq.Question.ID, sq.Question.CorrectChoiceIDs, false, 10)
+		if err != nil {
+			t.Fatalf("RecordAttempt single-select: %v", err)
+		}
+		if !correct {
+			t.Fatal("expected single-select answer to remain correct")
+		}
+	}
+
+	if !seenDifferentOrder {
+		t.Fatal("expected at least one question to have a different shuffled choice order")
+	}
+	if !seenMultiSelect {
+		t.Fatal("expected at least one multi-select question in session")
+	}
+
+	if err := engine.EndSession(); err != nil {
+		t.Fatalf("EndSession: %v", err)
 	}
 }

@@ -207,7 +207,7 @@ type model struct {
 	engine *app.SessionEngine
 
 	// Question screen state
-	currentQuestion *domain.Question
+	currentQuestion *app.SessionQuestion
 	questionNum     int // 1-based index
 	totalQuestions  int
 	choiceCursor    int             // which choice is highlighted

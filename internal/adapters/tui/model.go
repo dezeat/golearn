@@ -6,6 +6,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/dezeat/golearn/internal/app"
+	"github.com/dezeat/golearn/internal/domain"
 	"github.com/dezeat/golearn/internal/ports"
 )
 
@@ -371,14 +372,14 @@ func (m model) updateQuestion(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.choiceCursor--
 			}
 		case "down", "j":
-			if m.currentQuestion != nil && m.choiceCursor < len(m.currentQuestion.Choices)-1 {
+			if m.currentQuestion != nil && m.choiceCursor < len(m.currentQuestion.ShuffledChoices)-1 {
 				m.choiceCursor++
 			}
 		case " ":
 			// Toggle selection (for multi_select, or single_select).
-			if m.currentQuestion != nil {
-				choiceID := m.currentQuestion.Choices[m.choiceCursor].ID
-				if m.currentQuestion.Type == "single_select" {
+			if m.currentQuestion != nil && m.currentQuestion.Question != nil {
+				choiceID := m.currentQuestion.ShuffledChoices[m.choiceCursor].ID
+				if m.currentQuestion.Question.Type == "single_select" {
 					// Single select: clear others, select this one.
 					m.selected = map[string]bool{choiceID: true}
 				} else {
@@ -392,8 +393,8 @@ func (m model) updateQuestion(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		case "s":
 			// Skip this question.
-			if m.currentQuestion != nil {
-				_, _ = m.engine.RecordAttempt(m.currentQuestion.ID, nil, true, 0)
+			if m.currentQuestion != nil && m.currentQuestion.Question != nil {
+				_, _ = m.engine.RecordAttempt(m.currentQuestion.Question.ID, nil, true, 0)
 				m.answered++
 				m.lastSkipped = true
 				m.lastCorrect = false
@@ -402,7 +403,7 @@ func (m model) updateQuestion(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.screen = screenReview
 			}
 		case "enter":
-			if m.currentQuestion != nil && len(m.selected) > 0 {
+			if m.currentQuestion != nil && m.currentQuestion.Question != nil && len(m.selected) > 0 {
 				// Submit answer.
 				selectedIDs := make([]string, 0, len(m.selected))
 				for id := range m.selected {
@@ -411,7 +412,7 @@ func (m model) updateQuestion(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 				latencyMs := int(time.Since(m.questionStarted()).Milliseconds())
 				correct, _ := m.engine.RecordAttempt(
-					m.currentQuestion.ID, selectedIDs, false, latencyMs,
+					m.currentQuestion.Question.ID, selectedIDs, false, latencyMs,
 				)
 				m.lastCorrect = correct
 
@@ -422,9 +423,12 @@ func (m model) updateQuestion(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if m.lastCorrect {
 					m.correctCount++
 				} else {
+					q := *m.currentQuestion.Question
+					q.Choices = make([]domain.Choice, len(m.currentQuestion.ShuffledChoices))
+					copy(q.Choices, m.currentQuestion.ShuffledChoices)
 					// Track wrong answers for review browse.
 					m.wrongAnswers = append(m.wrongAnswers, wrongAnswer{
-						Question:    *m.currentQuestion,
+						Question:    q,
 						SelectedIDs: selectedIDs,
 					})
 				}
@@ -440,7 +444,7 @@ func (m model) updateQuestion(msg tea.Msg) (tea.Model, tea.Cmd) {
 var questionStartedAt time.Time
 
 func (m *model) advanceQuestion() {
-	q := m.engine.GetNextQuestion()
+	q := m.engine.GetNextSessionQuestion()
 	if q == nil {
 		_ = m.engine.EndSession()
 		m.screen = screenSummary

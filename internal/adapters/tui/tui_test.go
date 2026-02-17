@@ -18,19 +18,21 @@ func TestReviewState_ExplanationToggle(t *testing.T) {
 	m := model{
 		screen:    screenReview,
 		submitted: true,
-		currentQuestion: &domain.Question{
-			Prompt: "Test question",
-			Choices: []domain.Choice{
+		currentQuestion: &app.SessionQuestion{
+			Question: &domain.Question{
+				Prompt:           "Test question",
+				CorrectChoiceIDs: []string{"A"},
+				Rationale: domain.Rationale{
+					Correct: "A is correct because...",
+					PerChoice: map[string]string{
+						"A": "Correct. A is the right answer.",
+						"B": "Incorrect. B is wrong because...",
+					},
+				},
+			},
+			ShuffledChoices: []domain.Choice{
 				{ID: "A", Text: "Option A"},
 				{ID: "B", Text: "Option B"},
-			},
-			CorrectChoiceIDs: []string{"A"},
-			Rationale: domain.Rationale{
-				Correct: "A is correct because...",
-				PerChoice: map[string]string{
-					"A": "Correct. A is the right answer.",
-					"B": "Incorrect. B is wrong because...",
-				},
 			},
 		},
 		selected:         map[string]bool{"A": true},
@@ -78,13 +80,15 @@ func TestReviewState_CorrectFeedback(t *testing.T) {
 		submitted:   true,
 		lastCorrect: true,
 		lastSkipped: false,
-		currentQuestion: &domain.Question{
-			Prompt: "Test correct",
-			Choices: []domain.Choice{
+		currentQuestion: &app.SessionQuestion{
+			Question: &domain.Question{
+				Prompt:           "Test correct",
+				CorrectChoiceIDs: []string{"A"},
+			},
+			ShuffledChoices: []domain.Choice{
 				{ID: "A", Text: "Right"},
 				{ID: "B", Text: "Wrong"},
 			},
-			CorrectChoiceIDs: []string{"A"},
 		},
 		selected: map[string]bool{"A": true},
 	}
@@ -102,13 +106,15 @@ func TestReviewState_IncorrectFeedback(t *testing.T) {
 		submitted:   true,
 		lastCorrect: false,
 		lastSkipped: false,
-		currentQuestion: &domain.Question{
-			Prompt: "Test incorrect",
-			Choices: []domain.Choice{
+		currentQuestion: &app.SessionQuestion{
+			Question: &domain.Question{
+				Prompt:           "Test incorrect",
+				CorrectChoiceIDs: []string{"A"},
+			},
+			ShuffledChoices: []domain.Choice{
 				{ID: "A", Text: "Right"},
 				{ID: "B", Text: "Wrong"},
 			},
-			CorrectChoiceIDs: []string{"A"},
 		},
 		selected: map[string]bool{"B": true},
 	}
@@ -126,13 +132,15 @@ func TestReviewState_SkippedFeedback(t *testing.T) {
 		submitted:   true,
 		lastCorrect: false,
 		lastSkipped: true,
-		currentQuestion: &domain.Question{
-			Prompt: "Test skipped",
-			Choices: []domain.Choice{
+		currentQuestion: &app.SessionQuestion{
+			Question: &domain.Question{
+				Prompt:           "Test skipped",
+				CorrectChoiceIDs: []string{"A"},
+			},
+			ShuffledChoices: []domain.Choice{
 				{ID: "A", Text: "Right"},
 				{ID: "B", Text: "Wrong"},
 			},
-			CorrectChoiceIDs: []string{"A"},
 		},
 		selected: map[string]bool{},
 	}
@@ -445,6 +453,28 @@ func TestTruncate(t *testing.T) {
 	}
 	if truncate("hi", 5) != "hi" {
 		t.Errorf("expected 'hi', got %q", truncate("hi", 5))
+	}
+}
+
+func TestFormatStatsTimestamp(t *testing.T) {
+	tests := []struct {
+		name string
+		raw  string
+		want string
+	}{
+		{name: "sqlite format", raw: "2026-02-17 14:33:59", want: "2026-02-17 14:33"},
+		{name: "rfc3339", raw: "2026-02-17T14:33:59Z", want: "2026-02-17 14:33"},
+		{name: "already minute precision", raw: "2026-02-17 14:33", want: "2026-02-17 14:33"},
+		{name: "fallback truncate", raw: "2026-02-17 14:33:59.123 whatever", want: "2026-02-17 14:33"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := formatStatsTimestamp(tt.raw)
+			if got != tt.want {
+				t.Fatalf("formatStatsTimestamp(%q) = %q, want %q", tt.raw, got, tt.want)
+			}
+		})
 	}
 }
 

@@ -295,10 +295,11 @@ func runSession(dbPath string, args []string) error {
 	questionNum := 0
 
 	for {
-		q := engine.GetNextQuestion()
-		if q == nil {
+		sq := engine.GetNextSessionQuestion()
+		if sq == nil || sq.Question == nil {
 			break
 		}
+		q := sq.Question
 		questionNum++
 
 		// Print intro if present.
@@ -310,7 +311,7 @@ func runSession(dbPath string, args []string) error {
 		fmt.Printf("Q%d/%d: %s\n", questionNum, engine.QueueLength(), q.Prompt)
 
 		// Print choices.
-		for _, c := range q.Choices {
+		for _, c := range sq.ShuffledChoices {
 			fmt.Printf("  %s) %s\n", c.ID, c.Text)
 		}
 		fmt.Print("\nYour answer: ")

@@ -36,6 +36,28 @@ All core capabilities are implemented, tested, and documented.
 
 ## Changelog
 
+### 2026-02-17 — Phase 9: Session Shuffle + Stats Timestamp Polish
+
+- Added session-scoped answer shuffling in `SessionEngine`:
+  - Introduced `SessionQuestion` with original `Question` pointer + `ShuffledChoices`
+  - Choices are copied and shuffled per session using the existing session RNG seed
+  - No DB writes/schema changes and no changes to `domain.Question`
+- Preserved correctness logic using original choice IDs:
+  - `RecordAttempt` still evaluates against original `CorrectChoiceIDs`
+  - Multi-select remains order-insensitive via existing `domain.EvaluateCorrectness`
+  - Explanation mapping (`rationale.per_choice`) remains unchanged since shuffled choices retain original IDs
+- Updated consumers to render shuffled choices:
+  - TUI question/review screens render `ShuffledChoices`
+  - CLI `run` command also displays session-shuffled choice order
+- Updated Pack Detail Stats timestamp formatting:
+  - `Last:` now renders as `YYYY-MM-DD HH:MM`
+  - Seconds removed using `t.Format("2006-01-02 15:04")`
+  - Added robust parsing fallback for SQLite/RFC3339 timestamp variants
+- Added tests:
+  - Deterministic shuffle behavior with fixed RNG seed
+  - Correctness preserved when display order changes (including multi-select)
+  - Timestamp formatting test ensuring minute precision output
+
 ### 2026-02-17 — Phase 8: Stats Feature + Home Menu Navigation
 
 - Added post-login Home Menu with 5 options:

@@ -3,6 +3,7 @@ package tui
 import (
 	"fmt"
 	"strings"
+	"time"
 )
 
 // sparkline renders a unicode sparkline from a slice of float64 values (0–100).
@@ -69,6 +70,30 @@ func fmtDuration(totalSec float64) string {
 	h := m / 60
 	m = m % 60
 	return fmt.Sprintf("%dh %dm", h, m)
+}
+
+func formatStatsTimestamp(raw string) string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return ""
+	}
+	layouts := []string{
+		"2006-01-02 15:04:05.999999999-07:00",
+		"2006-01-02 15:04:05.999999999",
+		time.RFC3339Nano,
+		time.RFC3339,
+		"2006-01-02 15:04:05",
+		"2006-01-02 15:04",
+	}
+	for _, layout := range layouts {
+		if t, err := time.Parse(layout, raw); err == nil {
+			return t.Format("2006-01-02 15:04")
+		}
+	}
+	if len(raw) >= len("2006-01-02 15:04") {
+		return raw[:len("2006-01-02 15:04")]
+	}
+	return raw
 }
 
 // --- Home Menu ---
@@ -307,7 +332,7 @@ func (m model) viewStatsPackDetail() string {
 		b.WriteString(fmt.Sprintf("  Avg time:    %s\n", fmtDuration(ts.AvgLatencySeconds)))
 	}
 	if ts.LastPracticedAt != "" {
-		b.WriteString(fmt.Sprintf("  Last:        %s\n", truncate(ts.LastPracticedAt, 19)))
+		b.WriteString(fmt.Sprintf("  Last:        %s\n", formatStatsTimestamp(ts.LastPracticedAt)))
 	}
 
 	// Difficulty breakdown.
