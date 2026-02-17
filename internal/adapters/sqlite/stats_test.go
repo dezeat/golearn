@@ -178,10 +178,15 @@ func TestStatsRepo_DifficultyBucketing(t *testing.T) {
 		t.Fatalf("upsert topic: %v", err)
 	}
 
-	// Insert questions with different difficulties: 1, 2, 3, 4, 5, 0 (unrated).
+	// Insert questions with different difficulties: easy, easy, medium, hard, hard, unset.
 	qIDs := insertQuestions(t, qRepo, topic.ID, 6, func(i int, q *domain.Question) {
 		q.Hash = fmt.Sprintf("diff_hash_%d", i)
-		difficulties := []int{1, 2, 3, 4, 5, 0}
+		difficulties := []domain.Difficulty{
+			domain.DifficultyEasy, domain.DifficultyEasy,
+			domain.DifficultyMedium,
+			domain.DifficultyHard, domain.DifficultyHard,
+			domain.DifficultyUnset,
+		}
 		q.Difficulty = difficulties[i]
 	})
 
@@ -200,7 +205,7 @@ func TestStatsRepo_DifficultyBucketing(t *testing.T) {
 		t.Fatalf("difficulty stats: %v", err)
 	}
 
-	// Expect: Easy (diff 1,2), Medium (diff 3), Hard (diff 4,5), Unrated (diff 0).
+	// Expect: Easy (2 questions), Medium (1), Hard (2), Unrated (1).
 	bucketMap := map[string]int{}
 	for _, d := range diffs {
 		bucketMap[d.Bucket] = d.AttemptsAnswered

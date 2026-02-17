@@ -74,6 +74,10 @@ func ComputeQuestionHash(topicSlug string, q *PackQuestion) string {
 	copy(sorted, q.CorrectChoiceIDs)
 	sort.Strings(sorted)
 	h.Write([]byte(strings.Join(sorted, ",")))
+	h.Write([]byte(sep))
+
+	// difficulty (included so changing it creates a new hash)
+	h.Write([]byte(string(q.Difficulty)))
 
 	return fmt.Sprintf("%x", h.Sum(nil))
 }

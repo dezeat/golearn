@@ -1,4 +1,4 @@
-.PHONY: build test vet lint fmt check clean run
+.PHONY: build test vet lint fmt check clean run db-reset
 
 BINARY  := golearn
 BIN_DIR := ./bin
@@ -39,6 +39,10 @@ check: fmt vet lint test
 ## clean: remove build artifacts
 clean:
 	rm -rf $(BIN_DIR)
+
+## db-reset: delete the local database and start fresh
+db-reset: build
+	$(BIN_DIR)/$(BINARY) db reset --yes
 
 ## help: show available targets
 help:

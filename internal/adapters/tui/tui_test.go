@@ -123,11 +123,11 @@ func TestReviewView_ShuffledLabelsUseInternalExplanationLookup(t *testing.T) {
 				Prompt:           "Pick one",
 				CorrectChoiceIDs: []string{"A"},
 				Rationale: domain.Rationale{
-					Correct: "Correct: because of root cause",
+					Correct: "because of root cause",
 					PerChoice: map[string]string{
-						"C": "Incorrect: rationale for C",
-						"A": "Correct: rationale for A",
-						"B": "Incorrect: rationale for B",
+						"C": "rationale for C",
+						"A": "rationale for A",
+						"B": "rationale for B",
 					},
 				},
 			},
@@ -149,8 +149,12 @@ func TestReviewView_ShuffledLabelsUseInternalExplanationLookup(t *testing.T) {
 	if !containsSubstring(view, "rationale for C") {
 		t.Fatalf("expected explanation lookup by internal choice ID after shuffle; got:\n%s", view)
 	}
-	if containsSubstring(view, "Correct: because of root cause") || containsSubstring(view, "Incorrect: rationale for C") {
-		t.Fatalf("expected explanation prefixes to be sanitized; got:\n%s", view)
+	// FormatChoiceExplanation applies Correct:/Incorrect: dynamically.
+	if !containsSubstring(view, "Incorrect: rationale for C") {
+		t.Fatalf("expected Incorrect: prefix for wrong choice; got:\n%s", view)
+	}
+	if !containsSubstring(view, "Correct: rationale for A") {
+		t.Fatalf("expected Correct: prefix for right choice; got:\n%s", view)
 	}
 }
 

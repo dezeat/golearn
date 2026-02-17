@@ -64,7 +64,7 @@ Each incorrect answer (distractor) must:
 |--------------|------------------------------------------------------------|
 | `intro`      | When a question needs context (scenario, code block, etc.) |
 | `tags`       | Always recommended — enables filtering by topic            |
-| `difficulty` | 1–5 scale (1 = foundational, 5 = expert)                  |
+| `difficulty` | `easy`, `medium`, or `hard` (optional enum)                |
 | `source_ref` | Strongly recommended for certification packs               |
 | `confidence` | Defaults to 1.0 for manually authored questions            |
 
@@ -170,7 +170,7 @@ Preferred documentation sources:
     - { id: "4", text: "90 days" }
   correct_choice_ids: ["2"]
   tags: ["delta-lake", "vacuum"]
-  difficulty: 1
+  difficulty: easy
   rationale:
     correct: >-
       Delta Lake defaults to a 7-day (168-hour) retention threshold

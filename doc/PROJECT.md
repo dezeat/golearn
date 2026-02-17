@@ -29,8 +29,8 @@ All core capabilities are implemented and tested:
 ### CLI Framework Decision
 
 The CLI uses manual `os.Args` parsing instead of `cobra` or `flag`. This is intentional:
-- Only 5 commands (`import`, `run`, `tui`, `export`, `help`) — minimal complexity
-- No nested subcommands or complex flag interactions
+- Only 6 commands (`import`, `run`, `tui`, `export`, `db`, `help`) — minimal complexity
+- One nested subcommand (`db reset`) with minimal flag handling
 - Avoids adding a dependency tree for simple routing
 - If the command surface grows significantly, migration to `cobra` is straightforward
 
@@ -46,9 +46,10 @@ golearn/
 ├── internal/
 │   ├── domain/                    # pure domain types + logic
 │   │   ├── models.go              # Topic, Question, Session, Attempt, Pack types
-│   │   ├── validation.go          # pack & question validation (7 rules)
+│   │   ├── validation.go          # pack & question validation (8 rules)
 │   │   ├── hashing.go             # stable SHA-256 content hashing + normalisation
-│   │   └── correctness.go         # order-insensitive answer evaluation
+│   │   ├── correctness.go         # order-insensitive answer evaluation
+│   │   └── explanation.go         # explanation prefix helpers (strip + format)
 │   ├── ports/                     # interfaces (driven + driving)
 │   │   ├── repositories.go        # TopicRepo, QuestionRepo, SessionRepo, AttemptRepo, StatsRepo
 │   │   └── sources.go             # PackReader interface
@@ -65,6 +66,7 @@ golearn/
 │       │   ├── session_repo.go    # Create, Finish
 │       │   ├── attempt_repo.go    # Record, StatsByTopic
 │       │   ├── stats_repo.go      # StatsRepository: aggregated user-scoped stats
+│       │   ├── reset.go           # DB reset (validate path + delete)
 │       │   ├── sqlite_test.go     # integration tests
 │       │   └── stats_test.go      # stats aggregation tests
 │       ├── pack/
@@ -157,7 +159,7 @@ Development-phase compatibility rule:
 | `choices`            | `[]Choice`         | yes      | Ordered; ≥ 2 items                         |
 | `correct_choice_ids` | `[]string`         | yes      | References `Choice.id`; validated          |
 | `tags`               | `[]string`         | no       | Freeform topic tags                        |
-| `difficulty`         | int                | no       | 1–5 scale (convention)                     |
+| `difficulty`         | Difficulty (string) | no       | `easy`, `medium`, or `hard` (enum)        |
 | `rationale.correct`  | string             | no       | Shown in TUI review mode via 'e' toggle   |
 | `rationale.per_choice` | map[string]string | no      | Per-choice explanations, keyed by choice ID |
 | `source`             | string             | no       | Provenance, e.g. `manual:file`             |
@@ -192,7 +194,7 @@ questions:
       - { id: "3", text: "Third option" }
     correct_choice_ids: ["2"]
     tags: ["optional-tag"]         # optional
-    difficulty: 2                  # optional
+    difficulty: medium              # optional: easy | medium | hard
     source: "manual:file"          # optional
     source_ref: "https://..."      # optional
     confidence: 1.0                # optional
@@ -230,6 +232,7 @@ Future versions may add version-aware parsing if the schema evolves.
 5. `correct_choice_ids` must be non-empty
 6. For `single_select`: exactly one correct ID
 7. Every ID in `correct_choice_ids` must exist in `choices`
+8. `difficulty` (if set) must be `easy`, `medium`, or `hard`
 
 ### Error Handling
 
@@ -252,7 +255,8 @@ The content hash is computed over the concatenation of:
 ```
 SHA-256( topic_slug \x00 type \x00 normalise(intro) \x00 normalise(prompt) \x00
          for each choice in order: choice.id + normalise(choice.text) \x00
-         sort(correct_choice_ids) joined by "," )
+         sort(correct_choice_ids) joined by "," \x00
+         difficulty )
 ```
 
 Hex-encoded (64 characters). Separator: `\x00` (null byte) between fields.
@@ -275,6 +279,39 @@ A seeded `*rand.Rand` is used for all shuffling to ensure deterministic test beh
 
 Per-question stats (`attempts_count`, `wrong_count`) are computed from the `attempts`
 table grouped by `question_id` and filtered by `user_id`.
+
+---
+
+## Explanation Prefix Convention
+
+Pack files store explanation text **content-only** — no `Correct:`, `Incorrect:`,
+`✅`, or `❌` prefixes. The TUI dynamically prepends `Correct: ` or `Incorrect: `
+to each per-choice explanation at render time using `domain.FormatChoiceExplanation`,
+which checks whether the choice ID appears in `correct_choice_ids`.
+
+If legacy packs contain prefixes, `domain.StripExplanationPrefix` removes them
+before re-adding the appropriate prefix. This keeps packs portable and presentation
+logic isolated in the UI layer.
+
+---
+
+## DB Reset
+
+The CLI includes a `db reset` command that safely deletes the database file and
+its WAL/SHM sidecars:
+
+```bash
+golearn db reset            # interactive confirmation
+golearn db reset --yes      # skip confirmation (CI / scripts)
+```
+
+Safety checks (in `sqlite.ValidateResetPath`):
+- Path must not be empty
+- Must have a database extension (`.db`, `.sqlite`, `.sqlite3`)
+- Must contain a directory component (prevents bare filename targeting random files)
+- Must not be a root path (`/`)
+
+A `make db-reset` target is available for convenience.
 
 ---
 
@@ -338,6 +375,17 @@ After login/register, users land on the Home Menu:
 5) Quit
 ```
 
+### CLI Commands
+
+```
+golearn import <path>                  Import packs from file or directory
+golearn run <topic-slug> [--n N]       Text-mode session runner
+golearn tui                            Launch interactive TUI
+golearn export <slug> --out <path>     Export topic to pack file
+golearn db reset [--yes]               Delete database and sidecar files
+golearn help                           Show usage information
+```
+
 ### Summary Screen
 
 After completing a session, the summary shows:
@@ -365,14 +413,16 @@ All stats are **user-scoped** — switching profile changes all stats displays.
 
 ### Difficulty Bucketing
 
-Questions have an optional `difficulty` field (integer 1–5):
+Questions have an optional `difficulty` field (string enum):
 
 | Difficulty Value | Bucket   |
 |-----------------|----------|
-| 1–2             | Easy     |
-| 3               | Medium   |
-| 4–5             | Hard     |
-| 0 / NULL        | Unrated  |
+| `easy`          | Easy     |
+| `medium`        | Medium   |
+| `hard`          | Hard     |
+| `""` (empty)    | Unrated  |
+
+Stored as `TEXT` in SQLite. If omitted in the pack, defaults to empty string (Unrated).
 
 ### Tag Stats
 

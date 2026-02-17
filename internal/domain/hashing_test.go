@@ -106,6 +106,36 @@ func TestComputeQuestionHash_DifferentTopicDifferentHash(t *testing.T) {
 	}
 }
 
+func TestComputeQuestionHash_DifficultyChangesDifferentHash(t *testing.T) {
+	q1 := &domain.PackQuestion{
+		Type:   domain.SingleSelect,
+		Prompt: "Same question",
+		Choices: []domain.Choice{
+			{ID: "1", Text: "Yes"},
+			{ID: "2", Text: "No"},
+		},
+		CorrectChoiceIDs: []string{"1"},
+		Difficulty:       domain.DifficultyEasy,
+	}
+	q2 := &domain.PackQuestion{
+		Type:   domain.SingleSelect,
+		Prompt: "Same question",
+		Choices: []domain.Choice{
+			{ID: "1", Text: "Yes"},
+			{ID: "2", Text: "No"},
+		},
+		CorrectChoiceIDs: []string{"1"},
+		Difficulty:       domain.DifficultyHard,
+	}
+
+	hash1 := domain.ComputeQuestionHash("topic", q1)
+	hash2 := domain.ComputeQuestionHash("topic", q2)
+
+	if hash1 == hash2 {
+		t.Error("different difficulty should produce different hashes")
+	}
+}
+
 func TestComputeQuestionHash_WhitespaceNormalized(t *testing.T) {
 	q1 := &domain.PackQuestion{
 		Type:   domain.SingleSelect,

@@ -75,6 +75,11 @@ func main() {
 			fmt.Fprintf(os.Stderr, "error: %v\n", err)
 			os.Exit(1)
 		}
+	case "db":
+		if err := runDB(dbPath, subArgs); err != nil {
+			fmt.Fprintf(os.Stderr, "error: %v\n", err)
+			os.Exit(1)
+		}
 	default:
 		fmt.Fprintf(os.Stderr, "error: unknown command %q\n\n", subcommand)
 		printUsage()
@@ -93,6 +98,7 @@ func printUsage() {
 	fmt.Println("  tui                               Launch the interactive TUI")
 	fmt.Println("  run <topic-slug> [--n N]          Start a practice session (text mode)")
 	fmt.Println("  export <slug> --out <path>        Export a topic to a pack file")
+	fmt.Println("  db reset [--yes]                  Delete the database and start fresh")
 	fmt.Println("  help                              Show this help message")
 	fmt.Println()
 	fmt.Println("Global Flags:")
@@ -402,6 +408,58 @@ func runSession(dbPath string, args []string) error {
 		fmt.Printf("  Accuracy:       %.1f%%\n", pct)
 	}
 
+	return nil
+}
+
+// runDB implements the `golearn db <subcommand>` commands.
+func runDB(dbPath string, args []string) error {
+	if len(args) == 0 {
+		return fmt.Errorf("usage: golearn db reset [--yes]")
+	}
+
+	switch args[0] {
+	case "reset":
+		return runDBReset(dbPath, args[1:])
+	default:
+		return fmt.Errorf("unknown db command %q; usage: golearn db reset [--yes]", args[0])
+	}
+}
+
+// runDBReset deletes the SQLite database file and recreates schema on next run.
+func runDBReset(dbPath string, args []string) error {
+	autoConfirm := false
+	for _, arg := range args {
+		if arg == "--yes" || arg == "-yes" || arg == "-y" {
+			autoConfirm = true
+		}
+	}
+
+	// Validate the path is safe to delete.
+	if err := sqlite.ValidateResetPath(dbPath); err != nil {
+		return fmt.Errorf("db reset refused: %w", err)
+	}
+
+	if !autoConfirm {
+		fmt.Printf("This will permanently delete the database at:\n  %s\n\n", dbPath)
+		fmt.Print("Are you sure? [y/N] ")
+
+		scanner := bufio.NewScanner(os.Stdin)
+		if !scanner.Scan() {
+			return fmt.Errorf("cancelled (no input)")
+		}
+		answer := strings.TrimSpace(strings.ToLower(scanner.Text()))
+		if answer != "y" && answer != "yes" {
+			fmt.Println("Cancelled.")
+			return nil
+		}
+	}
+
+	if err := sqlite.ResetDB(dbPath); err != nil {
+		return fmt.Errorf("reset db: %w", err)
+	}
+
+	fmt.Printf("Database deleted: %s\n", dbPath)
+	fmt.Println("A fresh database will be created on next run.")
 	return nil
 }
 

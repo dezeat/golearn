@@ -200,14 +200,14 @@ func (r *StatsRepo) TopicSummaries(userID int64) ([]ports.TopicSummary, error) {
 	return summaries, nil
 }
 
-// difficultyBucket maps a question's integer difficulty to a label.
-func difficultyBucket(d int) string {
-	switch {
-	case d >= 1 && d <= 2:
+// difficultyBucket maps a question's string difficulty to a display label.
+func difficultyBucket(d string) string {
+	switch d {
+	case "easy":
 		return ports.DifficultyEasy
-	case d == 3:
+	case "medium":
 		return ports.DifficultyMedium
-	case d >= 4 && d <= 5:
+	case "hard":
 		return ports.DifficultyHard
 	default:
 		return ports.DifficultyUnrated
@@ -235,7 +235,8 @@ func (r *StatsRepo) DifficultyStats(userID, topicID int64) ([]ports.DifficultySt
 	// Accumulate into buckets.
 	buckets := map[string]*ports.DifficultyStat{}
 	for rows.Next() {
-		var diff, answered, correctCount int
+		var diff string
+		var answered, correctCount int
 		var totalLatencyMs int64
 		if err := rows.Scan(&diff, &answered, &correctCount, &totalLatencyMs); err != nil {
 			return nil, fmt.Errorf("scan difficulty: %w", err)

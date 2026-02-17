@@ -89,7 +89,7 @@ func (s *ExportService) Export(topicSlug, outPath, format string) error {
 		if len(q.Tags) > 0 {
 			pq.Tags = q.Tags
 		}
-		if q.Difficulty > 0 {
+		if q.Difficulty != "" {
 			pq.Difficulty = q.Difficulty
 		}
 		if q.Source != "" && q.Source != "manual:file" {
@@ -188,7 +188,7 @@ func (s *ExportService) ExportToBytes(topicSlug, format string) ([]byte, error) 
 		if len(q.Tags) > 0 {
 			pq.Tags = q.Tags
 		}
-		if q.Difficulty > 0 {
+		if q.Difficulty != "" {
 			pq.Difficulty = q.Difficulty
 		}
 		if q.Source != "" && q.Source != "manual:file" {

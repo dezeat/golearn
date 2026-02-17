@@ -221,7 +221,7 @@ var migrations = []string{
 		choices_json            TEXT NOT NULL,
 		correct_choice_ids_json TEXT NOT NULL,
 		tags_json               TEXT NOT NULL DEFAULT '[]',
-		difficulty              INTEGER NOT NULL DEFAULT 0,
+		difficulty              TEXT NOT NULL DEFAULT '',
 		rationale_correct       TEXT NOT NULL DEFAULT '',
 		rationale_per_choice_json TEXT NOT NULL DEFAULT '{}',
 		source                  TEXT NOT NULL DEFAULT '',

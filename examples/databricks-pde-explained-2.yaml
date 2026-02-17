@@ -1,7 +1,7 @@
 pack_version: 0.1.0
 topic:
-  slug: databricks-pde
-  name: Databricks Professional Data Engineer
+  slug: databricks-pde-explained-2
+  name: Databricks PDE - Explained Practice 2
 questions:
 - type: single_select
   intro: Auto Loader incrementally processes new data files as they arrive in cloud storage.
@@ -20,7 +20,7 @@ questions:
   tags:
   - auto-loader
   - structured-streaming
-  difficulty: 1
+  difficulty: easy
   source_ref: https://docs.databricks.com/en/ingestion/auto-loader/index.html
   rationale:
     correct: The best answer is 'cloudFiles' based on Databricks behavior described in the official documentation for this topic.
@@ -45,7 +45,7 @@ questions:
   - '2'
   tags:
   - auto-loader
-  difficulty: 2
+  difficulty: medium
   source_ref: https://docs.databricks.com/en/ingestion/auto-loader/file-notification-mode.html
   rationale:
     correct: The best answer is 'File notification mode' based on Databricks behavior described in the official documentation for this topic.
@@ -70,7 +70,7 @@ questions:
   tags:
   - auto-loader
   - schema-evolution
-  difficulty: 2
+  difficulty: medium
   source_ref: https://docs.databricks.com/en/ingestion/auto-loader/schema.html
   rationale:
     correct: The best answer is 'cloudFiles.inferColumnTypes' based on Databricks behavior described in the official documentation for this topic.
@@ -96,7 +96,7 @@ questions:
   tags:
   - delta-lake
   - transaction-log
-  difficulty: 1
+  difficulty: easy
   source_ref: https://docs.databricks.com/en/delta/index.html
   rationale:
     correct: The best answer is '_delta_log' based on Databricks behavior described in the official documentation for this topic.
@@ -121,7 +121,7 @@ questions:
   tags:
   - delta-lake
   - checkpointing
-  difficulty: 2
+  difficulty: medium
   source_ref: https://docs.databricks.com/en/delta/index.html
   rationale:
     correct: The best answer is 'Every 10 commits' based on Databricks behavior described in the official documentation for this topic.
@@ -147,7 +147,7 @@ questions:
   tags:
   - delta-lake
   - isolation-levels
-  difficulty: 3
+  difficulty: hard
   source_ref: https://docs.databricks.com/en/delta/isolation-level.html
   rationale:
     correct: The best answer is 'WriteSerializable' based on Databricks behavior described in the official documentation for this topic.
@@ -172,7 +172,7 @@ questions:
   tags:
   - delta-lake
   - vacuum
-  difficulty: 3
+  difficulty: hard
   source_ref: https://docs.databricks.com/en/delta/vacuum.html
   rationale:
     correct: The best answer is 'It fails with an error unless you set spark.databricks.delta.retentionDurationCheck.enabled to false' based on Databricks behavior described in the official documentation for this topic.
@@ -197,7 +197,7 @@ questions:
   tags:
   - delta-lake
   - vacuum
-  difficulty: 2
+  difficulty: medium
   source_ref: https://docs.databricks.com/en/delta/vacuum.html
   rationale:
     correct: The best answer is '7 days' based on Databricks behavior described in the official documentation for this topic.
@@ -224,7 +224,7 @@ questions:
   - delta-lake
   - zorder
   - optimization
-  difficulty: 2
+  difficulty: medium
   source_ref: https://docs.databricks.com/en/delta/optimize.html
   rationale:
     correct: The best answer is 'Co-locates related data in the same set of files to improve data skipping' based on Databricks behavior described in the official documentation for this topic.
@@ -250,7 +250,7 @@ questions:
   - delta-lake
   - optimization
   - auto-compaction
-  difficulty: 2
+  difficulty: medium
   source_ref: https://docs.databricks.com/en/delta/optimize.html
   rationale:
     correct: The best answer is 'Auto Compaction' based on Databricks behavior described in the official documentation for this topic.
@@ -276,7 +276,7 @@ questions:
   tags:
   - structured-streaming
   - checkpointing
-  difficulty: 2
+  difficulty: medium
   source_ref: https://docs.databricks.com/en/structured-streaming/index.html
   rationale:
     correct: The best answer is 'To track query progress and enable fault-tolerant recovery' based on Databricks behavior described in the official documentation for this topic.
@@ -301,7 +301,7 @@ questions:
   tags:
   - structured-streaming
   - output-modes
-  difficulty: 2
+  difficulty: medium
   source_ref: https://docs.databricks.com/en/structured-streaming/index.html
   rationale:
     correct: The best answer is 'Update mode' based on Databricks behavior described in the official documentation for this topic.
@@ -327,7 +327,7 @@ questions:
   tags:
   - structured-streaming
   - watermarks
-  difficulty: 3
+  difficulty: hard
   source_ref: https://docs.databricks.com/en/structured-streaming/watermarks.html
   rationale:
     correct: The best answer is 'The threshold for how late data can arrive and still be included in stateful aggregations' based on Databricks behavior described in the official documentation for this topic.
@@ -352,7 +352,7 @@ questions:
   tags:
   - structured-streaming
   - triggers
-  difficulty: 3
+  difficulty: hard
   source_ref: https://docs.databricks.com/en/structured-streaming/triggers.html
   rationale:
     correct: The best answer is 'trigger(availableNow=True)' based on Databricks behavior described in the official documentation for this topic.
@@ -378,7 +378,7 @@ questions:
   tags:
   - change-data-feed
   - delta-lake
-  difficulty: 2
+  difficulty: medium
   source_ref: https://docs.databricks.com/en/delta/delta-change-data-feed.html
   rationale:
     correct: The best answer is 'delta.enableChangeDataFeed' based on Databricks behavior described in the official documentation for this topic.
@@ -403,7 +403,7 @@ questions:
   tags:
   - change-data-feed
   - delta-lake
-  difficulty: 2
+  difficulty: medium
   source_ref: https://docs.databricks.com/en/delta/delta-change-data-feed.html
   rationale:
     correct: The best answer is '_change_type' based on Databricks behavior described in the official documentation for this topic.
@@ -429,7 +429,7 @@ questions:
   tags:
   - unity-catalog
   - governance
-  difficulty: 1
+  difficulty: easy
   source_ref: https://docs.databricks.com/en/data-governance/unity-catalog/index.html
   rationale:
     correct: The best answer is 'catalog.schema.table' based on Databricks behavior described in the official documentation for this topic.
@@ -454,7 +454,7 @@ questions:
   tags:
   - unity-catalog
   - governance
-  difficulty: 2
+  difficulty: medium
   source_ref: https://docs.databricks.com/en/data-governance/unity-catalog/index.html
   rationale:
     correct: The best answer is 'The top-level container for metadata that maps to a cloud storage location' based on Databricks behavior described in the official documentation for this topic.
@@ -479,7 +479,7 @@ questions:
   - '2'
   tags:
   - medallion-architecture
-  difficulty: 1
+  difficulty: easy
   source_ref: https://docs.databricks.com/en/lakehouse/medallion.html
   rationale:
     correct: The best answer is 'Store raw, unprocessed data as ingested from source systems' based on Databricks behavior described in the official documentation for this topic.
@@ -503,7 +503,7 @@ questions:
   - '2'
   tags:
   - medallion-architecture
-  difficulty: 1
+  difficulty: easy
   source_ref: https://docs.databricks.com/en/lakehouse/medallion.html
   rationale:
     correct: The best answer is 'Silver' based on Databricks behavior described in the official documentation for this topic.
@@ -530,7 +530,7 @@ questions:
   tags:
   - dlt
   - delta-live-tables
-  difficulty: 2
+  difficulty: medium
   source_ref: https://docs.databricks.com/en/delta-live-tables/index.html
   rationale:
     correct: 'The correct set is: Streaming tables; Materialized views. These selections align with documented Databricks semantics for this topic.'
@@ -555,7 +555,7 @@ questions:
   tags:
   - dlt
   - delta-live-tables
-  difficulty: 2
+  difficulty: medium
   source_ref: https://docs.databricks.com/en/delta-live-tables/python-ref.html
   rationale:
     correct: The best answer is '@dlt.table' based on Databricks behavior described in the official documentation for this topic.
@@ -583,7 +583,7 @@ questions:
   tags:
   - delta-lake
   - partitioning
-  difficulty: 3
+  difficulty: hard
   source_ref: https://docs.databricks.com/en/tables/partitions.html
   rationale:
     correct: 'The correct set is: Partition on low-cardinality columns commonly used in query filters; Ensure each partition contains at least 1 GB of data; Avoid partitioning small tables where data skipping is sufficient. These selections align with documented Databricks semantics for this topic.'
@@ -613,7 +613,7 @@ questions:
   tags:
   - change-data-feed
   - cdc
-  difficulty: 3
+  difficulty: hard
   source_ref: https://docs.databricks.com/en/delta/delta-change-data-feed.html
   rationale:
     correct: 'The correct set is: insert; update_preimage; update_postimage; delete. These selections align with documented Databricks semantics for this topic.'
@@ -641,7 +641,7 @@ questions:
   tags:
   - dlt
   - cdc
-  difficulty: 3
+  difficulty: hard
   source_ref: https://docs.databricks.com/en/delta-live-tables/cdc.html
   rationale:
     correct: 'The correct set is: KEYS; SEQUENCE BY. These selections align with documented Databricks semantics for this topic.'
@@ -668,7 +668,7 @@ questions:
   tags:
   - delta-lake
   - optimization
-  difficulty: 2
+  difficulty: medium
   source_ref: https://docs.databricks.com/en/delta/optimize.html
   rationale:
     correct: 'The correct set is: OPTIMIZE; ZORDER BY; ANALYZE TABLE ... COMPUTE STATISTICS. These selections align with documented Databricks semantics for this topic.'
@@ -695,7 +695,7 @@ questions:
   tags:
   - delta-lake
   - time-travel
-  difficulty: 2
+  difficulty: medium
   source_ref: https://docs.databricks.com/en/delta/history.html
   rationale:
     correct: 'The correct set is: SELECT * FROM table VERSION AS OF 5; SELECT * FROM table TIMESTAMP AS OF ''2024-01-01''. These selections align with documented Databricks semantics for this topic.'
@@ -722,7 +722,7 @@ questions:
   tags:
   - structured-streaming
   - delta-lake
-  difficulty: 3
+  difficulty: hard
   source_ref: https://docs.databricks.com/en/structured-streaming/delta-lake.html
   rationale:
     correct: 'The correct set is: Delta tables can be used as both streaming sources and sinks; The maxFilesPerTrigger option limits the number of new files processed per micro-batch; Delta''s transaction log ensures exactly-once processing guarantees. These selections align with documented Databricks semantics for this topic.'
@@ -749,7 +749,7 @@ questions:
   tags:
   - structured-streaming
   - delta-lake
-  difficulty: 4
+  difficulty: hard
   source_ref: https://docs.databricks.com/en/structured-streaming/foreach.html
   rationale:
     correct: 'The correct set is: foreachBatch provides the batch DataFrame and a unique batch ID; You can perform multiple write operations within a single foreachBatch call; You can use the batch ID with Delta merge operations to achieve exactly-once semantics. These selections align with documented Databricks semantics for this topic.'
@@ -777,7 +777,7 @@ questions:
   tags:
   - dlt
   - data-quality
-  difficulty: 3
+  difficulty: hard
   source_ref: https://docs.databricks.com/en/delta-live-tables/expectations.html
   rationale:
     correct: 'The correct set is: Track the violation in metrics but allow the record; Drop the violating record; Fail the pipeline. These selections align with documented Databricks semantics for this topic.'

@@ -67,7 +67,7 @@ func (r *QuestionRepo) InsertMany(questions []domain.Question) (*ports.InsertRes
 		res, err := stmt.Exec(
 			q.TopicID, string(q.Type), q.Intro, q.Prompt,
 			string(choicesJSON), string(correctJSON), string(tagsJSON),
-			q.Difficulty, q.Rationale.Correct, string(rationalePerChoiceJSON),
+			string(q.Difficulty), q.Rationale.Correct, string(rationalePerChoiceJSON),
 			q.Source, q.SourceRef, q.Confidence, q.Hash, createdAt,
 		)
 		if err != nil {
@@ -104,16 +104,18 @@ func (r *QuestionRepo) ListByTopic(topicID int64) ([]domain.Question, error) {
 	for rows.Next() {
 		var q domain.Question
 		var qtype string
+		var diffStr string
 		var choicesJSON, correctJSON, tagsJSON, rationalePerChoiceJSON string
 		if err := rows.Scan(
 			&q.ID, &q.TopicID, &qtype, &q.Intro, &q.Prompt,
 			&choicesJSON, &correctJSON, &tagsJSON,
-			&q.Difficulty, &q.Rationale.Correct, &rationalePerChoiceJSON,
+			&diffStr, &q.Rationale.Correct, &rationalePerChoiceJSON,
 			&q.Source, &q.SourceRef, &q.Confidence, &q.Hash, &q.CreatedAt,
 		); err != nil {
 			return nil, fmt.Errorf("scan question: %w", err)
 		}
 		q.Type = domain.QuestionType(qtype)
+		q.Difficulty = domain.Difficulty(diffStr)
 		if err := json.Unmarshal([]byte(choicesJSON), &q.Choices); err != nil {
 			return nil, fmt.Errorf("unmarshal choices: %w", err)
 		}

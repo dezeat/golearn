@@ -10,7 +10,7 @@ All core capabilities are implemented, tested, and documented.
 |-----------------|------------------|--------------------------------------|
 | Documentation   | ✅ Done          | `WORKFLOW.md`, `PROJECT.md`, `PROGRESS.md`, `SPEC.md` |
 | Go module       | ✅ Done          | `go.mod` with yaml.v3 + modernc.org/sqlite + bubbletea |
-| Domain models   | ✅ Done          | `models.go`, `validation.go`, `hashing.go`, `correctness.go` |
+| Domain models   | ✅ Done          | `models.go`, `validation.go`, `hashing.go`, `correctness.go`, `explanation.go` |
 | Ports/interfaces| ✅ Done          | `repositories.go` (incl. StatsRepository), `sources.go` |
 | Pack reader     | ✅ Done          | YAML + JSON parsing                  |
 | SQLite adapter  | ✅ Done          | DB open, WAL, FK, migrations, all repos incl. stats |
@@ -27,7 +27,7 @@ All core capabilities are implemented, tested, and documented.
 | Stats feature   | ✅ Done          | Global, per-pack, difficulty, tags, weak questions, trends |
 | Example packs   | ✅ Done          | `go-basics.yaml`, `mvp-basics.yaml`, `databricks-pde-explained-2.yaml` |
 | CLI (help)      | ✅ Done          | `golearn help` with examples         |
-| Tests           | ✅ Done          | 59 tests: validation, hashing, correctness, selector, session, export, integration, profiles, stats |
+| Tests           | ✅ Done          | 70+ tests: validation, hashing, correctness, selector, session, export, integration, profiles, stats, explanation, reset |
 | Makefile        | ✅ Done          | `fmt`, `vet`, `lint`, `test`, `check` |
 | Lint config     | ✅ Done          | `.golangci.yml` with sensible rules  |
 | CI pipeline     | ✅ Done          | GitHub Actions workflow (`.github/workflows/ci.yml`) |
@@ -35,6 +35,47 @@ All core capabilities are implemented, tested, and documented.
 ---
 
 ## Changelog
+
+### 2026-02-17 — Phase 13: Difficulty Enum + Explanation Prefix + DB Reset
+
+- Refactored difficulty from numeric 1–5 scale to string enum: `easy | medium | hard`
+  - Added `domain.Difficulty` type with constants `DifficultyEasy`, `DifficultyMedium`, `DifficultyHard`, `DifficultyUnset`
+  - Added `ValidDifficulties` map for validation lookup
+  - Changed `Question.Difficulty` and `PackQuestion.Difficulty` from `int` to `Difficulty`
+  - Added validation rule 8: difficulty (if set) must be `easy`, `medium`, or `hard`
+  - Added difficulty to stable content hash (changes hash for all questions with difficulty set)
+  - SQLite `difficulty` column changed from `INTEGER DEFAULT 0` to `TEXT DEFAULT ''`
+  - Stats `difficultyBucket` remapped from int-range to direct enum lookup
+  - Export omits difficulty when empty string instead of when `>0`
+- Updated all example packs (4 files) to enum difficulty values
+  - `go-basics.yaml`: all `1` → `easy`
+  - `mvp-basics.yaml`: `1`→`easy`, `2`→`medium`, `3`→`hard`
+  - `databricks-pde-explained.yaml`: `1`→`easy`, `2`→`medium`, `3`→`hard`
+  - `databricks-pde-explained-2.yaml`: `1`→`easy`, `2`→`medium`, `3`→`hard`, `4`→`hard`
+- Implemented explanation prefix policy
+  - Created `domain/explanation.go` with `StripExplanationPrefix` and `FormatChoiceExplanation`
+  - Pack files store content-only explanations (no Correct:/Incorrect: prefixes)
+  - TUI dynamically prepends "Correct: " or "Incorrect: " at render time
+  - `sanitizeExplanation` in TUI now delegates to `domain.StripExplanationPrefix`
+  - Review screens use `domain.FormatChoiceExplanation` for per-choice rendering
+- Added `db reset` command
+  - Created `sqlite/reset.go` with `ValidateResetPath` (safety checks) and `ResetDB`
+  - CLI: `golearn db reset [--yes]` with interactive confirmation
+  - Deletes DB file + WAL/SHM sidecars
+  - Added `make db-reset` Makefile target
+- Added/updated tests
+  - `domain/explanation_test.go`: 14 test cases (prefix stripping, format correctness)
+  - `sqlite/reset_test.go`: 10 safety sub-tests + functional tests
+  - Updated `validation_test.go`: difficulty enum validation (valid + invalid values)
+  - Updated `hashing_test.go`: difficulty changes produce different hashes
+  - Updated `stats_test.go`: enum-based difficulty bucketing
+  - Updated `tui_test.go`: dynamic prefix rendering assertions
+- Updated documentation
+  - `doc/PROJECT.md`: difficulty type, pack format, bucketing, hashing, validation rules, repo structure, CLI commands, explanation convention, DB reset
+  - `doc/QUESTIONS.md`: difficulty enum, gold standard example
+  - `doc/PROGRESS.md`: this changelog entry
+  - `README.md`: db reset command, pack format update
+- `make check` passes
 
 ### 2026-02-17 — Phase 12: Databricks Pack Refactor + Explanations
 

@@ -52,17 +52,5 @@ func (m model) choiceIDForDisplayLabel(label string) (string, bool) {
 }
 
 func sanitizeExplanation(raw string) string {
-	explanation := strings.TrimSpace(raw)
-	if explanation == "" {
-		return ""
-	}
-
-	prefixes := []string{"correct:", "incorrect:", "✅", "❌"}
-	for _, prefix := range prefixes {
-		if strings.HasPrefix(strings.ToLower(explanation), prefix) {
-			explanation = strings.TrimSpace(explanation[len(prefix):])
-			break
-		}
-	}
-	return explanation
+	return domain.StripExplanationPrefix(raw)
 }

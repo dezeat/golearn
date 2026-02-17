@@ -5,6 +5,8 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
+
+	"github.com/dezeat/golearn/internal/domain"
 )
 
 // viewQuestion renders the question answering screen.
@@ -166,7 +168,8 @@ func (m model) viewReview() string {
 		if m.showExplanations && q.Rationale.PerChoice != nil {
 			if explanation, ok := q.Rationale.PerChoice[c.ID]; ok {
 				expCW := m.contentWidth(7)
-				b.WriteString(styleExplain.Render(wrapAndIndent(sanitizeExplanation(explanation), expCW, "       ")) + "\n")
+				formatted := domain.FormatChoiceExplanation(c.ID, explanation, q.CorrectChoiceIDs)
+				b.WriteString(styleExplain.Render(wrapAndIndent(formatted, expCW, "       ")) + "\n")
 			}
 		}
 	}
@@ -274,7 +277,8 @@ func (m model) viewReviewBrowse() string {
 		if m.showExplanations && q.Rationale.PerChoice != nil {
 			if explanation, ok := q.Rationale.PerChoice[c.ID]; ok {
 				expCW := m.contentWidth(7)
-				b.WriteString(styleExplain.Render(wrapAndIndent(sanitizeExplanation(explanation), expCW, "       ")) + "\n")
+				formatted := domain.FormatChoiceExplanation(c.ID, explanation, q.CorrectChoiceIDs)
+				b.WriteString(styleExplain.Render(wrapAndIndent(formatted, expCW, "       ")) + "\n")
 			}
 		}
 	}

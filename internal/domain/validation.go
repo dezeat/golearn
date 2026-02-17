@@ -99,5 +99,10 @@ func ValidateQuestion(q *PackQuestion, index int, filePath string) []ValidationE
 		}
 	}
 
+	// Rule 8: difficulty must be easy|medium|hard if provided
+	if q.Difficulty != DifficultyUnset && !ValidDifficulties[q.Difficulty] {
+		ve("difficulty", fmt.Sprintf("must be easy, medium, or hard; got %q", q.Difficulty))
+	}
+
 	return errs
 }

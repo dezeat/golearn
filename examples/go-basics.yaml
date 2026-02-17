@@ -12,7 +12,7 @@ questions:
       - { id: "3", text: "Pauses the current goroutine" }
     correct_choice_ids: ["2"]
     tags: ["functions", "control-flow"]
-    difficulty: 1
+    difficulty: easy
 
   - type: "multi_select"
     prompt: "Which of these are valid Go data types?"
@@ -23,7 +23,7 @@ questions:
       - { id: "4", text: "string" }
     correct_choice_ids: ["1", "2", "4"]
     tags: ["types"]
-    difficulty: 1
+    difficulty: easy
 
   - type: "single_select"
     prompt: "What is the zero value of a `bool` in Go?"
@@ -33,4 +33,4 @@ questions:
       - { id: "3", text: "nil" }
     correct_choice_ids: ["2"]
     tags: ["types", "zero-values"]
-    difficulty: 1
+    difficulty: easy

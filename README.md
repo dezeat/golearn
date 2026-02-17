@@ -28,6 +28,9 @@ make build
 
 # Export a topic back to a pack file
 ./bin/golearn export databricks-pde --out out.yaml
+
+# Reset the database (delete all data)
+./bin/golearn db reset --yes
 ```
 
 ## Requirements
@@ -60,6 +63,7 @@ make fmt        # check gofmt formatting
 make vet        # go vet
 make lint       # golangci-lint (if installed)
 make check      # fmt + vet + lint + test (CI gate)
+make db-reset   # delete default database
 make clean      # remove build artifacts
 ```
 
@@ -82,10 +86,11 @@ questions:
   - type: "single_select"
     prompt: "What does `defer` do in Go?"
     choices:
-      - { id: "A", text: "Executes immediately" }
-      - { id: "B", text: "Schedules call for function return" }
-      - { id: "C", text: "Pauses the goroutine" }
-    correct_choice_ids: ["B"]
+      - { id: "1", text: "Executes immediately" }
+      - { id: "2", text: "Schedules call for function return" }
+      - { id: "3", text: "Pauses the goroutine" }
+    correct_choice_ids: ["2"]
+    difficulty: easy  # optional: easy | medium | hard
 ```
 
 See [doc/PROJECT.md](doc/PROJECT.md) for the full schema and validation rules.

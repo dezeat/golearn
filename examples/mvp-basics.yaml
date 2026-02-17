@@ -14,7 +14,7 @@ questions:
       - { id: "4", text: "Use panic for all errors" }
     correct_choice_ids: ["2"]
     tags: ["go", "error-handling"]
-    difficulty: 1
+    difficulty: easy
 
   # Q2: single_select, no intro, 2 choices (true/false style) — CLI
   - type: "single_select"
@@ -24,7 +24,7 @@ questions:
       - { id: "2", text: "False" }
     correct_choice_ids: ["1"]
     tags: ["cli"]
-    difficulty: 1
+    difficulty: easy
 
   # Q3: single_select, with intro, 4 choices — Databases
   - type: "single_select"
@@ -37,7 +37,7 @@ questions:
       - { id: "4", text: "PRAGMA cache_size=1000" }
     correct_choice_ids: ["2"]
     tags: ["database", "sqlite"]
-    difficulty: 2
+    difficulty: medium
 
   # Q4: single_select, no intro, 5 choices — General programming
   - type: "single_select"
@@ -50,7 +50,7 @@ questions:
       - { id: "5", text: "Linked list" }
     correct_choice_ids: ["2"]
     tags: ["data-structures"]
-    difficulty: 1
+    difficulty: easy
 
   # Q5: single_select, with intro, 4 choices — Concurrency
   - type: "single_select"
@@ -63,7 +63,7 @@ questions:
       - { id: "4", text: "Thread pools" }
     correct_choice_ids: ["2"]
     tags: ["go", "concurrency"]
-    difficulty: 2
+    difficulty: medium
 
   # Q6: multi_select, no intro, 4 choices — Go basics
   - type: "multi_select"
@@ -75,7 +75,7 @@ questions:
       - { id: "4", text: "bool" }
     correct_choice_ids: ["1", "2", "4"]
     tags: ["go", "types"]
-    difficulty: 1
+    difficulty: easy
 
   # Q7: multi_select, with intro, 5 choices — Databases
   - type: "multi_select"
@@ -89,7 +89,7 @@ questions:
       - { id: "5", text: "NOT NULL" }
     correct_choice_ids: ["1", "2", "3", "5"]
     tags: ["database", "sql"]
-    difficulty: 2
+    difficulty: medium
 
   # Q8: multi_select, no intro, 4 choices — Concurrency
   - type: "multi_select"
@@ -101,7 +101,7 @@ questions:
       - { id: "4", text: "Starvation" }
     correct_choice_ids: ["1", "2", "4"]
     tags: ["concurrency"]
-    difficulty: 3
+    difficulty: hard
 
   # Q9: multi_select, with intro, 2 choices (true/false style) — CLI
   - type: "multi_select"
@@ -112,7 +112,7 @@ questions:
       - { id: "2", text: "Environment variables" }
     correct_choice_ids: ["1", "2"]
     tags: ["cli", "configuration"]
-    difficulty: 1
+    difficulty: easy
 
   # Q10: multi_select, no intro, 4 choices — General programming
   - type: "multi_select"
@@ -124,4 +124,4 @@ questions:
       - { id: "4", text: "Code review before merging" }
     correct_choice_ids: ["1", "2", "4"]
     tags: ["best-practices"]
-    difficulty: 1
+    difficulty: easy

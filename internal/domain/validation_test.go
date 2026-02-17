@@ -133,3 +133,38 @@ func TestValidationError_Format(t *testing.T) {
 		t.Errorf("got %q, want %q", got, want)
 	}
 }
+
+func TestValidateQuestion_DifficultyEnum(t *testing.T) {
+	base := domain.PackQuestion{
+		Type:             domain.SingleSelect,
+		Prompt:           "Question?",
+		Choices:          []domain.Choice{{ID: "1", Text: "A"}, {ID: "2", Text: "B"}},
+		CorrectChoiceIDs: []string{"1"},
+	}
+
+	// Valid values should pass.
+	for _, d := range []domain.Difficulty{domain.DifficultyEasy, domain.DifficultyMedium, domain.DifficultyHard, domain.DifficultyUnset} {
+		q := base
+		q.Difficulty = d
+		errs := domain.ValidateQuestion(&q, 0, "test.yaml")
+		if len(errs) != 0 {
+			t.Errorf("difficulty %q should be valid, got errors: %v", d, errs)
+		}
+	}
+
+	// Invalid values should fail.
+	for _, d := range []domain.Difficulty{"1", "2", "5", "expert", "EASY"} {
+		q := base
+		q.Difficulty = d
+		errs := domain.ValidateQuestion(&q, 0, "test.yaml")
+		found := false
+		for _, e := range errs {
+			if e.Field == "difficulty" {
+				found = true
+			}
+		}
+		if !found {
+			t.Errorf("difficulty %q should be rejected, got no difficulty error", d)
+		}
+	}
+}

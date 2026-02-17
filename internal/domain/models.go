@@ -12,6 +12,23 @@ const (
 	MultiSelect  QuestionType = "multi_select"
 )
 
+// Difficulty represents the difficulty level of a question.
+type Difficulty string
+
+const (
+	DifficultyEasy   Difficulty = "easy"
+	DifficultyMedium Difficulty = "medium"
+	DifficultyHard   Difficulty = "hard"
+	DifficultyUnset  Difficulty = "" // optional; packs may omit difficulty
+)
+
+// ValidDifficulties is the set of allowed non-empty difficulty values.
+var ValidDifficulties = map[Difficulty]bool{
+	DifficultyEasy:   true,
+	DifficultyMedium: true,
+	DifficultyHard:   true,
+}
+
 // Choice represents one option in a multiple-choice question.
 type Choice struct {
 	ID   string `json:"id"   yaml:"id"`
@@ -49,7 +66,7 @@ type Question struct {
 	Choices          []Choice     `json:"choices"`
 	CorrectChoiceIDs []string     `json:"correct_choice_ids"`
 	Tags             []string     `json:"tags,omitempty"`
-	Difficulty       int          `json:"difficulty,omitempty"`
+	Difficulty       Difficulty   `json:"difficulty,omitempty"`
 	Rationale        Rationale    `json:"rationale,omitempty"`
 	Source           string       `json:"source,omitempty"`
 	SourceRef        string       `json:"source_ref,omitempty"`
@@ -103,7 +120,7 @@ type PackQuestion struct {
 	Choices          []Choice     `json:"choices"            yaml:"choices"`
 	CorrectChoiceIDs []string     `json:"correct_choice_ids" yaml:"correct_choice_ids"`
 	Tags             []string     `json:"tags,omitempty"     yaml:"tags,omitempty"`
-	Difficulty       int          `json:"difficulty,omitempty" yaml:"difficulty,omitempty"`
+	Difficulty       Difficulty   `json:"difficulty,omitempty" yaml:"difficulty,omitempty"`
 	Rationale        *Rationale   `json:"rationale,omitempty"  yaml:"rationale,omitempty"`
 	Source           string       `json:"source,omitempty"   yaml:"source,omitempty"`
 	SourceRef        string       `json:"source_ref,omitempty" yaml:"source_ref,omitempty"`
