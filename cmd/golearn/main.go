@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/dezeat/golearn/internal/adapters/localconfig"
 	"github.com/dezeat/golearn/internal/adapters/pack"
 	"github.com/dezeat/golearn/internal/adapters/sqlite"
 	"github.com/dezeat/golearn/internal/adapters/tui"
@@ -269,8 +270,15 @@ func runSession(dbPath string, args []string) error {
 	questionRepo := sqlite.NewQuestionRepo(db)
 	sessionRepo := sqlite.NewSessionRepo(db)
 	attemptRepo := sqlite.NewAttemptRepo(db)
+	userRepo := sqlite.NewUserRepo(db)
 
-	engine := app.NewSessionEngine(topicRepo, questionRepo, sessionRepo, attemptRepo, nil)
+	currentUserID, err := resolveCurrentUserID(userRepo, localconfig.NewStore(localconfig.DefaultPath()))
+	if err != nil {
+		return err
+	}
+	userCtx := app.NewUserContext(currentUserID)
+
+	engine := app.NewSessionEngine(topicRepo, questionRepo, sessionRepo, attemptRepo, userCtx, nil)
 
 	sessionID, err := engine.StartSession(topicSlug, n, "practice")
 	if err != nil {
@@ -366,4 +374,48 @@ func runSession(dbPath string, args []string) error {
 	}
 
 	return nil
+}
+
+func resolveCurrentUserID(userRepo *sqlite.UserRepo, configStore *localconfig.Store) (int64, error) {
+	users, err := userRepo.List()
+	if err != nil {
+		return 0, fmt.Errorf("load users: %w", err)
+	}
+	if len(users) == 0 {
+		u, err := userRepo.Create("local", "Local")
+		if err != nil {
+			return 0, fmt.Errorf("seed local user: %w", err)
+		}
+		users = append(users, *u)
+	}
+
+	cfg, err := configStore.Load()
+	if err != nil {
+		return 0, fmt.Errorf("load config: %w", err)
+	}
+
+	if cfg.CurrentUserID > 0 {
+		if _, found, err := userRepo.GetByID(cfg.CurrentUserID); err != nil {
+			return 0, fmt.Errorf("resolve configured user: %w", err)
+		} else if found {
+			return cfg.CurrentUserID, nil
+		}
+	}
+
+	localUser, found, err := userRepo.GetByHandle("local")
+	if err != nil {
+		return 0, fmt.Errorf("get local user: %w", err)
+	}
+	if found {
+		if err := configStore.Save(localconfig.Config{CurrentUserID: localUser.ID}); err != nil {
+			return 0, fmt.Errorf("save config: %w", err)
+		}
+		return localUser.ID, nil
+	}
+
+	fallback := users[0].ID
+	if err := configStore.Save(localconfig.Config{CurrentUserID: fallback}); err != nil {
+		return 0, fmt.Errorf("save config: %w", err)
+	}
+	return fallback, nil
 }

@@ -44,12 +44,124 @@ func Open(dbPath string) (*sql.DB, error) {
 		return nil, fmt.Errorf("enable foreign keys: %w", err)
 	}
 
+	if err := ensureCompatibleSchema(db); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("ensure compatible schema: %w", err)
+	}
+
 	if err := migrate(db); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("run migrations: %w", err)
 	}
 
 	return db, nil
+}
+
+func ensureCompatibleSchema(db *sql.DB) error {
+	needsReset, err := schemaNeedsReset(db)
+	if err != nil {
+		return err
+	}
+	if !needsReset {
+		return nil
+	}
+
+	if err := resetSchema(db); err != nil {
+		return fmt.Errorf("reset schema: %w", err)
+	}
+	return nil
+}
+
+func schemaNeedsReset(db *sql.DB) (bool, error) {
+	usersExists, err := tableExists(db, "users")
+	if err != nil {
+		return false, fmt.Errorf("check users table: %w", err)
+	}
+	if !usersExists {
+		hasLegacy, err := hasAnyLegacyTables(db)
+		if err != nil {
+			return false, err
+		}
+		if hasLegacy {
+			return true, nil
+		}
+		return false, nil
+	}
+
+	hasSessionUserID, err := tableHasColumn(db, "sessions", "user_id")
+	if err != nil {
+		return false, fmt.Errorf("check sessions.user_id: %w", err)
+	}
+	hasAttemptUserID, err := tableHasColumn(db, "attempts", "user_id")
+	if err != nil {
+		return false, fmt.Errorf("check attempts.user_id: %w", err)
+	}
+
+	return !hasSessionUserID || !hasAttemptUserID, nil
+}
+
+func hasAnyLegacyTables(db *sql.DB) (bool, error) {
+	tables := []string{"schema_migrations", "topics", "questions", "sessions", "attempts"}
+	for _, table := range tables {
+		exists, err := tableExists(db, table)
+		if err != nil {
+			return false, fmt.Errorf("check table %s: %w", table, err)
+		}
+		if exists {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+func tableExists(db *sql.DB, table string) (bool, error) {
+	var count int
+	err := db.QueryRow(`SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name=?`, table).Scan(&count)
+	if err != nil {
+		return false, err
+	}
+	return count > 0, nil
+}
+
+func tableHasColumn(db *sql.DB, table, column string) (bool, error) {
+	rows, err := db.Query(fmt.Sprintf(`PRAGMA table_info(%s)`, table))
+	if err != nil {
+		return false, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var cid int
+		var name, colType string
+		var notNull, pk int
+		var dflt sql.NullString
+		if err := rows.Scan(&cid, &name, &colType, &notNull, &dflt, &pk); err != nil {
+			return false, err
+		}
+		if name == column {
+			return true, nil
+		}
+	}
+
+	if err := rows.Err(); err != nil {
+		return false, err
+	}
+	return false, nil
+}
+
+func resetSchema(db *sql.DB) error {
+	_, err := db.Exec(`
+		DROP TABLE IF EXISTS attempts;
+		DROP TABLE IF EXISTS sessions;
+		DROP TABLE IF EXISTS questions;
+		DROP TABLE IF EXISTS topics;
+		DROP TABLE IF EXISTS users;
+		DROP TABLE IF EXISTS schema_migrations;
+	`)
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 // migrate applies schema migrations in order.
@@ -84,7 +196,17 @@ func migrate(db *sql.DB) error {
 // migrations are applied in order. Each entry is a single SQL statement or batch.
 var migrations = []string{
 	// v1: core schema
-	`CREATE TABLE IF NOT EXISTS topics (
+	`CREATE TABLE IF NOT EXISTS users (
+		id          INTEGER PRIMARY KEY AUTOINCREMENT,
+		handle      TEXT NOT NULL UNIQUE,
+		display_name TEXT,
+		created_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+	);
+
+	INSERT OR IGNORE INTO users (handle, display_name, created_at)
+	VALUES ('local', 'Local', CURRENT_TIMESTAMP);
+
+	CREATE TABLE IF NOT EXISTS topics (
 		id   INTEGER PRIMARY KEY AUTOINCREMENT,
 		slug TEXT NOT NULL UNIQUE,
 		name TEXT NOT NULL
@@ -113,6 +235,7 @@ var migrations = []string{
 
 	CREATE TABLE IF NOT EXISTS sessions (
 		id          INTEGER PRIMARY KEY AUTOINCREMENT,
+		user_id     INTEGER NOT NULL REFERENCES users(id),
 		topic_id    INTEGER NOT NULL REFERENCES topics(id),
 		mode        TEXT NOT NULL DEFAULT 'practice',
 		requested_n INTEGER NOT NULL DEFAULT 10,
@@ -120,8 +243,12 @@ var migrations = []string{
 		ended_at    DATETIME
 	);
 
+	CREATE INDEX IF NOT EXISTS idx_sessions_user_topic_started
+	ON sessions(user_id, topic_id, started_at);
+
 	CREATE TABLE IF NOT EXISTS attempts (
 		id                      INTEGER PRIMARY KEY AUTOINCREMENT,
+		user_id                 INTEGER NOT NULL REFERENCES users(id),
 		session_id              INTEGER NOT NULL REFERENCES sessions(id),
 		question_id             INTEGER NOT NULL REFERENCES questions(id),
 		selected_choice_ids_json TEXT NOT NULL DEFAULT '[]',
@@ -131,6 +258,8 @@ var migrations = []string{
 		created_at              DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 	);
 
-	CREATE INDEX IF NOT EXISTS idx_attempts_session_id ON attempts(session_id);
-	CREATE INDEX IF NOT EXISTS idx_attempts_question_id ON attempts(question_id);`,
+	CREATE INDEX IF NOT EXISTS idx_attempts_user_question_created
+	ON attempts(user_id, question_id, created_at);
+	CREATE INDEX IF NOT EXISTS idx_attempts_user_session
+	ON attempts(user_id, session_id);`,
 }

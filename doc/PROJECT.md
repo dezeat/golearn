@@ -100,6 +100,7 @@ golearn/
 | Setting     | Default                    | Override          |
 |-------------|----------------------------|-------------------|
 | DB path     | `~/.golearn/golearn.db`    | `--db <path>`     |
+| Config path | `~/.golearn/config.json`   | test-only injection in code |
 | DB engine   | SQLite (CGo-free)          | —                 |
 | WAL mode    | Enabled (`PRAGMA journal_mode=WAL`) | —       |
 | Foreign keys| Enabled (`PRAGMA foreign_keys=ON`)  | —       |
@@ -117,6 +118,20 @@ mode for single-writer, multiple-reader workloads.
 Schema migrations are sequential and version-tracked in a `schema_migrations` table.
 Each migration is an embedded SQL string applied exactly once. This avoids external
 migration tool dependencies while supporting future schema evolution.
+
+### Local Profiles
+
+`golearn` uses local profiles (not network auth):
+
+- `users` table stores profile metadata (`handle`, optional `display_name`)
+- Current profile is persisted in `~/.golearn/config.json` as `current_user_id`
+- Topics and questions are shared globally across users
+- Sessions, attempts, selection stats, topic accuracy, and review scope are per-user
+
+Development-phase compatibility rule:
+
+- If an older DB schema is detected (missing user fields), startup resets schema by
+  dropping and recreating tables, then re-seeds default `local` profile.
 
 ---
 
@@ -254,7 +269,7 @@ Buckets are concatenated in order and capped at `n` (requested session length).
 A seeded `*rand.Rand` is used for all shuffling to ensure deterministic test behavior.
 
 Per-question stats (`attempts_count`, `wrong_count`) are computed from the `attempts`
-table grouped by `question_id`.
+table grouped by `question_id` and filtered by `user_id`.
 
 ---
 
@@ -283,9 +298,9 @@ table grouped by `question_id`.
 
 The session engine manages the lifecycle of a practice session:
 
-1. **StartSession** — resolve topic, load questions, compute stats, select questions, persist session row
+1. **StartSession** — resolve topic, load questions, compute user-scoped stats, select questions, persist session row with `user_id`
 2. **GetNextQuestion** — serve from in-memory queue (no duplicates)
-3. **RecordAttempt** — evaluate correctness via domain layer, persist attempt
+3. **RecordAttempt** — evaluate correctness via domain layer, persist attempt with `user_id`
 4. **EndSession** — set `ended_at` timestamp
 
 The engine holds in-memory state for one active session per instance. This is an

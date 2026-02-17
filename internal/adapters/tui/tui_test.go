@@ -1,8 +1,14 @@
 package tui
 
 import (
+	"path/filepath"
 	"testing"
 
+	tea "github.com/charmbracelet/bubbletea"
+
+	"github.com/dezeat/golearn/internal/adapters/localconfig"
+	"github.com/dezeat/golearn/internal/adapters/sqlite"
+	"github.com/dezeat/golearn/internal/app"
 	"github.com/dezeat/golearn/internal/domain"
 )
 
@@ -139,17 +145,53 @@ func TestReviewState_SkippedFeedback(t *testing.T) {
 
 // TestIntroScreen verifies the ASCII intro renders.
 func TestIntroScreen(t *testing.T) {
-	m := model{screen: screenIntro}
-	view := m.viewIntro()
+	m := model{screen: screenProfileMenu, hasValidCurrentUser: true, currentUser: &domain.User{Handle: "local", DisplayName: "Local"}}
+	view := m.viewProfileMenu()
 	if view == "" {
-		t.Fatal("viewIntro returned empty string")
+		t.Fatal("viewProfileMenu returned empty string")
 	}
-	// The ASCII art contains "GO" as part of the block letters.
 	if !containsSubstring(view, "adaptive certification practice") {
 		t.Error("expected tagline in intro screen")
 	}
-	if !containsSubstring(view, "Press any key") {
-		t.Error("expected 'Press any key' prompt in intro screen")
+	if !containsSubstring(view, "Continue") {
+		t.Error("expected Continue option in profile menu")
+	}
+}
+
+func TestProfileLoginSetsCurrentUserID(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "tui.db")
+	db, err := sqlite.Open(dbPath)
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	defer db.Close()
+
+	topicRepo := sqlite.NewTopicRepo(db)
+	questionRepo := sqlite.NewQuestionRepo(db)
+	sessionRepo := sqlite.NewSessionRepo(db)
+	attemptRepo := sqlite.NewAttemptRepo(db)
+	userRepo := sqlite.NewUserRepo(db)
+	configStore := localconfig.NewStore(filepath.Join(t.TempDir(), "config.json"))
+
+	alice, err := userRepo.Create("alice", "Alice")
+	if err != nil {
+		t.Fatalf("create alice: %v", err)
+	}
+
+	ctx := app.NewUserContext(0)
+	m := newModel(topicRepo, questionRepo, sessionRepo, attemptRepo, userRepo, configStore, ctx)
+	m.screen = screenProfileLogin
+	m.profiles = []domain.User{*alice}
+	m.profileLoginCursor = 0
+
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	nm := updated.(model)
+
+	if ctx.CurrentUserID() != alice.ID {
+		t.Fatalf("expected current user id %d, got %d", alice.ID, ctx.CurrentUserID())
+	}
+	if nm.screen != screenTopicSelect {
+		t.Fatalf("expected transition to topic select, got screen %d", nm.screen)
 	}
 }
 

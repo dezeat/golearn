@@ -5,11 +5,11 @@ import (
 	"strings"
 )
 
-// viewIntro renders the ASCII splash screen shown once at startup.
-func (m model) viewIntro() string {
+// viewProfileMenu renders the startup profile menu with ASCII logo.
+func (m model) viewProfileMenu() string {
 	var b strings.Builder
 
-	b.WriteString("\n\n")
+	b.WriteString("\n")
 	b.WriteString(styleHeader.Render("   ██████╗  ██████╗ ██╗     ███████╗ █████╗ ██████╗ ███╗   ██╗") + "\n")
 	b.WriteString(styleHeader.Render("  ██╔════╝ ██╔═══██╗██║     ██╔════╝██╔══██╗██╔══██╗████╗  ██║") + "\n")
 	b.WriteString(styleHeader.Render("  ██║  ███╗██║   ██║██║     █████╗  ███████║██████╔╝██╔██╗ ██║") + "\n")
@@ -17,9 +17,85 @@ func (m model) viewIntro() string {
 	b.WriteString(styleHeader.Render("  ╚██████╔╝╚██████╔╝███████╗███████╗██║  ██║██║  ██║██║ ╚████║") + "\n")
 	b.WriteString(styleHeader.Render("   ╚═════╝  ╚═════╝ ╚══════╝╚══════╝╚═╝  ╚═╝╚═╝  ╚═╝╚═╝  ╚═══╝") + "\n")
 	b.WriteString("\n")
-	b.WriteString(styleDim.Render("  adaptive certification practice") + "\n")
-	b.WriteString("\n\n")
-	b.WriteString("  Press any key to continue\n")
+	b.WriteString(styleDim.Render("  golearn — adaptive certification practice") + "\n\n")
+
+	if m.currentUser != nil {
+		b.WriteString(fmt.Sprintf("  Current profile: %s\n\n", displayProfile(*m.currentUser)))
+	}
+
+	options := m.profileMenuOptions()
+	for i, opt := range options {
+		cursor := "  "
+		if i == m.profileMenuCursor {
+			cursor = "▸ "
+		}
+		b.WriteString(fmt.Sprintf("%s%s\n", cursor, opt))
+	}
+
+	if m.profileError != "" {
+		b.WriteString("\n")
+		b.WriteString(styleIncorrect.Render("  " + m.profileError + "\n"))
+	}
+
+	b.WriteString("\n  ↑/↓ or j/k to navigate · enter to select · q to quit\n")
+	return b.String()
+}
+
+// viewProfileLogin renders existing profile selection.
+func (m model) viewProfileLogin() string {
+	var b strings.Builder
+
+	b.WriteString(styleHeader.Render("golearn — Login") + "\n")
+	b.WriteString("═══════════════\n\n")
+
+	if len(m.profiles) == 0 {
+		b.WriteString("  No profiles found. Press esc to go back.\n")
+		return b.String()
+	}
+
+	for i, p := range m.profiles {
+		cursor := "  "
+		if i == m.profileLoginCursor {
+			cursor = "▸ "
+		}
+		b.WriteString(fmt.Sprintf("%s%s\n", cursor, displayProfile(p)))
+	}
+
+	if m.profileError != "" {
+		b.WriteString("\n")
+		b.WriteString(styleIncorrect.Render("  " + m.profileError + "\n"))
+	}
+
+	b.WriteString("\n  ↑/↓ or j/k to navigate · enter to login · esc to back\n")
+	return b.String()
+}
+
+// viewProfileRegister renders profile creation without passwords.
+func (m model) viewProfileRegister() string {
+	var b strings.Builder
+
+	b.WriteString(styleHeader.Render("golearn — Register") + "\n")
+	b.WriteString("══════════════════\n\n")
+	b.WriteString("  Create a local profile (no passwords).\n\n")
+
+	handlePrefix := "  "
+	namePrefix := "  "
+	if m.registerField == 0 {
+		handlePrefix = "▸ "
+	} else {
+		namePrefix = "▸ "
+	}
+
+	b.WriteString(fmt.Sprintf("%sHandle:      %s\n", handlePrefix, m.registerHandle))
+	b.WriteString(fmt.Sprintf("%sDisplay name: %s\n", namePrefix, m.registerDisplayName))
+	b.WriteString("\n  Handle rules: a-z 0-9 - _\n")
+
+	if m.profileError != "" {
+		b.WriteString("\n")
+		b.WriteString(styleIncorrect.Render("  " + m.profileError + "\n"))
+	}
+
+	b.WriteString("\n  type to edit · tab switch field · enter next/create · esc back\n")
 
 	return b.String()
 }
@@ -31,6 +107,9 @@ func (m model) viewTopicSelect() string {
 
 	b.WriteString(styleHeader.Render("golearn — Select a Topic") + "\n")
 	b.WriteString("════════════════════════\n\n")
+	if m.currentUser != nil {
+		b.WriteString(fmt.Sprintf("  Profile: %s\n\n", displayProfile(*m.currentUser)))
+	}
 
 	if len(m.topics) == 0 {
 		b.WriteString("  No topics found.\n")

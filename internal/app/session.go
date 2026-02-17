@@ -20,6 +20,7 @@ type SessionEngine struct {
 	questions ports.QuestionRepository
 	sessions  ports.SessionRepository
 	attempts  ports.AttemptRepository
+	userCtx   CurrentUserProvider
 
 	// In-memory state for the active session.
 	sessionID int64
@@ -35,16 +36,21 @@ func NewSessionEngine(
 	questions ports.QuestionRepository,
 	sessions ports.SessionRepository,
 	attempts ports.AttemptRepository,
+	userCtx CurrentUserProvider,
 	rng *rand.Rand,
 ) *SessionEngine {
 	if rng == nil {
 		rng = rand.New(rand.NewSource(time.Now().UnixNano()))
+	}
+	if userCtx == nil {
+		userCtx = NewUserContext(0)
 	}
 	return &SessionEngine{
 		topics:    topics,
 		questions: questions,
 		sessions:  sessions,
 		attempts:  attempts,
+		userCtx:   userCtx,
 		rng:       rng,
 	}
 }
@@ -54,6 +60,9 @@ func NewSessionEngine(
 func (e *SessionEngine) StartSession(topicSlug string, n int, mode string) (int64, error) {
 	if mode == "" {
 		mode = "practice"
+	}
+	if e.userCtx.CurrentUserID() <= 0 {
+		return 0, fmt.Errorf("current user is not set")
 	}
 
 	// Resolve topic by slug.
@@ -75,7 +84,7 @@ func (e *SessionEngine) StartSession(topicSlug string, n int, mode string) (int6
 	}
 
 	// Load attempt stats to inform selection policy.
-	stats, err := e.attempts.StatsByTopic(topic.ID)
+	stats, err := e.attempts.StatsByTopic(e.userCtx.CurrentUserID(), topic.ID)
 	if err != nil {
 		return 0, fmt.Errorf("load attempt stats: %w", err)
 	}
@@ -86,6 +95,7 @@ func (e *SessionEngine) StartSession(topicSlug string, n int, mode string) (int6
 
 	// Persist the session row.
 	sess := &domain.Session{
+		UserID:     e.userCtx.CurrentUserID(),
 		TopicID:    topic.ID,
 		Mode:       mode,
 		RequestedN: n,
@@ -132,6 +142,7 @@ func (e *SessionEngine) RecordAttempt(
 	}
 
 	attempt := &domain.Attempt{
+		UserID:            e.userCtx.CurrentUserID(),
 		SessionID:         e.sessionID,
 		QuestionID:        questionID,
 		SelectedChoiceIDs: selectedChoiceIDs,

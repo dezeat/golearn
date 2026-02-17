@@ -31,8 +31,12 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 
 	switch m.screen {
-	case screenIntro:
-		return m.updateIntro(msg)
+	case screenProfileMenu:
+		return m.updateProfileMenu(msg)
+	case screenProfileLogin:
+		return m.updateProfileLogin(msg)
+	case screenProfileRegister:
+		return m.updateProfileRegister(msg)
 	case screenTopicSelect:
 		return m.updateTopicSelect(msg)
 	case screenSessionConfig:
@@ -57,8 +61,12 @@ func (m model) View() string {
 	}
 
 	switch m.screen {
-	case screenIntro:
-		return m.viewIntro()
+	case screenProfileMenu:
+		return m.viewProfileMenu()
+	case screenProfileLogin:
+		return m.viewProfileLogin()
+	case screenProfileRegister:
+		return m.viewProfileRegister()
 	case screenTopicSelect:
 		return m.viewTopicSelect()
 	case screenSessionConfig:
@@ -76,13 +84,173 @@ func (m model) View() string {
 	return ""
 }
 
-// --- Intro ---
+// --- Profile Menu ---
 
-func (m model) updateIntro(msg tea.Msg) (tea.Model, tea.Cmd) {
-	switch msg.(type) {
+func (m model) updateProfileMenu(msg tea.Msg) (tea.Model, tea.Cmd) {
+	switch msg := msg.(type) {
 	case tea.KeyMsg:
-		// Any key press moves to topic select.
-		m.screen = screenTopicSelect
+		switch msg.String() {
+		case "q", "esc":
+			m.quitting = true
+			return m, tea.Quit
+		case "up", "k":
+			if m.profileMenuCursor > 0 {
+				m.profileMenuCursor--
+			}
+		case "down", "j":
+			if m.profileMenuCursor < len(m.profileMenuOptions())-1 {
+				m.profileMenuCursor++
+			}
+		case "enter":
+			options := m.profileMenuOptions()
+			if len(options) == 0 {
+				return m, nil
+			}
+
+			selected := options[m.profileMenuCursor]
+			switch {
+			case selected == "Login":
+				profiles, err := m.userRepo.List()
+				if err != nil {
+					m.profileError = "Failed to load profiles"
+					return m, nil
+				}
+				m.profiles = profiles
+				m.profileLoginCursor = 0
+				m.profileError = ""
+				m.screen = screenProfileLogin
+			case selected == "Register":
+				m.registerHandle = ""
+				m.registerDisplayName = ""
+				m.registerField = 0
+				m.profileError = ""
+				m.screen = screenProfileRegister
+			case selected == "Quit":
+				m.quitting = true
+				return m, tea.Quit
+			default: // Continue
+				if m.currentUser == nil {
+					m.profileError = "No active profile"
+					return m, nil
+				}
+				if err := m.reloadTopicsForCurrentUser(); err != nil {
+					m.profileError = "Failed to load topics"
+					return m, nil
+				}
+				m.screen = screenTopicSelect
+			}
+		}
+	}
+	return m, nil
+}
+
+func (m model) updateProfileLogin(msg tea.Msg) (tea.Model, tea.Cmd) {
+	switch msg := msg.(type) {
+	case tea.KeyMsg:
+		switch msg.String() {
+		case "q", "esc":
+			m.screen = screenProfileMenu
+		case "up", "k":
+			if m.profileLoginCursor > 0 {
+				m.profileLoginCursor--
+			}
+		case "down", "j":
+			if m.profileLoginCursor < len(m.profiles)-1 {
+				m.profileLoginCursor++
+			}
+		case "enter":
+			if len(m.profiles) == 0 {
+				m.profileError = "No profiles available"
+				return m, nil
+			}
+			selected := m.profiles[m.profileLoginCursor]
+			if err := m.setCurrentUser(&selected, true); err != nil {
+				m.profileError = "Failed to save profile"
+				return m, nil
+			}
+			if err := m.reloadTopicsForCurrentUser(); err != nil {
+				m.profileError = "Failed to load topics"
+				return m, nil
+			}
+			m.profileError = ""
+			m.screen = screenTopicSelect
+		}
+	}
+	return m, nil
+}
+
+func (m model) updateProfileRegister(msg tea.Msg) (tea.Model, tea.Cmd) {
+	switch msg := msg.(type) {
+	case tea.KeyMsg:
+		switch msg.String() {
+		case "esc":
+			m.screen = screenProfileMenu
+			return m, nil
+		case "tab":
+			m.registerField = (m.registerField + 1) % 2
+			return m, nil
+		case "backspace":
+			if m.registerField == 0 {
+				if len(m.registerHandle) > 0 {
+					m.registerHandle = m.registerHandle[:len(m.registerHandle)-1]
+				}
+			} else if len(m.registerDisplayName) > 0 {
+				m.registerDisplayName = m.registerDisplayName[:len(m.registerDisplayName)-1]
+			}
+			return m, nil
+		case "enter":
+			m.profileError = ""
+			if m.registerField == 0 {
+				handle := m.registerHandle
+				if !isValidHandle(handle) {
+					m.profileError = "Handle must use: a-z 0-9 - _"
+					return m, nil
+				}
+				existing, found, err := m.userRepo.GetByHandle(handle)
+				if err != nil {
+					m.profileError = "Failed to check handle"
+					return m, nil
+				}
+				if found && existing != nil {
+					m.profileError = "Handle already exists"
+					return m, nil
+				}
+				m.registerField = 1
+				return m, nil
+			}
+
+			u, err := m.userRepo.Create(m.registerHandle, m.registerDisplayName)
+			if err != nil {
+				m.profileError = "Failed to create profile"
+				return m, nil
+			}
+			if err := m.setCurrentUser(u, true); err != nil {
+				m.profileError = "Failed to save profile"
+				return m, nil
+			}
+			profiles, err := m.userRepo.List()
+			if err == nil {
+				m.profiles = profiles
+			}
+			if err := m.reloadTopicsForCurrentUser(); err != nil {
+				m.profileError = "Failed to load topics"
+				return m, nil
+			}
+			m.screen = screenTopicSelect
+			return m, nil
+		}
+
+		if len(msg.Runes) == 0 {
+			return m, nil
+		}
+		r := msg.Runes[0]
+		if m.registerField == 0 {
+			if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || r == '-' || r == '_' {
+				m.registerHandle += string(r)
+			}
+		} else if r >= 32 && r <= 126 {
+			m.registerDisplayName += string(r)
+		}
 	}
 	return m, nil
 }
@@ -139,6 +307,7 @@ func (m model) updateSessionConfig(msg tea.Msg) (tea.Model, tea.Cmd) {
 			engine := app.NewSessionEngine(
 				m.topicRepo, m.questionRepo,
 				m.sessionRepo, m.attemptRepo,
+				m.userCtx,
 				nil, // time-seeded rng
 			)
 			_, err := engine.StartSession(
@@ -330,6 +499,7 @@ func (m model) updateSummary(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Quit
 		case "enter", "b":
 			// Back to topic select.
+			_ = m.reloadTopicsForCurrentUser()
 			m.screen = screenTopicSelect
 		case "r":
 			// Review mode: browse wrong answers (read-only).

@@ -21,11 +21,11 @@ All core capabilities are implemented, tested, and documented.
 | CLI (run)       | ✅ Done          | `golearn run <topic-slug> --n N`     |
 | Export use case | ✅ Done          | Deterministic ordering, YAML + JSON output |
 | CLI (export)    | ✅ Done          | `golearn export <slug> --out <path> [--format]` |
-| Bubble Tea TUI  | ✅ Done          | Topic select, config, question, feedback, summary |
+| Bubble Tea TUI  | ✅ Done          | Profile menu, topic select, config, question, feedback, summary |
 | CLI (tui)       | ✅ Done          | `golearn tui` with alt-screen        |
 | Example packs   | ✅ Done          | `go-basics.yaml`, `mvp-basics.yaml`, `databricks-pde.yaml` |
 | CLI (help)      | ✅ Done          | `golearn help` with examples         |
-| Tests           | ✅ Done          | 31 tests: validation, hashing, correctness, selector, session, export, integration |
+| Tests           | ✅ Done          | 46 tests: validation, hashing, correctness, selector, session, export, integration, profiles |
 | Makefile        | ✅ Done          | `fmt`, `vet`, `lint`, `test`, `check` |
 | Lint config     | ✅ Done          | `.golangci.yml` with sensible rules  |
 | CI pipeline     | ✅ Done          | GitHub Actions workflow (`.github/workflows/ci.yml`) |
@@ -33,6 +33,35 @@ All core capabilities are implemented, tested, and documented.
 ---
 
 ## Changelog
+
+### 2026-02-17 — Phase 7: Local Multi-User Profiles
+
+- Added local profile system (no passwords, no network auth)
+  - New `users` table with unique `handle`, optional `display_name`, timestamps
+  - Seeded default profile: `local` / `Local`
+- Added persisted current user config at `~/.golearn/config.json`
+  - Stores `current_user_id`
+  - Missing/invalid config falls back to seeded `local` and rewrites config
+  - Config path is injectable in code paths used by tests
+- Made sessions/attempts/stats user-scoped
+  - Added `user_id` to `sessions` and `attempts`
+  - Added indexes: `sessions(user_id, topic_id, started_at)`,
+    `attempts(user_id, question_id, created_at)`, `attempts(user_id, session_id)`
+  - Selection policy stats and topic accuracy now filter by current `user_id`
+  - Review mode remains read-only and only reflects current user's mistakes
+- Replaced startup intro with profile menu flow in TUI
+  - Menu: Continue, Login, Register, Quit
+  - Login: pick existing profile
+  - Register: handle validation (`a-z`, `0-9`, `-`, `_`) + uniqueness
+  - Successful login/register sets current profile and persists config
+- Added schema compatibility reset strategy for dev phase
+  - On startup, if legacy schema (missing user columns/tables) is detected,
+    DB schema is dropped and recreated automatically
+- Added tests
+  - SQLite user repository create/list/get + unique handle enforcement
+  - Two-user stats scoping correctness (`user A` not polluted by `user B`)
+  - TUI profile selection state sets current user context
+- `make check` passes
 
 ### 2026-02-17 — Phase 6: TUI UX Polish
 

@@ -160,3 +160,75 @@ func TestQuestionRepo_ListByTopic_Empty(t *testing.T) {
 		t.Errorf("expected 0 questions, got %d", len(questions))
 	}
 }
+
+func TestUserRepo_CreateListGet(t *testing.T) {
+	db, err := sqlite.Open(tempDB(t))
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer db.Close()
+
+	repo := sqlite.NewUserRepo(db)
+
+	seeded, found, err := repo.GetByHandle("local")
+	if err != nil {
+		t.Fatalf("GetByHandle(local): %v", err)
+	}
+	if !found || seeded == nil {
+		t.Fatal("expected seeded local user")
+	}
+
+	created, err := repo.Create("alice", "Alice")
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	if created.ID == 0 {
+		t.Fatal("expected non-zero user ID")
+	}
+
+	byHandle, found, err := repo.GetByHandle("alice")
+	if err != nil {
+		t.Fatalf("GetByHandle(alice): %v", err)
+	}
+	if !found || byHandle == nil {
+		t.Fatal("expected to find alice by handle")
+	}
+	if byHandle.ID != created.ID {
+		t.Fatalf("expected same ID by handle, got %d vs %d", byHandle.ID, created.ID)
+	}
+
+	byID, found, err := repo.GetByID(created.ID)
+	if err != nil {
+		t.Fatalf("GetByID: %v", err)
+	}
+	if !found || byID == nil {
+		t.Fatal("expected to find alice by ID")
+	}
+	if byID.Handle != "alice" {
+		t.Fatalf("expected handle alice, got %q", byID.Handle)
+	}
+
+	users, err := repo.List()
+	if err != nil {
+		t.Fatalf("List: %v", err)
+	}
+	if len(users) < 2 {
+		t.Fatalf("expected at least 2 users (local + alice), got %d", len(users))
+	}
+}
+
+func TestUserRepo_UniqueHandleEnforced(t *testing.T) {
+	db, err := sqlite.Open(tempDB(t))
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer db.Close()
+
+	repo := sqlite.NewUserRepo(db)
+	if _, err := repo.Create("bob", "Bob"); err != nil {
+		t.Fatalf("Create bob: %v", err)
+	}
+	if _, err := repo.Create("bob", "Bobby"); err == nil {
+		t.Fatal("expected unique handle error")
+	}
+}

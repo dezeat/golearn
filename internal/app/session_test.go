@@ -13,11 +13,13 @@ import (
 // setupTestDB opens a temp SQLite DB, seeds a topic + questions, and returns
 // all the repos plus the topic used for the test.
 func setupTestDB(t *testing.T) (
+	*sqlite.UserRepo,
 	*sqlite.TopicRepo,
 	*sqlite.QuestionRepo,
 	*sqlite.SessionRepo,
 	*sqlite.AttemptRepo,
 	*domain.Topic,
+	int64,
 ) {
 	t.Helper()
 	dbPath := filepath.Join(t.TempDir(), "test.db")
@@ -31,6 +33,14 @@ func setupTestDB(t *testing.T) (
 	questionRepo := sqlite.NewQuestionRepo(db)
 	sessionRepo := sqlite.NewSessionRepo(db)
 	attemptRepo := sqlite.NewAttemptRepo(db)
+	userRepo := sqlite.NewUserRepo(db)
+	localUser, found, err := userRepo.GetByHandle("local")
+	if err != nil {
+		t.Fatalf("GetByHandle(local): %v", err)
+	}
+	if !found || localUser == nil {
+		t.Fatal("expected seeded local user")
+	}
 
 	topic, err := topicRepo.UpsertBySlug("test-topic", "Test Topic")
 	if err != nil {
@@ -71,13 +81,13 @@ func setupTestDB(t *testing.T) (
 		t.Fatalf("InsertMany: %v", err)
 	}
 
-	return topicRepo, questionRepo, sessionRepo, attemptRepo, topic
+	return userRepo, topicRepo, questionRepo, sessionRepo, attemptRepo, topic, localUser.ID
 }
 
 func TestSessionLifecycle(t *testing.T) {
-	topicRepo, questionRepo, sessionRepo, attemptRepo, _ := setupTestDB(t)
+	_, topicRepo, questionRepo, sessionRepo, attemptRepo, _, userID := setupTestDB(t)
 	rng := rand.New(rand.NewSource(42))
-	engine := app.NewSessionEngine(topicRepo, questionRepo, sessionRepo, attemptRepo, rng)
+	engine := app.NewSessionEngine(topicRepo, questionRepo, sessionRepo, attemptRepo, app.NewUserContext(userID), rng)
 
 	// Start session.
 	sessionID, err := engine.StartSession("test-topic", 3, "practice")
@@ -116,9 +126,9 @@ func TestSessionLifecycle(t *testing.T) {
 }
 
 func TestRecordAttempt_CorrectnessEvaluation(t *testing.T) {
-	topicRepo, questionRepo, sessionRepo, attemptRepo, _ := setupTestDB(t)
+	_, topicRepo, questionRepo, sessionRepo, attemptRepo, _, userID := setupTestDB(t)
 	rng := rand.New(rand.NewSource(42))
-	engine := app.NewSessionEngine(topicRepo, questionRepo, sessionRepo, attemptRepo, rng)
+	engine := app.NewSessionEngine(topicRepo, questionRepo, sessionRepo, attemptRepo, app.NewUserContext(userID), rng)
 
 	if _, err := engine.StartSession("test-topic", 3, "practice"); err != nil {
 		t.Fatalf("StartSession: %v", err)
@@ -147,9 +157,9 @@ func TestRecordAttempt_CorrectnessEvaluation(t *testing.T) {
 }
 
 func TestRecordAttempt_SkippedIsNotCorrect(t *testing.T) {
-	topicRepo, questionRepo, sessionRepo, attemptRepo, _ := setupTestDB(t)
+	_, topicRepo, questionRepo, sessionRepo, attemptRepo, _, userID := setupTestDB(t)
 	rng := rand.New(rand.NewSource(42))
-	engine := app.NewSessionEngine(topicRepo, questionRepo, sessionRepo, attemptRepo, rng)
+	engine := app.NewSessionEngine(topicRepo, questionRepo, sessionRepo, attemptRepo, app.NewUserContext(userID), rng)
 
 	if _, err := engine.StartSession("test-topic", 1, "practice"); err != nil {
 		t.Fatalf("StartSession: %v", err)
@@ -174,9 +184,9 @@ func TestRecordAttempt_SkippedIsNotCorrect(t *testing.T) {
 }
 
 func TestStartSession_TopicNotFound(t *testing.T) {
-	topicRepo, questionRepo, sessionRepo, attemptRepo, _ := setupTestDB(t)
+	_, topicRepo, questionRepo, sessionRepo, attemptRepo, _, userID := setupTestDB(t)
 	rng := rand.New(rand.NewSource(42))
-	engine := app.NewSessionEngine(topicRepo, questionRepo, sessionRepo, attemptRepo, rng)
+	engine := app.NewSessionEngine(topicRepo, questionRepo, sessionRepo, attemptRepo, app.NewUserContext(userID), rng)
 
 	_, err := engine.StartSession("nonexistent", 5, "practice")
 	if err == nil {
@@ -185,9 +195,9 @@ func TestStartSession_TopicNotFound(t *testing.T) {
 }
 
 func TestAttemptStats_AffectSelection(t *testing.T) {
-	topicRepo, questionRepo, sessionRepo, attemptRepo, _ := setupTestDB(t)
+	_, topicRepo, questionRepo, sessionRepo, attemptRepo, _, userID := setupTestDB(t)
 	rng := rand.New(rand.NewSource(42))
-	engine := app.NewSessionEngine(topicRepo, questionRepo, sessionRepo, attemptRepo, rng)
+	engine := app.NewSessionEngine(topicRepo, questionRepo, sessionRepo, attemptRepo, app.NewUserContext(userID), rng)
 
 	// Session 1: answer Q1 wrong, Q2 correct, Q3 skip.
 	if _, err := engine.StartSession("test-topic", 3, "practice"); err != nil {
@@ -215,7 +225,7 @@ func TestAttemptStats_AffectSelection(t *testing.T) {
 	// Session 2: selection should prioritise weak questions.
 	// We use a fresh engine with the same repos so stats are visible.
 	rng2 := rand.New(rand.NewSource(42))
-	engine2 := app.NewSessionEngine(topicRepo, questionRepo, sessionRepo, attemptRepo, rng2)
+	engine2 := app.NewSessionEngine(topicRepo, questionRepo, sessionRepo, attemptRepo, app.NewUserContext(userID), rng2)
 
 	if _, err := engine2.StartSession("test-topic", 3, "practice"); err != nil {
 		t.Fatalf("StartSession 2: %v", err)
@@ -240,4 +250,73 @@ func TestAttemptStats_AffectSelection(t *testing.T) {
 	}
 
 	engine2.EndSession()
+}
+
+func TestAttemptStats_UserScoped(t *testing.T) {
+	userRepo, topicRepo, questionRepo, sessionRepo, attemptRepo, topic, localUserID := setupTestDB(t)
+
+	secondUser, err := userRepo.Create("alice", "Alice")
+	if err != nil {
+		t.Fatalf("create second user: %v", err)
+	}
+
+	localEngine := app.NewSessionEngine(
+		topicRepo, questionRepo, sessionRepo, attemptRepo,
+		app.NewUserContext(localUserID), rand.New(rand.NewSource(1)),
+	)
+	aliceEngine := app.NewSessionEngine(
+		topicRepo, questionRepo, sessionRepo, attemptRepo,
+		app.NewUserContext(secondUser.ID), rand.New(rand.NewSource(1)),
+	)
+
+	if _, err := localEngine.StartSession("test-topic", 1, "practice"); err != nil {
+		t.Fatalf("start local session: %v", err)
+	}
+	qLocal := localEngine.GetNextQuestion()
+	if qLocal == nil {
+		t.Fatal("expected local question")
+	}
+	if _, err := localEngine.RecordAttempt(qLocal.ID, []string{"B"}, false, 10); err != nil {
+		t.Fatalf("local record attempt: %v", err)
+	}
+	_ = localEngine.EndSession()
+
+	if _, err := aliceEngine.StartSession("test-topic", 1, "practice"); err != nil {
+		t.Fatalf("start alice session: %v", err)
+	}
+	qAlice := aliceEngine.GetNextQuestion()
+	if qAlice == nil {
+		t.Fatal("expected alice question")
+	}
+	if _, err := aliceEngine.RecordAttempt(qAlice.ID, qAlice.CorrectChoiceIDs, false, 10); err != nil {
+		t.Fatalf("alice record attempt: %v", err)
+	}
+	_ = aliceEngine.EndSession()
+
+	localStats, err := attemptRepo.StatsByTopic(localUserID, topic.ID)
+	if err != nil {
+		t.Fatalf("local stats: %v", err)
+	}
+	aliceStats, err := attemptRepo.StatsByTopic(secondUser.ID, topic.ID)
+	if err != nil {
+		t.Fatalf("alice stats: %v", err)
+	}
+
+	if len(localStats) != 1 {
+		t.Fatalf("expected local stats for 1 question, got %d", len(localStats))
+	}
+	if len(aliceStats) != 1 {
+		t.Fatalf("expected alice stats for 1 question, got %d", len(aliceStats))
+	}
+
+	for _, s := range localStats {
+		if s.Wrong != 1 {
+			t.Fatalf("expected local wrong=1, got %d", s.Wrong)
+		}
+	}
+	for _, s := range aliceStats {
+		if s.Wrong != 0 {
+			t.Fatalf("expected alice wrong=0, got %d", s.Wrong)
+		}
+	}
 }

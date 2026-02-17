@@ -31,6 +31,14 @@ type Topic struct {
 	Name string `json:"name"`
 }
 
+// User represents a local profile.
+type User struct {
+	ID          int64     `json:"id"`
+	Handle      string    `json:"handle"`
+	DisplayName string    `json:"display_name,omitempty"`
+	CreatedAt   time.Time `json:"created_at"`
+}
+
 // Question is the canonical MCQ domain model.
 type Question struct {
 	ID               int64        `json:"id"`
@@ -53,6 +61,7 @@ type Question struct {
 // Session tracks a practice or exam run (stubbed for future use).
 type Session struct {
 	ID         int64      `json:"id"`
+	UserID     int64      `json:"user_id"`
 	TopicID    int64      `json:"topic_id"`
 	Mode       string     `json:"mode"`
 	RequestedN int        `json:"requested_n"`
@@ -63,6 +72,7 @@ type Session struct {
 // Attempt records a single answer within a session (stubbed for future use).
 type Attempt struct {
 	ID                int64     `json:"id"`
+	UserID            int64     `json:"user_id"`
 	SessionID         int64     `json:"session_id"`
 	QuestionID        int64     `json:"question_id"`
 	SelectedChoiceIDs []string  `json:"selected_choice_ids"`

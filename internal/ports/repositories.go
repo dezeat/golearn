@@ -3,6 +3,21 @@ package ports
 
 import "github.com/dezeat/golearn/internal/domain"
 
+// UserRepository persists and retrieves local profiles.
+type UserRepository interface {
+	// Create inserts a user profile.
+	Create(handle, displayName string) (*domain.User, error)
+
+	// GetByHandle returns a user by handle.
+	GetByHandle(handle string) (*domain.User, bool, error)
+
+	// List returns all users ordered by handle.
+	List() ([]domain.User, error)
+
+	// GetByID returns a user by ID.
+	GetByID(id int64) (*domain.User, bool, error)
+}
+
 // TopicRepository persists and retrieves topics.
 type TopicRepository interface {
 	// UpsertBySlug creates a topic or returns the existing one matching the slug.
@@ -53,5 +68,5 @@ type AttemptRepository interface {
 
 	// StatsByTopic returns per-question attempt stats for all
 	// questions in a topic, keyed by question ID.
-	StatsByTopic(topicID int64) (map[int64]QuestionStats, error)
+	StatsByTopic(userID, topicID int64) (map[int64]QuestionStats, error)
 }

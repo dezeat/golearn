@@ -150,6 +150,14 @@ func TestIntegration_ImportAndSession(t *testing.T) {
 	questionRepo := sqlite.NewQuestionRepo(db)
 	sessionRepo := sqlite.NewSessionRepo(db)
 	attemptRepo := sqlite.NewAttemptRepo(db)
+	userRepo := sqlite.NewUserRepo(db)
+	localUser, found, err := userRepo.GetByHandle("local")
+	if err != nil {
+		t.Fatalf("get local user: %v", err)
+	}
+	if !found || localUser == nil {
+		t.Fatal("expected seeded local user")
+	}
 
 	// Import the example pack.
 	reader := pack.NewReader()
@@ -164,7 +172,7 @@ func TestIntegration_ImportAndSession(t *testing.T) {
 
 	// Start a session with 5 questions.
 	rng := rand.New(rand.NewSource(42))
-	engine := app.NewSessionEngine(topicRepo, questionRepo, sessionRepo, attemptRepo, rng)
+	engine := app.NewSessionEngine(topicRepo, questionRepo, sessionRepo, attemptRepo, app.NewUserContext(localUser.ID), rng)
 	sessionID, err := engine.StartSession("mvp-basics", 5, "practice")
 	if err != nil {
 		t.Fatalf("start session: %v", err)
@@ -220,7 +228,7 @@ func TestIntegration_ImportAndSession(t *testing.T) {
 		}
 	}
 
-	stats, err := attemptRepo.StatsByTopic(topicID)
+	stats, err := attemptRepo.StatsByTopic(localUser.ID, topicID)
 	if err != nil {
 		t.Fatalf("stats by topic: %v", err)
 	}
