@@ -18,6 +18,6 @@ func (m model) viewSessionConfig() string {
 
 	b.WriteString(fmt.Sprintf("  Questions: ◀ %d ▶\n\n", m.questionCount))
 
-	b.WriteString("  ←/→ or j/k to adjust count · enter to start · esc to go back\n")
+	m.writeFooter(&b, footerSessionConfig)
 	return b.String()
 }

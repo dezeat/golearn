@@ -68,7 +68,7 @@ func (m model) viewQuestion() string {
 		}
 	}
 
-	b.WriteString("\n  ↑/↓ navigate · space toggle · enter submit · s skip · q quit\n")
+	m.writeFooter(&b, footerQuiz)
 	return b.String()
 }
 
@@ -178,12 +178,7 @@ func (m model) viewReview() string {
 	}
 
 	// Controls.
-	b.WriteString("\n")
-	explainHint := "e show explanations"
-	if m.showExplanations {
-		explainHint = "e hide explanations"
-	}
-	b.WriteString(fmt.Sprintf("  %s · enter next · q end session\n", explainHint))
+	m.writeFooter(&b, footerReview)
 
 	return b.String()
 }
@@ -291,12 +286,7 @@ func (m model) viewReviewBrowse() string {
 	}
 
 	// Controls.
-	b.WriteString("\n")
-	explainHint := "e explanations"
-	if m.showExplanations {
-		explainHint = "e hide explanations"
-	}
-	b.WriteString(fmt.Sprintf("  enter next · p previous · %s · q exit\n", explainHint))
+	m.writeFooter(&b, footerReview)
 
 	return b.String()
 }

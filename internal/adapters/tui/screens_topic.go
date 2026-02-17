@@ -10,18 +10,15 @@ func (m model) viewProfileMenu() string {
 	var b strings.Builder
 
 	b.WriteString("\n")
-	b.WriteString(styleHeader.Render("   ██████╗  ██████╗ ██╗     ███████╗ █████╗ ██████╗ ███╗   ██╗") + "\n")
-	b.WriteString(styleHeader.Render("  ██╔════╝ ██╔═══██╗██║     ██╔════╝██╔══██╗██╔══██╗████╗  ██║") + "\n")
-	b.WriteString(styleHeader.Render("  ██║  ███╗██║   ██║██║     █████╗  ███████║██████╔╝██╔██╗ ██║") + "\n")
-	b.WriteString(styleHeader.Render("  ██║   ██║██║   ██║██║     ██╔══╝  ██╔══██║██╔══██╗██║╚██╗██║") + "\n")
-	b.WriteString(styleHeader.Render("  ╚██████╔╝╚██████╔╝███████╗███████╗██║  ██║██║  ██║██║ ╚████║") + "\n")
-	b.WriteString(styleHeader.Render("   ╚═════╝  ╚═════╝ ╚══════╝╚══════╝╚═╝  ╚═╝╚═╝  ╚═╝╚═╝  ╚═══╝") + "\n")
+	m.writeCenteredLine(&b, styleHeader.Render("   ██████╗  ██████╗ ██╗     ███████╗ █████╗ ██████╗ ███╗   ██╗"))
+	m.writeCenteredLine(&b, styleHeader.Render("  ██╔════╝ ██╔═══██╗██║     ██╔════╝██╔══██╗██╔══██╗████╗  ██║"))
+	m.writeCenteredLine(&b, styleHeader.Render("  ██║  ███╗██║   ██║██║     █████╗  ███████║██████╔╝██╔██╗ ██║"))
+	m.writeCenteredLine(&b, styleHeader.Render("  ██║   ██║██║   ██║██║     ██╔══╝  ██╔══██║██╔══██╗██║╚██╗██║"))
+	m.writeCenteredLine(&b, styleHeader.Render("  ╚██████╔╝╚██████╔╝███████╗███████╗██║  ██║██║  ██║██║ ╚████║"))
+	m.writeCenteredLine(&b, styleHeader.Render("   ╚═════╝  ╚═════╝ ╚══════╝╚══════╝╚═╝  ╚═╝╚═╝  ╚═╝╚═╝  ╚═══╝"))
 	b.WriteString("\n")
-	b.WriteString(styleDim.Render("  golearn — adaptive certification practice") + "\n\n")
-
-	if m.currentUser != nil {
-		b.WriteString(fmt.Sprintf("  Current profile: %s\n\n", displayProfile(*m.currentUser)))
-	}
+	m.writeCenteredLine(&b, styleDim.Render("golearn — adaptive certification practice"))
+	b.WriteString("\n")
 
 	options := m.profileMenuOptions()
 	for i, opt := range options {
@@ -29,15 +26,15 @@ func (m model) viewProfileMenu() string {
 		if i == m.profileMenuCursor {
 			cursor = "▸ "
 		}
-		b.WriteString(fmt.Sprintf("%s%s\n", cursor, opt))
+		m.writeCenteredLine(&b, fmt.Sprintf("%s%s", cursor, opt))
 	}
 
 	if m.profileError != "" {
 		b.WriteString("\n")
-		b.WriteString(styleIncorrect.Render("  " + m.profileError + "\n"))
+		m.writeCenteredLine(&b, styleIncorrect.Render(m.profileError))
 	}
 
-	b.WriteString("\n  ↑/↓ or j/k to navigate · enter to select · q to quit\n")
+	m.writeFooter(&b, footerMenuTop)
 	return b.String()
 }
 
@@ -45,11 +42,13 @@ func (m model) viewProfileMenu() string {
 func (m model) viewProfileLogin() string {
 	var b strings.Builder
 
-	b.WriteString(styleHeader.Render("golearn — Login") + "\n")
-	b.WriteString("═══════════════\n\n")
+	m.writeCenteredLine(&b, styleHeader.Render("golearn — Login"))
+	m.writeCenteredLine(&b, "═══════════════")
+	b.WriteString("\n")
 
 	if len(m.profiles) == 0 {
-		b.WriteString("  No profiles found. Press esc to go back.\n")
+		m.writeCenteredLine(&b, "No profiles found.")
+		m.writeFooter(&b, footerMenuSub)
 		return b.String()
 	}
 
@@ -58,15 +57,15 @@ func (m model) viewProfileLogin() string {
 		if i == m.profileLoginCursor {
 			cursor = "▸ "
 		}
-		b.WriteString(fmt.Sprintf("%s%s\n", cursor, displayProfile(p)))
+		m.writeCenteredLine(&b, fmt.Sprintf("%s%s", cursor, displayProfile(p)))
 	}
 
 	if m.profileError != "" {
 		b.WriteString("\n")
-		b.WriteString(styleIncorrect.Render("  " + m.profileError + "\n"))
+		m.writeCenteredLine(&b, styleIncorrect.Render(m.profileError))
 	}
 
-	b.WriteString("\n  ↑/↓ or j/k to navigate · enter to login · esc to back\n")
+	m.writeFooter(&b, footerMenuSub)
 	return b.String()
 }
 
@@ -74,9 +73,11 @@ func (m model) viewProfileLogin() string {
 func (m model) viewProfileRegister() string {
 	var b strings.Builder
 
-	b.WriteString(styleHeader.Render("golearn — Register") + "\n")
-	b.WriteString("══════════════════\n\n")
-	b.WriteString("  Create a local profile (no passwords).\n\n")
+	m.writeCenteredLine(&b, styleHeader.Render("golearn — Register"))
+	m.writeCenteredLine(&b, "══════════════════")
+	b.WriteString("\n")
+	m.writeCenteredLine(&b, "Create a local profile (no passwords).")
+	b.WriteString("\n")
 
 	handlePrefix := "  "
 	namePrefix := "  "
@@ -86,16 +87,17 @@ func (m model) viewProfileRegister() string {
 		namePrefix = "▸ "
 	}
 
-	b.WriteString(fmt.Sprintf("%sHandle:      %s\n", handlePrefix, m.registerHandle))
-	b.WriteString(fmt.Sprintf("%sDisplay name: %s\n", namePrefix, m.registerDisplayName))
-	b.WriteString("\n  Handle rules: a-z 0-9 - _\n")
+	m.writeCenteredLine(&b, fmt.Sprintf("%sHandle:      %s", handlePrefix, m.registerHandle))
+	m.writeCenteredLine(&b, fmt.Sprintf("%sDisplay name: %s", namePrefix, m.registerDisplayName))
+	b.WriteString("\n")
+	m.writeCenteredLine(&b, "Handle rules: a-z 0-9 - _")
 
 	if m.profileError != "" {
 		b.WriteString("\n")
-		b.WriteString(styleIncorrect.Render("  " + m.profileError + "\n"))
+		m.writeCenteredLine(&b, styleIncorrect.Render(m.profileError))
 	}
 
-	b.WriteString("\n  type to edit · tab switch field · enter next/create · esc back\n")
+	m.writeFooter(&b, footerMenuSub)
 
 	return b.String()
 }
@@ -105,15 +107,14 @@ func (m model) viewProfileRegister() string {
 func (m model) viewTopicSelect() string {
 	var b strings.Builder
 
-	b.WriteString(styleHeader.Render("golearn — Select a Topic") + "\n")
-	b.WriteString("════════════════════════\n\n")
-	if m.currentUser != nil {
-		b.WriteString(fmt.Sprintf("  Profile: %s\n\n", displayProfile(*m.currentUser)))
-	}
+	m.writeCenteredLine(&b, styleHeader.Render("golearn — Select a Topic"))
+	m.writeCenteredLine(&b, "════════════════════════")
+	b.WriteString("\n")
 
 	if len(m.topics) == 0 {
-		b.WriteString("  No topics found.\n")
-		b.WriteString("  Import a pack first: golearn import <path>\n")
+		m.writeCenteredLine(&b, "No topics found.")
+		m.writeCenteredLine(&b, "Import a pack first: golearn import <path>")
+		m.writeFooter(&b, footerMenuSub)
 		return b.String()
 	}
 
@@ -149,9 +150,9 @@ func (m model) viewTopicSelect() string {
 			accStr = fmt.Sprintf("%.0f%%", pct)
 		}
 
-		b.WriteString(fmt.Sprintf("%s%-*s  %-*s  %*s\n", cursor, nameW, name, qsColW, qsStr, accColW, accStr))
+		m.writeCenteredLine(&b, fmt.Sprintf("%s%-*s  %-*s  %*s", cursor, nameW, name, qsColW, qsStr, accColW, accStr))
 	}
 
-	b.WriteString("\n  ↑/↓ or j/k to navigate · enter to select · q to quit\n")
+	m.writeFooter(&b, footerMenuSub)
 	return b.String()
 }

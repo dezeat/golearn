@@ -215,7 +215,7 @@ func TestReviewSessionSetup(t *testing.T) {
 		selected:     make(map[string]bool),
 	}
 
-	m.startReviewSession()
+	m.startReviewSession(screenSummary)
 
 	if m.screen != screenReviewBrowse {
 		t.Errorf("expected screenReviewBrowse, got %d", m.screen)
@@ -225,6 +225,9 @@ func TestReviewSessionSetup(t *testing.T) {
 	}
 	if m.reviewCursor != 0 {
 		t.Errorf("expected reviewCursor 0, got %d", m.reviewCursor)
+	}
+	if m.reviewReturnScreen != screenSummary {
+		t.Errorf("expected reviewReturnScreen summary, got %d", m.reviewReturnScreen)
 	}
 }
 
@@ -338,7 +341,7 @@ func TestReviewBrowseView(t *testing.T) {
 	if !containsSubstring(view, "What is the answer?") {
 		t.Error("expected prompt in review browse")
 	}
-	if !containsSubstring(view, "enter next") {
+	if !containsSubstring(view, "Toggle Explanation") {
 		t.Error("expected browse controls")
 	}
 }

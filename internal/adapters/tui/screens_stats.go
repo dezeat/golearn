@@ -101,12 +101,9 @@ func formatStatsTimestamp(raw string) string {
 func (m model) viewHomeMenu() string {
 	var b strings.Builder
 
-	b.WriteString(styleHeader.Render("golearn — Home") + "\n")
-	b.WriteString("══════════════\n\n")
-
-	if m.currentUser != nil {
-		b.WriteString(fmt.Sprintf("  Profile: %s\n\n", displayProfile(*m.currentUser)))
-	}
+	m.writeCenteredLine(&b, styleHeader.Render("golearn — Home"))
+	m.writeCenteredLine(&b, "══════════════")
+	b.WriteString("\n")
 
 	options := m.homeMenuOptions()
 	for i, opt := range options {
@@ -119,10 +116,14 @@ func (m model) viewHomeMenu() string {
 		if opt == "Review Wrong Answers" && len(m.wrongAnswers) == 0 {
 			label = styleDim.Render(opt + " (none)")
 		}
-		b.WriteString(cursor + label + "\n")
+		m.writeCenteredLine(&b, cursor+label)
 	}
 
-	b.WriteString("\n  ↑/↓ or j/k to navigate · enter to select · q to quit\n")
+	if len(m.wrongAnswers) > 0 {
+		m.writeFooter(&b, footerMenuTopReview)
+	} else {
+		m.writeFooter(&b, footerMenuTop)
+	}
 	return b.String()
 }
 
@@ -171,7 +172,11 @@ func (m model) viewSummary() string {
 		b.WriteString(cursor + opt + "\n")
 	}
 
-	b.WriteString("\n  ↑/↓ navigate · enter select · r review · q quit\n")
+	if len(m.wrongAnswers) > 0 {
+		m.writeFooter(&b, footerMenuSubReview)
+	} else {
+		m.writeFooter(&b, footerMenuSub)
+	}
 	return b.String()
 }
 
@@ -189,20 +194,20 @@ func (m model) viewStatsGlobal() string {
 
 	if m.statsError != "" {
 		b.WriteString(styleIncorrect.Render("  Error: "+m.statsError) + "\n")
-		b.WriteString("\n  esc back\n")
+		m.writeFooter(&b, footerMenuSub)
 		return b.String()
 	}
 
 	gs := m.statsGlobal
 	if gs == nil {
 		b.WriteString("  No stats data yet. Complete a practice session first.\n")
-		b.WriteString("\n  esc back\n")
+		m.writeFooter(&b, footerMenuSub)
 		return b.String()
 	}
 
 	if gs.TotalAnswered == 0 && gs.TotalSkipped == 0 {
 		b.WriteString("  No attempts recorded yet.\n")
-		b.WriteString("\n  esc back\n")
+		m.writeFooter(&b, footerMenuSub)
 		return b.String()
 	}
 
@@ -227,7 +232,7 @@ func (m model) viewStatsGlobal() string {
 			trendDelta(m.statsGlobalTrend)))
 	}
 
-	b.WriteString("\n  enter: pack stats · esc: back to home\n")
+	m.writeFooter(&b, footerMenuSub)
 	return b.String()
 }
 
@@ -236,18 +241,19 @@ func (m model) viewStatsGlobal() string {
 func (m model) viewStatsPackList() string {
 	var b strings.Builder
 
-	b.WriteString(styleHeader.Render("golearn — Pack Stats") + "\n")
-	b.WriteString("════════════════════\n\n")
+	m.writeCenteredLine(&b, styleHeader.Render("golearn — Pack Stats"))
+	m.writeCenteredLine(&b, "════════════════════")
+	b.WriteString("\n")
 
 	if m.statsError != "" {
-		b.WriteString(styleIncorrect.Render("  Error: "+m.statsError) + "\n")
-		b.WriteString("\n  esc back\n")
+		m.writeCenteredLine(&b, styleIncorrect.Render("Error: "+m.statsError))
+		m.writeFooter(&b, footerMenuSub)
 		return b.String()
 	}
 
 	if len(m.statsPacks) == 0 {
-		b.WriteString("  No packs found.\n")
-		b.WriteString("\n  esc back\n")
+		m.writeCenteredLine(&b, "No packs found.")
+		m.writeFooter(&b, footerMenuSub)
 		return b.String()
 	}
 
@@ -267,9 +273,9 @@ func (m model) viewStatsPackList() string {
 	}
 
 	// Header row.
-	b.WriteString(fmt.Sprintf("  %-*s  %-*s  %-*s  %s\n",
+	m.writeCenteredLine(&b, fmt.Sprintf("  %-*s  %-*s  %-*s  %s",
 		nameW, "Pack", qsColW, "Qs", accColW, "Acc", "Att"))
-	b.WriteString(fmt.Sprintf("  %s  %s  %s  %s\n",
+	m.writeCenteredLine(&b, fmt.Sprintf("  %s  %s  %s  %s",
 		strings.Repeat("─", nameW), strings.Repeat("─", qsColW),
 		strings.Repeat("─", accColW), strings.Repeat("─", attColW)))
 
@@ -287,11 +293,11 @@ func (m model) viewStatsPackList() string {
 		}
 		attStr := fmt.Sprintf("%d", ts.AttemptsAnswered)
 
-		b.WriteString(fmt.Sprintf("%s%-*s  %*s  %*s  %*s\n",
+		m.writeCenteredLine(&b, fmt.Sprintf("%s%-*s  %*s  %*s  %*s",
 			cursor, nameW, name, qsColW, qsStr, accColW, accStr, attColW, attStr))
 	}
 
-	b.WriteString("\n  ↑/↓ navigate · enter details · esc back\n")
+	m.writeFooter(&b, footerMenuSub)
 	return b.String()
 }
 
@@ -305,14 +311,14 @@ func (m model) viewStatsPackDetail() string {
 
 	if m.statsError != "" {
 		b.WriteString(styleIncorrect.Render("  Error: "+m.statsError) + "\n")
-		b.WriteString("\n  b back · q home\n")
+		m.writeFooter(&b, footerMenuSub)
 		return b.String()
 	}
 
 	ts := m.statsDetail
 	if ts == nil {
 		b.WriteString("  No stats loaded.\n")
-		b.WriteString("\n  b back · q home\n")
+		m.writeFooter(&b, footerMenuSub)
 		return b.String()
 	}
 
@@ -389,6 +395,6 @@ func (m model) viewStatsPackDetail() string {
 			trendDelta(m.statsDetailTrend)))
 	}
 
-	b.WriteString("\n  b/esc back · q home\n")
+	m.writeFooter(&b, footerMenuSub)
 	return b.String()
 }

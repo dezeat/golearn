@@ -229,8 +229,9 @@ type model struct {
 	wrongAnswers []wrongAnswer
 
 	// Review browse state
-	reviewQueue  []wrongAnswer
-	reviewCursor int
+	reviewQueue        []wrongAnswer
+	reviewCursor       int
+	reviewReturnScreen screen
 
 	// Stats state
 	statsGlobal      *ports.GlobalStats

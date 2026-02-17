@@ -107,19 +107,20 @@ func (m model) View() string {
 func (m model) updateProfileMenu(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
-		switch msg.String() {
-		case "q", "esc":
+		key := msg.String()
+		switch {
+		case isQuitKey(key):
 			m.quitting = true
 			return m, tea.Quit
-		case "up", "k":
+		case isUpNav(key):
 			if m.profileMenuCursor > 0 {
 				m.profileMenuCursor--
 			}
-		case "down", "j":
+		case isDownNav(key):
 			if m.profileMenuCursor < len(m.profileMenuOptions())-1 {
 				m.profileMenuCursor++
 			}
-		case "enter":
+		case isEnterKey(key):
 			options := m.profileMenuOptions()
 			if len(options) == 0 {
 				return m, nil
@@ -166,18 +167,19 @@ func (m model) updateProfileMenu(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m model) updateProfileLogin(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
-		switch msg.String() {
-		case "q", "esc":
+		key := msg.String()
+		switch {
+		case isBackKey(key):
 			m.screen = screenProfileMenu
-		case "up", "k":
+		case isUpNav(key):
 			if m.profileLoginCursor > 0 {
 				m.profileLoginCursor--
 			}
-		case "down", "j":
+		case isDownNav(key):
 			if m.profileLoginCursor < len(m.profiles)-1 {
 				m.profileLoginCursor++
 			}
-		case "enter":
+		case isEnterKey(key):
 			if len(m.profiles) == 0 {
 				m.profileError = "No profiles available"
 				return m, nil
@@ -202,8 +204,9 @@ func (m model) updateProfileLogin(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m model) updateProfileRegister(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
-		switch msg.String() {
-		case "esc":
+		key := msg.String()
+		switch key {
+		case keyBack:
 			m.screen = screenProfileMenu
 			return m, nil
 		case "tab":
@@ -218,7 +221,7 @@ func (m model) updateProfileRegister(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.registerDisplayName = m.registerDisplayName[:len(m.registerDisplayName)-1]
 			}
 			return m, nil
-		case "enter":
+		case keyEnter:
 			m.profileError = ""
 			if m.registerField == 0 {
 				handle := m.registerHandle
@@ -281,19 +284,20 @@ func (m model) updateProfileRegister(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m model) updateTopicSelect(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
-		switch msg.String() {
-		case "q", "esc":
+		key := msg.String()
+		switch {
+		case isBackKey(key):
 			m.homeMenuCursor = 0
 			m.screen = screenHomeMenu
-		case "up", "k":
+		case isUpNav(key):
 			if m.topicCursor > 0 {
 				m.topicCursor--
 			}
-		case "down", "j":
+		case isDownNav(key):
 			if m.topicCursor < len(m.topics)-1 {
 				m.topicCursor++
 			}
-		case "enter":
+		case isEnterKey(key):
 			if len(m.topics) > 0 {
 				m.selectedTopic = m.topics[m.topicCursor]
 				// Cap default question count to available questions.
@@ -312,18 +316,19 @@ func (m model) updateTopicSelect(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m model) updateSessionConfig(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
-		switch msg.String() {
-		case "q", "esc":
+		key := msg.String()
+		switch {
+		case isBackKey(key):
 			m.screen = screenTopicSelect
-		case "right", "k":
+		case isAdjustUp(key):
 			if m.questionCount < m.selectedTopic.QuestionCount {
 				m.questionCount++
 			}
-		case "left", "j":
+		case isAdjustDown(key):
 			if m.questionCount > 1 {
 				m.questionCount--
 			}
-		case "enter":
+		case isEnterKey(key):
 			// Start the session via the engine.
 			engine := app.NewSessionEngine(
 				m.topicRepo, m.questionRepo,
@@ -362,20 +367,21 @@ func (m model) updateSessionConfig(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m model) updateQuestion(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
-		switch msg.String() {
-		case "q":
-			// Quit session early → go to summary.
+		key := msg.String()
+		switch {
+		case isBackKey(key):
+			// Cancel session and return to previous config screen.
 			_ = m.engine.EndSession()
-			m.screen = screenSummary
-		case "up", "k":
+			m.screen = screenSessionConfig
+		case isUpNav(key):
 			if m.choiceCursor > 0 {
 				m.choiceCursor--
 			}
-		case "down", "j":
+		case isDownNav(key):
 			if m.currentQuestion != nil && m.choiceCursor < len(m.currentQuestion.ShuffledChoices)-1 {
 				m.choiceCursor++
 			}
-		case " ":
+		case isToggleKey(key):
 			// Toggle selection (for multi_select, or single_select).
 			if m.currentQuestion != nil && m.currentQuestion.Question != nil {
 				choiceID := m.currentQuestion.ShuffledChoices[m.choiceCursor].ID
@@ -391,7 +397,7 @@ func (m model) updateQuestion(msg tea.Msg) (tea.Model, tea.Cmd) {
 					}
 				}
 			}
-		case "s":
+		case isSkipKey(key):
 			// Skip this question.
 			if m.currentQuestion != nil && m.currentQuestion.Question != nil {
 				_, _ = m.engine.RecordAttempt(m.currentQuestion.Question.ID, nil, true, 0)
@@ -402,7 +408,7 @@ func (m model) updateQuestion(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.showExplanations = false
 				m.screen = screenReview
 			}
-		case "enter":
+		case isEnterKey(key):
 			if m.currentQuestion != nil && m.currentQuestion.Question != nil && len(m.selected) > 0 {
 				// Submit answer.
 				selectedIDs := make([]string, 0, len(m.selected))
@@ -469,16 +475,17 @@ func (m model) questionStarted() time.Time {
 func (m model) updateReview(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
-		switch msg.String() {
-		case "e":
+		key := msg.String()
+		switch {
+		case isExplainKey(key):
 			// Toggle explanations.
 			m.showExplanations = !m.showExplanations
-		case "enter", " ":
+		case isEnterKey(key):
 			// Advance to next question.
 			m.advanceQuestion()
-		case "q":
+		case isBackKey(key):
 			_ = m.engine.EndSession()
-			m.screen = screenSummary
+			m.screen = screenSessionConfig
 		}
 	}
 	return m, nil
@@ -489,25 +496,19 @@ func (m model) updateReview(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m model) updateReviewBrowse(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
-		switch msg.String() {
-		case "enter", "n", "right":
+		key := msg.String()
+		switch {
+		case isEnterKey(key):
 			if m.reviewCursor < len(m.reviewQueue)-1 {
 				m.reviewCursor++
 				m.showExplanations = false
 			} else {
-				// End of review, back to summary.
-				m.screen = screenSummary
+				m.screen = m.reviewReturnScreen
 			}
-		case "p", "left":
-			if m.reviewCursor > 0 {
-				m.reviewCursor--
-				m.showExplanations = false
-			}
-		case "e":
+		case isExplainKey(key):
 			m.showExplanations = !m.showExplanations
-		case "q", "esc":
-			m.homeMenuCursor = 0
-			m.screen = screenHomeMenu
+		case isBackKey(key):
+			m.screen = m.reviewReturnScreen
 		}
 	}
 	return m, nil
@@ -518,15 +519,17 @@ func (m model) updateReviewBrowse(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m model) updateSummary(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
-		switch msg.String() {
-		case "q", "esc":
-			m.quitting = true
-			return m, tea.Quit
-		case "up", "k":
+		key := msg.String()
+		switch {
+		case isBackKey(key):
+			_ = m.reloadTopicsForCurrentUser()
+			m.homeMenuCursor = 0
+			m.screen = screenHomeMenu
+		case isUpNav(key):
 			if m.summaryCursor > 0 {
 				m.summaryCursor--
 			}
-		case "down", "j":
+		case isDownNav(key):
 			maxCursor := 2 // stats, home
 			if len(m.wrongAnswers) > 0 {
 				maxCursor = 3 // review, stats, home
@@ -534,7 +537,7 @@ func (m model) updateSummary(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.summaryCursor < maxCursor {
 				m.summaryCursor++
 			}
-		case "enter":
+		case isEnterKey(key):
 			options := m.summaryOptions()
 			if m.summaryCursor >= len(options) {
 				break
@@ -542,7 +545,7 @@ func (m model) updateSummary(msg tea.Msg) (tea.Model, tea.Cmd) {
 			switch options[m.summaryCursor] {
 			case "Review incorrect questions":
 				if len(m.wrongAnswers) > 0 {
-					m.startReviewSession()
+					m.startReviewSession(screenSummary)
 				}
 			case "View stats for this pack":
 				m.loadPackDetailStats(m.selectedTopic.Topic.ID)
@@ -552,10 +555,9 @@ func (m model) updateSummary(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.homeMenuCursor = 0
 				m.screen = screenHomeMenu
 			}
-		case "r":
-			// Quick shortcut: review wrong answers.
+		case isReviewKey(key):
 			if len(m.wrongAnswers) > 0 {
-				m.startReviewSession()
+				m.startReviewSession(screenSummary)
 			}
 		}
 	}
@@ -597,19 +599,23 @@ func (m model) homeMenuOptions() []string {
 func (m model) updateHomeMenu(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
-		switch msg.String() {
-		case "q":
+		key := msg.String()
+		switch {
+		case isQuitKey(key):
 			m.quitting = true
 			return m, tea.Quit
-		case "up", "k":
+		case isBackKey(key):
+			m.profileMenuCursor = 0
+			m.screen = screenProfileMenu
+		case isUpNav(key):
 			if m.homeMenuCursor > 0 {
 				m.homeMenuCursor--
 			}
-		case "down", "j":
+		case isDownNav(key):
 			if m.homeMenuCursor < len(m.homeMenuOptions())-1 {
 				m.homeMenuCursor++
 			}
-		case "enter":
+		case isEnterKey(key):
 			options := m.homeMenuOptions()
 			if m.homeMenuCursor >= len(options) {
 				return m, nil
@@ -619,7 +625,7 @@ func (m model) updateHomeMenu(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.screen = screenTopicSelect
 			case "Review Wrong Answers":
 				if len(m.wrongAnswers) > 0 {
-					m.startReviewSession()
+					m.startReviewSession(screenHomeMenu)
 				}
 			case "Stats":
 				m.loadGlobalStats()
@@ -630,6 +636,10 @@ func (m model) updateHomeMenu(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case "Quit":
 				m.quitting = true
 				return m, tea.Quit
+			}
+		case isReviewKey(key):
+			if len(m.wrongAnswers) > 0 {
+				m.startReviewSession(screenHomeMenu)
 			}
 		}
 	}
@@ -708,11 +718,12 @@ func (m *model) loadPackDetailStats(topicID int64) {
 func (m model) updateStatsGlobal(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
-		switch msg.String() {
-		case "q", "esc":
+		key := msg.String()
+		switch {
+		case isBackKey(key):
 			m.homeMenuCursor = 0
 			m.screen = screenHomeMenu
-		case "enter":
+		case isEnterKey(key):
 			m.loadPackListStats()
 			m.screen = screenStatsPackList
 		}
@@ -723,18 +734,19 @@ func (m model) updateStatsGlobal(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m model) updateStatsPackList(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
-		switch msg.String() {
-		case "q", "esc":
+		key := msg.String()
+		switch {
+		case isBackKey(key):
 			m.screen = screenStatsGlobal
-		case "up", "k":
+		case isUpNav(key):
 			if m.statsPackCursor > 0 {
 				m.statsPackCursor--
 			}
-		case "down", "j":
+		case isDownNav(key):
 			if m.statsPackCursor < len(m.statsPacks)-1 {
 				m.statsPackCursor++
 			}
-		case "enter":
+		case isEnterKey(key):
 			if len(m.statsPacks) > 0 {
 				sel := m.statsPacks[m.statsPackCursor]
 				m.loadPackDetailStats(sel.TopicID)
@@ -748,13 +760,11 @@ func (m model) updateStatsPackList(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m model) updateStatsPackDetail(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
-		switch msg.String() {
-		case "b", "esc":
+		key := msg.String()
+		switch {
+		case isBackKey(key):
 			m.loadPackListStats()
 			m.screen = screenStatsPackList
-		case "q":
-			m.homeMenuCursor = 0
-			m.screen = screenHomeMenu
 		}
 	}
 	return m, nil

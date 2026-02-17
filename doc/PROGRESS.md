@@ -36,6 +36,33 @@ All core capabilities are implemented, tested, and documented.
 
 ## Changelog
 
+### 2026-02-17 — Phase 10: TUI UX Consistency Refactor
+
+- Unified TUI input handling via central keymap in `internal/adapters/tui/keymap.go`
+  - Standardized keys: `esc` back, `enter` confirm, `↑/↓` + `j/k` navigation,
+    `space` toggle, `e` explanation toggle, `r` review (when available), `s` skip (quiz)
+  - Enforced top-level quit only (`q` on Profile Menu and Home), removing deep-screen quit behavior
+- Refactored screen update handlers to shared key predicates in `model.go`
+  - Removed mixed back conventions (`b` + `esc`) in favor of `esc` only
+  - Removed hidden review-browse shortcuts (`n/p/←/→`) so behavior matches on-screen help
+- Implemented consistent parent-return behavior for review browse
+  - Added `reviewReturnScreen` state and updated `startReviewSession(returnTo screen)`
+  - `esc` and end-of-review now return to the invoking screen (Home or Summary)
+- Added shared layout helpers in `internal/adapters/tui/layout.go`
+  - Horizontal centering support for primary menus/lists
+  - Unified footer renderer used across screens
+- Centered primary menus and list screens:
+  - Profile Menu, Profile Login, Home, Topic Select, Pack Stats List
+- Simplified profile presentation on Login/Home flow
+  - Removed redundant profile duplication when `Continue (...)` is already shown
+- Unified and corrected footer help text across screens to match actual key behavior
+  - Non-session screens: consistent navigate/select/back (and quit only where valid)
+  - Quiz screen: navigate/toggle/submit/cancel/skip
+  - Review screens: next/toggle explanation/back
+- Updated TUI tests for new review parent behavior and footer text expectations
+- Validation:
+  - `go test ./internal/adapters/tui -v -count=1` passes
+
 ### 2026-02-17 — Phase 9: Session Shuffle + Stats Timestamp Polish
 
 - Added session-scoped answer shuffling in `SessionEngine`:
