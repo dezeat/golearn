@@ -6,7 +6,6 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/dezeat/golearn/internal/app"
-	"github.com/dezeat/golearn/internal/domain"
 )
 
 // Init implements tea.Model. It returns no initial command.
@@ -42,6 +41,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.updateQuestion(msg)
 	case screenReview:
 		return m.updateReview(msg)
+	case screenReviewBrowse:
+		return m.updateReviewBrowse(msg)
 	case screenSummary:
 		return m.updateSummary(msg)
 	}
@@ -66,6 +67,8 @@ func (m model) View() string {
 		return m.viewQuestion()
 	case screenReview:
 		return m.viewReview()
+	case screenReviewBrowse:
+		return m.viewReviewBrowse()
 	case screenSummary:
 		return m.viewSummary()
 	}
@@ -123,11 +126,11 @@ func (m model) updateSessionConfig(msg tea.Msg) (tea.Model, tea.Cmd) {
 		switch msg.String() {
 		case "q", "esc":
 			m.screen = screenTopicSelect
-		case "up", "k":
+		case "right", "k":
 			if m.questionCount < m.selectedTopic.QuestionCount {
 				m.questionCount++
 			}
-		case "down", "j":
+		case "left", "j":
 			if m.questionCount > 1 {
 				m.questionCount--
 			}
@@ -155,8 +158,7 @@ func (m model) updateSessionConfig(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.answered = 0
 			m.correctCount = 0
 			m.totalLatency = 0
-			m.wrongQuestions = nil
-			m.reviewMode = false
+			m.wrongAnswers = nil
 
 			// Advance to the first question.
 			m.advanceQuestion()
@@ -202,9 +204,7 @@ func (m model) updateQuestion(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "s":
 			// Skip this question.
 			if m.currentQuestion != nil {
-				if !m.reviewMode {
-					_, _ = m.engine.RecordAttempt(m.currentQuestion.ID, nil, true, 0)
-				}
+				_, _ = m.engine.RecordAttempt(m.currentQuestion.ID, nil, true, 0)
 				m.answered++
 				m.lastSkipped = true
 				m.lastCorrect = false
@@ -221,15 +221,10 @@ func (m model) updateQuestion(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 
 				latencyMs := int(time.Since(m.questionStarted()).Milliseconds())
-				if !m.reviewMode {
-					correct, _ := m.engine.RecordAttempt(
-						m.currentQuestion.ID, selectedIDs, false, latencyMs,
-					)
-					m.lastCorrect = correct
-				} else {
-					// In review mode, evaluate locally.
-					m.lastCorrect = domain.EvaluateCorrectness(selectedIDs, m.currentQuestion.CorrectChoiceIDs)
-				}
+				correct, _ := m.engine.RecordAttempt(
+					m.currentQuestion.ID, selectedIDs, false, latencyMs,
+				)
+				m.lastCorrect = correct
 
 				m.answered++
 				m.totalLatency += latencyMs
@@ -237,9 +232,12 @@ func (m model) updateQuestion(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.submitted = true
 				if m.lastCorrect {
 					m.correctCount++
-				} else if !m.reviewMode {
-					// Track wrong questions only in normal mode.
-					m.wrongQuestions = append(m.wrongQuestions, *m.currentQuestion)
+				} else {
+					// Track wrong answers for review browse.
+					m.wrongAnswers = append(m.wrongAnswers, wrongAnswer{
+						Question:    *m.currentQuestion,
+						SelectedIDs: selectedIDs,
+					})
 				}
 				m.showExplanations = false
 				m.screen = screenReview
@@ -253,11 +251,6 @@ func (m model) updateQuestion(msg tea.Msg) (tea.Model, tea.Cmd) {
 var questionStartedAt time.Time
 
 func (m *model) advanceQuestion() {
-	// In review mode, use the review queue instead of the engine.
-	if m.reviewMode {
-		m.advanceReviewQuestion()
-		return
-	}
 	q := m.engine.GetNextQuestion()
 	if q == nil {
 		_ = m.engine.EndSession()
@@ -298,6 +291,34 @@ func (m model) updateReview(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+// --- Review Browse (read-only review of wrong answers) ---
+
+func (m model) updateReviewBrowse(msg tea.Msg) (tea.Model, tea.Cmd) {
+	switch msg := msg.(type) {
+	case tea.KeyMsg:
+		switch msg.String() {
+		case "enter", "n", "right":
+			if m.reviewCursor < len(m.reviewQueue)-1 {
+				m.reviewCursor++
+				m.showExplanations = false
+			} else {
+				// End of review, back to summary.
+				m.screen = screenSummary
+			}
+		case "p", "left":
+			if m.reviewCursor > 0 {
+				m.reviewCursor--
+				m.showExplanations = false
+			}
+		case "e":
+			m.showExplanations = !m.showExplanations
+		case "q", "esc":
+			m.screen = screenTopicSelect
+		}
+	}
+	return m, nil
+}
+
 // --- Summary ---
 
 func (m model) updateSummary(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -311,11 +332,26 @@ func (m model) updateSummary(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// Back to topic select.
 			m.screen = screenTopicSelect
 		case "r":
-			// Review mode: replay wrong questions.
-			if len(m.wrongQuestions) > 0 {
+			// Review mode: browse wrong answers (read-only).
+			if len(m.wrongAnswers) > 0 {
 				m.startReviewSession()
 			}
 		}
 	}
 	return m, nil
+}
+
+// contentWidth returns the available character width for content,
+// subtracting padding from the terminal width. Falls back to 80
+// columns when no WindowSizeMsg has been received yet.
+func (m model) contentWidth(padding int) int {
+	w := m.width
+	if w == 0 {
+		w = 80
+	}
+	cw := w - padding
+	if cw < 20 {
+		cw = 20
+	}
+	return cw
 }

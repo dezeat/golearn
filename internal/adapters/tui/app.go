@@ -93,6 +93,13 @@ type topicInfo struct {
 	TotalCorrect  int
 }
 
+// wrongAnswer pairs a question with the user's selected choices
+// for display in the review browse screen.
+type wrongAnswer struct {
+	Question    domain.Question
+	SelectedIDs []string
+}
+
 // screen represents which screen is currently active.
 type screen int
 
@@ -102,6 +109,7 @@ const (
 	screenSessionConfig               // session configuration
 	screenQuestion                    // answering a question
 	screenReview                      // quiz-show review mode (replaces screenFeedback)
+	screenReviewBrowse                // browse-only review of wrong answers
 	screenSummary                     // session summary
 )
 
@@ -145,12 +153,11 @@ type model struct {
 	correctCount int
 	totalLatency int // cumulative latency in milliseconds
 
-	// Track wrong questions for review
-	wrongQuestions []domain.Question
+	// Track wrong answers for review browse
+	wrongAnswers []wrongAnswer
 
-	// Review session mode: only replay wrong questions
-	reviewMode   bool
-	reviewQueue  []domain.Question
+	// Review browse state
+	reviewQueue  []wrongAnswer
 	reviewCursor int
 
 	// Window size

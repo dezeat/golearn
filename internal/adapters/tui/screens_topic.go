@@ -24,7 +24,8 @@ func (m model) viewIntro() string {
 	return b.String()
 }
 
-// viewTopicSelect renders the topic selection screen.
+// viewTopicSelect renders the topic selection screen with a fixed-column
+// layout that adapts to terminal width without horizontal overflow.
 func (m model) viewTopicSelect() string {
 	var b strings.Builder
 
@@ -37,20 +38,39 @@ func (m model) viewTopicSelect() string {
 		return b.String()
 	}
 
+	// Fixed-column layout: cursor(2) + name(nameW) + gap(2) + questions(14) + gap(2) + accuracy(5)
+	w := m.width
+	if w == 0 {
+		w = 80
+	}
+	const cursorW = 2
+	const qsColW = 14 // "999 questions"
+	const accColW = 5 // "100%" or "  —"
+	const gaps = 4    // two gaps of 2 chars
+	nameW := w - cursorW - gaps - qsColW - accColW
+	if nameW < 10 {
+		nameW = 10
+	}
+
 	for i, ti := range m.topics {
 		cursor := "  "
 		if i == m.topicCursor {
 			cursor = "▸ "
 		}
 
-		// Build the info line.
-		info := fmt.Sprintf("%d questions", ti.QuestionCount)
-		if ti.TotalAttempts > 0 {
-			pct := float64(ti.TotalCorrect) / float64(ti.TotalAttempts) * 100
-			info += fmt.Sprintf(" · %.0f%% accuracy", pct)
+		name := ti.Topic.Name
+		if len(name) > nameW {
+			name = name[:nameW-1] + "…"
 		}
 
-		b.WriteString(fmt.Sprintf("%s%-20s  %s\n", cursor, ti.Topic.Name, info))
+		qsStr := fmt.Sprintf("%d questions", ti.QuestionCount)
+		accStr := "—"
+		if ti.TotalAttempts > 0 {
+			pct := float64(ti.TotalCorrect) / float64(ti.TotalAttempts) * 100
+			accStr = fmt.Sprintf("%.0f%%", pct)
+		}
+
+		b.WriteString(fmt.Sprintf("%s%-*s  %-*s  %*s\n", cursor, nameW, name, qsColW, qsStr, accColW, accStr))
 	}
 
 	b.WriteString("\n  ↑/↓ or j/k to navigate · enter to select · q to quit\n")

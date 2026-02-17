@@ -3,6 +3,8 @@ package tui
 import (
 	"fmt"
 	"strings"
+
+	"github.com/charmbracelet/lipgloss"
 )
 
 // viewQuestion renders the question answering screen.
@@ -10,9 +12,6 @@ func (m model) viewQuestion() string {
 	var b strings.Builder
 
 	header := fmt.Sprintf("golearn — Question %d/%d", m.questionNum, m.totalQuestions)
-	if m.reviewMode {
-		header += " (Review)"
-	}
 	b.WriteString(styleHeader.Render(header) + "\n")
 	b.WriteString("════════════════════════\n\n")
 
@@ -22,6 +21,7 @@ func (m model) viewQuestion() string {
 	}
 
 	q := m.currentQuestion
+	cw := m.contentWidth(2)
 
 	// Show type hint.
 	typeHint := "Select one"
@@ -32,13 +32,17 @@ func (m model) viewQuestion() string {
 
 	// Show intro if present.
 	if q.Intro != "" {
-		b.WriteString(fmt.Sprintf("  %s\n\n", q.Intro))
+		b.WriteString(wrapAndIndent(q.Intro, cw, "  ") + "\n\n")
 	}
 
 	// Show prompt.
-	b.WriteString(fmt.Sprintf("  %s\n\n", styleBold.Render(q.Prompt)))
+	b.WriteString(styleBold.Render(wrapAndIndent(q.Prompt, cw, "  ")) + "\n\n")
 
-	// Show choices.
+	// Show choices with wrapping.
+	const choicePad = 10 // visual: "  ▸ ● A) "
+	choiceCW := m.contentWidth(choicePad)
+	contIndent := "          " // 10 spaces
+
 	for i, c := range q.Choices {
 		cursor := "  "
 		if i == m.choiceCursor {
@@ -51,7 +55,13 @@ func (m model) viewQuestion() string {
 			marker = "●"
 		}
 
-		b.WriteString(fmt.Sprintf("  %s%s %s) %s\n", cursor, marker, c.ID, c.Text))
+		choiceText := fmt.Sprintf("%s) %s", c.ID, c.Text)
+		wrappedLines := strings.Split(wrapText(choiceText, choiceCW), "\n")
+
+		b.WriteString(fmt.Sprintf("  %s%s %s\n", cursor, marker, wrappedLines[0]))
+		for _, l := range wrappedLines[1:] {
+			b.WriteString(contIndent + l + "\n")
+		}
 	}
 
 	b.WriteString("\n  ↑/↓ navigate · space toggle · enter submit · s skip · q quit\n")
@@ -73,12 +83,13 @@ func (m model) viewReview() string {
 	}
 
 	q := m.currentQuestion
+	cw := m.contentWidth(2)
 
 	// Show prompt.
 	if q.Intro != "" {
-		b.WriteString(fmt.Sprintf("  %s\n\n", q.Intro))
+		b.WriteString(wrapAndIndent(q.Intro, cw, "  ") + "\n\n")
 	}
-	b.WriteString(fmt.Sprintf("  %s\n\n", styleBold.Render(q.Prompt)))
+	b.WriteString(styleBold.Render(wrapAndIndent(q.Prompt, cw, "  ")) + "\n\n")
 
 	if m.lastSkipped {
 		b.WriteString("  ⏭  " + styleDim.Render("Skipped") + "\n\n")
@@ -94,29 +105,33 @@ func (m model) viewReview() string {
 		correctSet[id] = true
 	}
 
-	// Show choices with visual feedback.
+	// Show choices with visual feedback and wrapping.
+	const choicePad = 8 // visual: "  ▸ ✔ " prefix
+	choiceCW := m.contentWidth(choicePad)
+	contIndent := "        " // 8 spaces
+
 	for _, c := range q.Choices {
 		isCorrect := correctSet[c.ID]
 		isSelected := m.selected[c.ID]
 
-		var marker, line string
+		var marker string
+		var choiceStyle *lipgloss.Style
 		switch {
 		case isCorrect && isSelected:
-			// Correct and user selected it — green ✔
 			marker = styleCorrect.Render("✔")
-			line = styleCorrect.Render(fmt.Sprintf("%s) %s", c.ID, c.Text))
+			s := styleCorrect
+			choiceStyle = &s
 		case isCorrect && !isSelected:
-			// Correct but user didn't select — green (missed)
 			marker = styleCorrect.Render("✔")
-			line = styleCorrect.Render(fmt.Sprintf("%s) %s", c.ID, c.Text))
+			s := styleCorrect
+			choiceStyle = &s
 		case !isCorrect && isSelected:
-			// Wrong and user selected it — red ✘
 			marker = styleIncorrect.Render("✘")
-			line = styleIncorrect.Render(fmt.Sprintf("%s) %s", c.ID, c.Text))
+			s := styleIncorrect
+			choiceStyle = &s
 		default:
-			// Wrong and user didn't select — neutral
-			marker = "  "
-			line = fmt.Sprintf("%s) %s", c.ID, c.Text)
+			marker = " "
+			choiceStyle = nil
 		}
 
 		// Add selection indicator.
@@ -125,20 +140,33 @@ func (m model) viewReview() string {
 			selectIndicator = styleSelected.Render("▸")
 		}
 
-		b.WriteString(fmt.Sprintf("  %s %s %s\n", selectIndicator, marker, line))
+		choiceText := fmt.Sprintf("%s) %s", c.ID, c.Text)
+		wrappedLines := strings.Split(wrapText(choiceText, choiceCW), "\n")
+
+		for li, l := range wrappedLines {
+			if choiceStyle != nil {
+				l = choiceStyle.Render(l)
+			}
+			if li == 0 {
+				b.WriteString(fmt.Sprintf("  %s %s %s\n", selectIndicator, marker, l))
+			} else {
+				b.WriteString(contIndent + l + "\n")
+			}
+		}
 
 		// Show per-choice explanation if toggled.
 		if m.showExplanations && q.Rationale.PerChoice != nil {
 			if explanation, ok := q.Rationale.PerChoice[c.ID]; ok {
-				b.WriteString(fmt.Sprintf("       %s\n", styleExplain.Render(explanation)))
+				expCW := m.contentWidth(7)
+				b.WriteString(styleExplain.Render(wrapAndIndent(explanation, expCW, "       ")) + "\n")
 			}
 		}
 	}
 
 	// Show correct explanation if available and explanations toggled.
 	if m.showExplanations && q.Rationale.Correct != "" {
-		b.WriteString(fmt.Sprintf("\n  %s\n", styleBold.Render("Explanation:")))
-		b.WriteString(fmt.Sprintf("  %s\n", styleExplain.Render(q.Rationale.Correct)))
+		b.WriteString("\n" + styleBold.Render("  Explanation:") + "\n")
+		b.WriteString(styleExplain.Render(wrapAndIndent(q.Rationale.Correct, cw, "  ")) + "\n")
 	}
 
 	// Controls.
@@ -148,6 +176,119 @@ func (m model) viewReview() string {
 		explainHint = "e hide explanations"
 	}
 	b.WriteString(fmt.Sprintf("  %s · enter next · q end session\n", explainHint))
+
+	return b.String()
+}
+
+// viewReviewBrowse renders the read-only review of wrong answers.
+// No new attempts are recorded — just browse with explanations.
+func (m model) viewReviewBrowse() string {
+	var b strings.Builder
+
+	if len(m.reviewQueue) == 0 {
+		b.WriteString("  No wrong answers to review.\n")
+		return b.String()
+	}
+
+	wa := m.reviewQueue[m.reviewCursor]
+	q := &wa.Question
+	cw := m.contentWidth(2)
+
+	header := fmt.Sprintf("golearn — Review (%d/%d)", m.reviewCursor+1, len(m.reviewQueue))
+	b.WriteString(styleHeader.Render(header) + "\n")
+	b.WriteString("════════════════════════\n\n")
+
+	// Type hint.
+	typeHint := "Single select"
+	if q.Type == "multi_select" {
+		typeHint = "Multi select"
+	}
+	b.WriteString(fmt.Sprintf("  [%s]\n\n", typeHint))
+
+	// Intro.
+	if q.Intro != "" {
+		b.WriteString(wrapAndIndent(q.Intro, cw, "  ") + "\n\n")
+	}
+
+	// Prompt.
+	b.WriteString(styleBold.Render(wrapAndIndent(q.Prompt, cw, "  ")) + "\n\n")
+
+	// Build lookup sets.
+	correctSet := make(map[string]bool, len(q.CorrectChoiceIDs))
+	for _, id := range q.CorrectChoiceIDs {
+		correctSet[id] = true
+	}
+	selectedSet := make(map[string]bool, len(wa.SelectedIDs))
+	for _, id := range wa.SelectedIDs {
+		selectedSet[id] = true
+	}
+
+	// Show choices with feedback.
+	const choicePad = 8
+	choiceCW := m.contentWidth(choicePad)
+	contIndent := "        "
+
+	for _, c := range q.Choices {
+		isCorrect := correctSet[c.ID]
+		wasSelected := selectedSet[c.ID]
+
+		var marker string
+		var choiceStyle *lipgloss.Style
+		switch {
+		case isCorrect:
+			marker = styleCorrect.Render("✔")
+			s := styleCorrect
+			choiceStyle = &s
+		case wasSelected:
+			marker = styleIncorrect.Render("✘")
+			s := styleIncorrect
+			choiceStyle = &s
+		default:
+			marker = " "
+			choiceStyle = nil
+		}
+
+		indicator := " "
+		if wasSelected {
+			indicator = styleSelected.Render("▸")
+		}
+
+		choiceText := fmt.Sprintf("%s) %s", c.ID, c.Text)
+		wrappedLines := strings.Split(wrapText(choiceText, choiceCW), "\n")
+
+		for li, l := range wrappedLines {
+			if choiceStyle != nil {
+				l = choiceStyle.Render(l)
+			}
+			if li == 0 {
+				b.WriteString(fmt.Sprintf("  %s %s %s\n", indicator, marker, l))
+			} else {
+				b.WriteString(contIndent + l + "\n")
+			}
+		}
+
+		// Per-choice explanation.
+		if m.showExplanations && q.Rationale.PerChoice != nil {
+			if explanation, ok := q.Rationale.PerChoice[c.ID]; ok {
+				expCW := m.contentWidth(7)
+				b.WriteString(styleExplain.Render(wrapAndIndent(explanation, expCW, "       ")) + "\n")
+			}
+		}
+	}
+
+	// Correct explanation.
+	if m.showExplanations && q.Rationale.Correct != "" {
+		b.WriteString("\n" + styleBold.Render("  Explanation:") + "\n")
+		b.WriteString(styleExplain.Render(wrapAndIndent(q.Rationale.Correct, cw, "  ")) + "\n")
+	}
+
+	// Controls.
+	b.WriteString("\n")
+	explainHint := "e explanations"
+	if m.showExplanations {
+		explainHint = "e hide explanations"
+	}
+	b.WriteString(fmt.Sprintf("  enter next · p previous · %s · q exit\n", explainHint))
 
 	return b.String()
 }

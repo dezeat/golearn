@@ -34,6 +34,37 @@ All core capabilities are implemented, tested, and documented.
 
 ## Changelog
 
+### 2026-02-17 — Phase 6: TUI UX Polish
+
+- Fixed text overflow: all long text now hard-wraps to terminal width
+  - Created `internal/adapters/tui/wrap.go` with `wrapText` and `wrapAndIndent` helpers
+  - Uses `WindowSizeMsg` width with `contentWidth(padding)` method (default 80, min content 20)
+  - Wrapping applied to: intro, prompt, choice text, rationale.correct, rationale.per_choice
+  - Continuation lines use consistent indentation aligned to content start
+- Redesigned review mode as read-only browse (no new quiz session)
+  - New `screenReviewBrowse` mode: cycles through wrong answers without recording attempts
+  - Shows correct answers (green ✔), user's wrong selections (red ✘), and explanations
+  - Tracks user's original selections via `wrongAnswer{Question, SelectedIDs}` struct
+  - Controls: enter/n/→ next, p/← previous, e toggle explanations, q exit to topics
+  - Removed old review-as-quiz flow that created a new answering session
+- Fixed question-count selection controls to match visual hints
+  - Session config now uses ←/→ (and j/k) to increment/decrement count
+  - Hint text updated from "↑/↓" to "←/→" to match the ◀ N ▶ display
+- Implemented tabular topic list with fixed-column layout
+  - Column 1: topic name (variable width, truncated with "…" to fit)
+  - Column 2: "N questions" (right-aligned, 14-char column)
+  - Column 3: "N%" accuracy (right-aligned, 5-char column)
+  - Layout adapts to terminal width; never overflows horizontally
+  - Selected row highlighting preserves column alignment
+- Added 5 new tests (42 total):
+  - `TestWrapText`: 12 table-driven sub-tests covering word wrap, long words, newlines, edge cases
+  - `TestWrapText_NoLineExceedsWidth`: property test verifying no output line exceeds width
+  - `TestWrapAndIndent`: indent + wrap integration
+  - `TestReviewBrowseView`: browse view renders header, prompt, and controls
+  - `TestContentWidth`: padding and default width calculations
+- Updated `TestReviewSessionSetup` for new browse-mode review (wrongAnswer type, screenReviewBrowse)
+- All 42 tests pass, `make check` green
+
 ### 2026-02-17 — Phase 5: UX Polish + Explained Pack + Question Standard
 
 - Created `examples/databricks-pde-explained.yaml`: 15-question PDE pack with full rationale

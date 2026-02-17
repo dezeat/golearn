@@ -3,9 +3,6 @@ package tui
 import (
 	"fmt"
 	"strings"
-	"time"
-
-	"github.com/dezeat/golearn/internal/domain"
 )
 
 // viewSummary renders the session summary screen with review option.
@@ -35,7 +32,7 @@ func (m model) viewSummary() string {
 		b.WriteString("  Accuracy:       —\n")
 	}
 
-	wrongCount := len(m.wrongQuestions)
+	wrongCount := len(m.wrongAnswers)
 	if wrongCount > 0 {
 		b.WriteString(fmt.Sprintf("\n  %s\n",
 			styleIncorrect.Render(fmt.Sprintf("  %d question(s) answered incorrectly", wrongCount))))
@@ -47,37 +44,12 @@ func (m model) viewSummary() string {
 	return b.String()
 }
 
-// startReviewSession creates a review-only session from wrong questions.
+// startReviewSession sets up the review browse queue from wrong answers.
+// No new quiz session is created — just a read-only browse through mistakes.
 func (m *model) startReviewSession() {
-	m.reviewMode = true
-	m.reviewQueue = make([]domain.Question, len(m.wrongQuestions))
-	copy(m.reviewQueue, m.wrongQuestions)
+	m.reviewQueue = make([]wrongAnswer, len(m.wrongAnswers))
+	copy(m.reviewQueue, m.wrongAnswers)
 	m.reviewCursor = 0
-	m.totalQuestions = len(m.reviewQueue)
-	m.questionNum = 0
-	m.answered = 0
-	m.correctCount = 0
-	m.totalLatency = 0
-	m.wrongQuestions = nil
-
-	m.advanceReviewQuestion()
-}
-
-// advanceReviewQuestion serves the next question from the review queue.
-func (m *model) advanceReviewQuestion() {
-	if m.reviewCursor >= len(m.reviewQueue) {
-		m.screen = screenSummary
-		m.reviewMode = false
-		return
-	}
-	q := &m.reviewQueue[m.reviewCursor]
-	m.reviewCursor++
-	m.currentQuestion = q
-	m.questionNum++
-	m.choiceCursor = 0
-	m.selected = make(map[string]bool)
-	m.submitted = false
 	m.showExplanations = false
-	m.screen = screenQuestion
-	questionStartedAt = time.Now()
+	m.screen = screenReviewBrowse
 }
