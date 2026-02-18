@@ -57,7 +57,10 @@ golearn/
 │   │   ├── import_pack.go         # parse → validate → normalise → hash → persist
 │   │   ├── export_pack.go         # load → sort → serialise to YAML/JSON
 │   │   ├── session.go             # session lifecycle engine
-│   │   └── selector.go            # question selection policy (unseen → weak → fill)
+│   │   ├── selector.go            # question selection policy (unseen → weak → fill)
+│   │   ├── selection_mode.go      # SelectionMode type, SessionConfig, ModeParams
+│   │   ├── selector_difficulty.go # By Difficulty selector (filter bucket → Balanced)
+│   │   └── selector_weakest.go    # Weakest selector (by tag or by question)
 │   └── adapters/                  # infrastructure implementations
 │       ├── sqlite/
 │       │   ├── db.go              # Open, WAL + FK pragmas, sequential migrations
@@ -268,15 +271,46 @@ it as a duplicate.
 
 ## Selection Policy
 
-Questions are selected using a three-tier priority system:
+### Selection Modes
+
+Sessions support three question selection modes, chosen during session configuration:
+
+| Mode             | Key           | Description                                          |
+|------------------|---------------|------------------------------------------------------|
+| **Balanced**     | `balanced`    | Default. Unseen → weak → random fill (original policy) |
+| **By Difficulty** | `by_difficulty` | Filters to a single difficulty bucket, then applies Balanced within |
+| **Weakest**      | `weakest`     | Two sub-modes: By Tag or By Question                 |
+
+### Balanced (default)
+
+Three-tier priority system:
 
 1. **Unseen bucket** — questions with zero prior attempts, shuffled randomly
 2. **Weak bucket** — questions with at least one wrong attempt, sorted by wrong rate descending
 3. **Fill bucket** — remaining questions (all correct history), shuffled randomly
 
 Buckets are concatenated in order and capped at `n` (requested session length).
-A seeded `*rand.Rand` is used for all shuffling to ensure deterministic test behavior.
 
+### By Difficulty
+
+Filters questions to the selected difficulty bucket (`easy`, `medium`, or `hard`),
+then applies Balanced selection within that subset. If fewer questions exist in the
+bucket than requested, the session starts with a reduced count and shows a note.
+
+### Weakest
+
+Two sub-modes:
+
+- **By Question** — ranks questions by wrong rate descending (min 2 attempts), fills remainder with Balanced
+- **By Tag** — finds the tag with lowest accuracy (min 5 attempts from stats repo), filters to questions with that tag, applies Balanced within
+
+### Implementation
+
+`SessionConfig` struct holds mode, question count, and mode-specific parameters.
+`StartSessionWithConfig` routes to the correct selector. Mode and params are
+persisted in `mode_params_json` on the sessions table for audit.
+
+A seeded `*rand.Rand` is used for all shuffling to ensure deterministic test behavior.
 Per-question stats (`attempts_count`, `wrong_count`) are computed from the `attempts`
 table grouped by `question_id` and filtered by `user_id`.
 
@@ -368,11 +402,33 @@ intentional MVP constraint — the engine is lightweight and instantiated per se
 After login/register, users land on the Home Menu:
 
 ```
-1) Start Practice     → Topic Select → Session Config → Quiz → Summary
+1) Start Practice     → Topic Select → Session Config (mode picker) → Quiz → Summary
 2) Review Wrong       → Browse incorrect from last session (disabled if none)
-3) Stats              → Global Stats → Pack List → Pack Detail
+3) Stats              → Stats Menu → {Global Stats, Stats by Pack → Pack Detail}
 4) Switch Profile     → Profile Menu (login/register)
 5) Quit
+```
+
+### Session Config
+
+The session configuration screen is a multi-field picker:
+
+```
+  Questions:   ◀ 10 ▶
+  Mode:        ◀ Balanced ▶
+  [sub-option shown for By Difficulty / Weakest]
+```
+
+↑/↓ navigates fields, ←/→ adjusts values, Enter starts the session.
+
+### Stats Menu
+
+A hub screen between Home and stats views:
+
+```
+  Global Stats      → aggregated metrics across all packs
+  Stats by Pack     → pack list sorted by attempts (most practiced first)
+  Back              → Home
 ```
 
 ### CLI Commands
@@ -410,6 +466,7 @@ All stats are **user-scoped** — switching profile changes all stats displays.
 | Coverage %           | Topic     | `distinct_questions_attempted / total_questions * 100`    |
 | Most practiced       | Global    | Topic with most non-skipped attempts                      |
 | Weakest              | Global    | Topic with lowest accuracy (minimum 5 attempts)           |
+| Strongest            | Global    | Topic with highest accuracy (minimum 5 attempts)          |
 
 ### Difficulty Bucketing
 

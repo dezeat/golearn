@@ -17,7 +17,7 @@ All core capabilities are implemented, tested, and documented.
 | Import use case | ✅ Done          | Validate → normalise → hash → dedupe → insert |
 | CLI (import)    | ✅ Done          | `golearn import <path>` with `--db` flag |
 | Session engine  | ✅ Done          | StartSession, GetNextQuestion, RecordAttempt, EndSession |
-| Selection policy| ✅ Done          | Unseen → weak → random fill          |
+| Selection policy| ✅ Done          | Balanced, By Difficulty, Weakest modes |
 | CLI (run)       | ✅ Done          | `golearn run <topic-slug> --n N`     |
 | Export use case | ✅ Done          | Deterministic ordering, YAML + JSON output |
 | CLI (export)    | ✅ Done          | `golearn export <slug> --out <path> [--format]` |
@@ -27,7 +27,7 @@ All core capabilities are implemented, tested, and documented.
 | Stats feature   | ✅ Done          | Global, per-pack, difficulty, tags, weak questions, trends |
 | Example packs   | ✅ Done          | `go-basics.yaml`, `mvp-basics.yaml`, `databricks-pde-explained-2.yaml` |
 | CLI (help)      | ✅ Done          | `golearn help` with examples         |
-| Tests           | ✅ Done          | 70+ tests: validation, hashing, correctness, selector, session, export, integration, profiles, stats, explanation, reset |
+| Tests           | ✅ Done          | 80+ tests: validation, hashing, correctness, selector, modes, session, export, integration, profiles, stats, explanation, reset |
 | Makefile        | ✅ Done          | `fmt`, `vet`, `lint`, `test`, `check` |
 | Lint config     | ✅ Done          | `.golangci.yml` with sensible rules  |
 | CI pipeline     | ✅ Done          | GitHub Actions workflow (`.github/workflows/ci.yml`) |
