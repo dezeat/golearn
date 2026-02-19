@@ -11,25 +11,10 @@ func (m *model) setDisplayLabelMapping(choices []domain.Choice) {
 	m.choiceIDByDisplayLabel = make(map[string]string, len(choices))
 
 	for i, c := range choices {
-		label := displayLabelForIndex(i)
+		label := domain.DisplayLabelForIndex(i)
 		m.displayLabelByChoiceID[c.ID] = label
 		m.choiceIDByDisplayLabel[label] = c.ID
 	}
-}
-
-func displayLabelForIndex(index int) string {
-	if index < 0 {
-		return ""
-	}
-
-	value := index + 1
-	label := ""
-	for value > 0 {
-		value--
-		label = string(rune('A'+(value%26))) + label
-		value /= 26
-	}
-	return label
 }
 
 func (m model) displayLabelForChoiceID(choiceID string) string {

@@ -2,7 +2,9 @@ package sqlite
 
 import (
 	"database/sql"
+	"encoding/json"
 	"fmt"
+	"sort"
 
 	"github.com/dezeat/golearn/internal/ports"
 )
@@ -68,7 +70,7 @@ func (r *StatsRepo) GlobalStats(userID int64) (*ports.GlobalStats, error) {
 	}
 
 	// Weakest topic (lowest accuracy, minimum 5 answered attempts).
-	const minForWeak = 5
+	const minForWeak = 5 // minimum attempts to rank as weakest/strongest
 	err = r.db.QueryRow(`
 		SELECT t.name FROM attempts a
 		JOIN questions q ON q.id = a.question_id
@@ -183,35 +185,83 @@ func (r *StatsRepo) TopicSummary(userID, topicID int64) (*ports.TopicSummary, er
 	return ts, nil
 }
 
-// TopicSummaries returns stats for all topics for a user.
+// TopicSummaries returns stats for all topics for a user using a single
+// aggregate query instead of per-topic lookups (eliminates N+1 pattern).
 func (r *StatsRepo) TopicSummaries(userID int64) ([]ports.TopicSummary, error) {
-	rows, err := r.db.Query(`SELECT id FROM topics ORDER BY slug`)
+	rows, err := r.db.Query(`
+		SELECT
+			t.id,
+			t.name,
+			(SELECT COUNT(*) FROM questions WHERE topic_id = t.id) AS total_questions,
+			COALESCE((
+				SELECT COUNT(DISTINCT a.question_id)
+				FROM attempts a
+				JOIN questions q ON q.id = a.question_id
+				WHERE a.user_id = ? AND q.topic_id = t.id
+			), 0) AS seen_questions,
+			COALESCE((
+				SELECT SUM(CASE WHEN a.skipped = 0 THEN 1 ELSE 0 END)
+				FROM attempts a
+				JOIN questions q ON q.id = a.question_id
+				WHERE a.user_id = ? AND q.topic_id = t.id
+			), 0) AS answered,
+			COALESCE((
+				SELECT SUM(CASE WHEN a.skipped = 1 THEN 1 ELSE 0 END)
+				FROM attempts a
+				JOIN questions q ON q.id = a.question_id
+				WHERE a.user_id = ? AND q.topic_id = t.id
+			), 0) AS skipped,
+			COALESCE((
+				SELECT SUM(a.correct)
+				FROM attempts a
+				JOIN questions q ON q.id = a.question_id
+				WHERE a.user_id = ? AND q.topic_id = t.id AND a.skipped = 0
+			), 0) AS correct,
+			COALESCE((
+				SELECT SUM(a.latency_ms)
+				FROM attempts a
+				JOIN questions q ON q.id = a.question_id
+				WHERE a.user_id = ? AND q.topic_id = t.id AND a.skipped = 0
+			), 0) AS total_latency_ms,
+			(
+				SELECT MAX(a.created_at)
+				FROM attempts a
+				JOIN questions q ON q.id = a.question_id
+				WHERE a.user_id = ? AND q.topic_id = t.id
+			) AS last_practiced
+		FROM topics t
+		ORDER BY t.slug`,
+		userID, userID, userID, userID, userID, userID)
 	if err != nil {
-		return nil, fmt.Errorf("list topics: %w", err)
+		return nil, fmt.Errorf("topic summaries: %w", err)
 	}
 	defer rows.Close()
 
-	var ids []int64
+	var summaries []ports.TopicSummary
 	for rows.Next() {
-		var id int64
-		if err := rows.Scan(&id); err != nil {
-			return nil, fmt.Errorf("scan topic id: %w", err)
+		var ts ports.TopicSummary
+		var correct, totalLatencyMs int64
+		var lastAt sql.NullString
+		if err := rows.Scan(
+			&ts.TopicID, &ts.TopicName, &ts.TotalQuestions,
+			&ts.SeenQuestions, &ts.AttemptsAnswered, &ts.AttemptsSkipped,
+			&correct, &totalLatencyMs, &lastAt,
+		); err != nil {
+			return nil, fmt.Errorf("scan topic summary: %w", err)
 		}
-		ids = append(ids, id)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-
-	summaries := make([]ports.TopicSummary, 0, len(ids))
-	for _, id := range ids {
-		ts, err := r.TopicSummary(userID, id)
-		if err != nil {
-			return nil, err
+		if ts.TotalQuestions > 0 {
+			ts.CoveragePct = float64(ts.SeenQuestions) / float64(ts.TotalQuestions) * 100
 		}
-		summaries = append(summaries, *ts)
+		if ts.AttemptsAnswered > 0 {
+			ts.AccuracyPct = float64(correct) / float64(ts.AttemptsAnswered) * 100
+			ts.AvgLatencySeconds = float64(totalLatencyMs) / 1000.0 / float64(ts.AttemptsAnswered)
+		}
+		if lastAt.Valid {
+			ts.LastPracticedAt = lastAt.String
+		}
+		summaries = append(summaries, ts)
 	}
-	return summaries, nil
+	return summaries, rows.Err()
 }
 
 // difficultyBucket maps a question's string difficulty to a display label.
@@ -291,60 +341,76 @@ func (r *StatsRepo) DifficultyStats(userID, topicID int64) ([]ports.DifficultySt
 
 // TagStats returns per-tag stats for a user+topic, filtering by minAttempts.
 func (r *StatsRepo) TagStats(userID, topicID int64, minAttempts int) ([]ports.TagStat, error) {
-	// Tags are stored as JSON arrays. We need to join tags with attempts.
-	// Since SQLite doesn't have native JSON array unnest in all versions,
-	// we load question IDs + tags in Go and aggregate.
-	type qTag struct {
-		questionID int64
-		tag        string
-	}
+	// Tags are stored as JSON arrays. Since SQLite doesn't have native
+	// JSON array unnest in all versions, we load question tags in Go,
+	// then fetch per-question attempt stats in a single aggregate query.
 
-	rows, err := r.db.Query(`
+	// Step 1: load question → tags mapping.
+	tagRows, err := r.db.Query(`
 		SELECT id, tags_json FROM questions WHERE topic_id = ?`, topicID)
 	if err != nil {
 		return nil, fmt.Errorf("load question tags: %w", err)
 	}
-	defer rows.Close()
+	defer tagRows.Close()
 
-	// Build tag -> []questionID mapping.
 	tagQuestions := map[string][]int64{}
-	for rows.Next() {
+	for tagRows.Next() {
 		var qID int64
 		var tagsJSON string
-		if err := rows.Scan(&qID, &tagsJSON); err != nil {
+		if err := tagRows.Scan(&qID, &tagsJSON); err != nil {
 			return nil, fmt.Errorf("scan question tag: %w", err)
 		}
-		tags := parseJSONStringArray(tagsJSON)
-		for _, tag := range tags {
+		for _, tag := range parseJSONStringArray(tagsJSON) {
 			if tag != "" {
 				tagQuestions[tag] = append(tagQuestions[tag], qID)
 			}
 		}
 	}
-	if err := rows.Err(); err != nil {
+	if err := tagRows.Err(); err != nil {
 		return nil, err
 	}
-
 	if len(tagQuestions) == 0 {
 		return nil, nil
 	}
 
-	// For each tag, query attempts for its questions.
+	// Step 2: fetch per-question attempt stats in a single query.
+	type qStat struct {
+		answered int
+		correct  int
+	}
+	statsByQ := map[int64]qStat{}
+
+	statRows, err := r.db.Query(`
+		SELECT a.question_id, COUNT(*), COALESCE(SUM(a.correct), 0)
+		FROM attempts a
+		JOIN questions q ON q.id = a.question_id
+		WHERE a.user_id = ? AND q.topic_id = ? AND a.skipped = 0
+		GROUP BY a.question_id`, userID, topicID)
+	if err != nil {
+		return nil, fmt.Errorf("tag stats batch query: %w", err)
+	}
+	defer statRows.Close()
+
+	for statRows.Next() {
+		var qID int64
+		var a, c int
+		if err := statRows.Scan(&qID, &a, &c); err != nil {
+			return nil, fmt.Errorf("scan tag stat: %w", err)
+		}
+		statsByQ[qID] = qStat{answered: a, correct: c}
+	}
+	if err := statRows.Err(); err != nil {
+		return nil, err
+	}
+
+	// Step 3: aggregate per tag.
 	var result []ports.TagStat
 	for tag, qIDs := range tagQuestions {
 		var answered, correct int
 		for _, qID := range qIDs {
-			var a, c int
-			err := r.db.QueryRow(`
-				SELECT COUNT(*), COALESCE(SUM(correct), 0)
-				FROM attempts
-				WHERE user_id = ? AND question_id = ? AND skipped = 0`,
-				userID, qID).Scan(&a, &c)
-			if err != nil {
-				return nil, fmt.Errorf("tag stat query: %w", err)
-			}
-			answered += a
-			correct += c
+			s := statsByQ[qID]
+			answered += s.answered
+			correct += s.correct
 		}
 		if answered < minAttempts {
 			continue
@@ -360,7 +426,9 @@ func (r *StatsRepo) TagStats(userID, topicID int64, minAttempts int) ([]ports.Ta
 	}
 
 	// Sort by accuracy ascending (weakest first).
-	sortTagStats(result)
+	sort.Slice(result, func(i, j int) bool {
+		return result[i].AccuracyPct < result[j].AccuracyPct
+	})
 	return result, nil
 }
 
@@ -397,175 +465,83 @@ func (r *StatsRepo) WeakQuestions(userID, topicID int64, minAttempts, limit int)
 }
 
 // SessionTrend returns accuracy per session for the last N sessions of a topic.
+// Uses a single aggregate query with GROUP BY instead of per-session lookups.
 func (r *StatsRepo) SessionTrend(userID, topicID int64, limitN int) ([]float64, error) {
 	rows, err := r.db.Query(`
-		SELECT s.id, s.started_at
-		FROM sessions s
-		WHERE s.user_id = ? AND s.topic_id = ? AND s.ended_at IS NOT NULL
-		ORDER BY s.started_at DESC
-		LIMIT ?`, userID, topicID, limitN)
+		SELECT
+			COUNT(*) AS answered,
+			COALESCE(SUM(a.correct), 0) AS correct
+		FROM attempts a
+		JOIN sessions s ON s.id = a.session_id
+		WHERE a.user_id = ? AND s.topic_id = ? AND s.ended_at IS NOT NULL AND a.skipped = 0
+		  AND s.id IN (
+			SELECT s2.id FROM sessions s2
+			WHERE s2.user_id = ? AND s2.topic_id = ? AND s2.ended_at IS NOT NULL
+			ORDER BY s2.started_at DESC LIMIT ?
+		  )
+		GROUP BY s.id
+		ORDER BY s.started_at ASC`, userID, topicID, userID, topicID, limitN)
 	if err != nil {
 		return nil, fmt.Errorf("session trend query: %w", err)
 	}
 	defer rows.Close()
 
-	type sessionRef struct {
-		id int64
-	}
-	var refs []sessionRef
+	var trend []float64
 	for rows.Next() {
-		var sr sessionRef
-		var startedAt string
-		if err := rows.Scan(&sr.id, &startedAt); err != nil {
-			return nil, fmt.Errorf("scan session ref: %w", err)
-		}
-		refs = append(refs, sr)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-
-	// Reverse to get chronological order.
-	for i, j := 0, len(refs)-1; i < j; i, j = i+1, j-1 {
-		refs[i], refs[j] = refs[j], refs[i]
-	}
-
-	// Compute accuracy per session.
-	trend := make([]float64, 0, len(refs))
-	for _, sr := range refs {
 		var answered, correct int
-		err := r.db.QueryRow(`
-			SELECT COUNT(*), COALESCE(SUM(correct), 0)
-			FROM attempts
-			WHERE user_id = ? AND session_id = ? AND skipped = 0`,
-			userID, sr.id).Scan(&answered, &correct)
-		if err != nil {
-			return nil, fmt.Errorf("session accuracy: %w", err)
+		if err := rows.Scan(&answered, &correct); err != nil {
+			return nil, fmt.Errorf("scan session trend: %w", err)
 		}
 		if answered > 0 {
 			trend = append(trend, float64(correct)/float64(answered)*100)
 		}
 	}
-	return trend, nil
+	return trend, rows.Err()
 }
 
 // SessionTrendGlobal returns accuracy per session across all topics for last N sessions.
+// Uses a single aggregate query with GROUP BY instead of per-session lookups.
 func (r *StatsRepo) SessionTrendGlobal(userID int64, limitN int) ([]float64, error) {
 	rows, err := r.db.Query(`
-		SELECT s.id
-		FROM sessions s
-		WHERE s.user_id = ? AND s.ended_at IS NOT NULL
-		ORDER BY s.started_at DESC
-		LIMIT ?`, userID, limitN)
+		SELECT
+			COUNT(*) AS answered,
+			COALESCE(SUM(a.correct), 0) AS correct
+		FROM attempts a
+		JOIN sessions s ON s.id = a.session_id
+		WHERE a.user_id = ? AND s.ended_at IS NOT NULL AND a.skipped = 0
+		  AND s.id IN (
+			SELECT s2.id FROM sessions s2
+			WHERE s2.user_id = ? AND s2.ended_at IS NOT NULL
+			ORDER BY s2.started_at DESC LIMIT ?
+		  )
+		GROUP BY s.id
+		ORDER BY s.started_at ASC`, userID, userID, limitN)
 	if err != nil {
 		return nil, fmt.Errorf("global trend query: %w", err)
 	}
 	defer rows.Close()
 
-	var ids []int64
+	var trend []float64
 	for rows.Next() {
-		var id int64
-		if err := rows.Scan(&id); err != nil {
-			return nil, fmt.Errorf("scan session id: %w", err)
-		}
-		ids = append(ids, id)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-
-	// Reverse to chronological order.
-	for i, j := 0, len(ids)-1; i < j; i, j = i+1, j-1 {
-		ids[i], ids[j] = ids[j], ids[i]
-	}
-
-	trend := make([]float64, 0, len(ids))
-	for _, id := range ids {
 		var answered, correct int
-		err := r.db.QueryRow(`
-			SELECT COUNT(*), COALESCE(SUM(correct), 0)
-			FROM attempts
-			WHERE user_id = ? AND session_id = ? AND skipped = 0`,
-			userID, id).Scan(&answered, &correct)
-		if err != nil {
-			return nil, fmt.Errorf("session accuracy: %w", err)
+		if err := rows.Scan(&answered, &correct); err != nil {
+			return nil, fmt.Errorf("scan global trend: %w", err)
 		}
 		if answered > 0 {
 			trend = append(trend, float64(correct)/float64(answered)*100)
 		}
 	}
-	return trend, nil
+	return trend, rows.Err()
 }
 
-// parseJSONStringArray is a simple JSON string array parser.
+// parseJSONStringArray unmarshals a JSON-encoded string array.
 func parseJSONStringArray(s string) []string {
 	if s == "" || s == "[]" || s == "null" {
 		return nil
 	}
 	var result []string
-	// Simple parsing: strip brackets, split by comma, strip quotes.
-	s = trimBrackets(s)
-	if s == "" {
+	if err := json.Unmarshal([]byte(s), &result); err != nil {
 		return nil
 	}
-	for _, item := range splitJSON(s) {
-		item = trimQuotes(item)
-		if item != "" {
-			result = append(result, item)
-		}
-	}
 	return result
-}
-
-func trimBrackets(s string) string {
-	if len(s) >= 2 && s[0] == '[' && s[len(s)-1] == ']' {
-		return s[1 : len(s)-1]
-	}
-	return s
-}
-
-func trimQuotes(s string) string {
-	s = trimSpace(s)
-	if len(s) >= 2 && s[0] == '"' && s[len(s)-1] == '"' {
-		return s[1 : len(s)-1]
-	}
-	return s
-}
-
-func trimSpace(s string) string {
-	for len(s) > 0 && (s[0] == ' ' || s[0] == '\t' || s[0] == '\n' || s[0] == '\r') {
-		s = s[1:]
-	}
-	for len(s) > 0 && (s[len(s)-1] == ' ' || s[len(s)-1] == '\t' || s[len(s)-1] == '\n' || s[len(s)-1] == '\r') {
-		s = s[:len(s)-1]
-	}
-	return s
-}
-
-func splitJSON(s string) []string {
-	var parts []string
-	inQuote := false
-	start := 0
-	for i := 0; i < len(s); i++ {
-		switch s[i] {
-		case '"':
-			inQuote = !inQuote
-		case ',':
-			if !inQuote {
-				parts = append(parts, s[start:i])
-				start = i + 1
-			}
-		}
-	}
-	parts = append(parts, s[start:])
-	return parts
-}
-
-func sortTagStats(stats []ports.TagStat) {
-	// Sort by accuracy ascending (weakest first).
-	for i := 1; i < len(stats); i++ {
-		for j := i; j > 0 && stats[j].AccuracyPct < stats[j-1].AccuracyPct; j-- {
-			stats[j], stats[j-1] = stats[j-1], stats[j]
-		}
-	}
 }

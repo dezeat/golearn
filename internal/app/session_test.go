@@ -113,19 +113,20 @@ func TestSessionLifecycle(t *testing.T) {
 	// Iterate all questions.
 	seen := make(map[int64]bool)
 	for i := 0; i < 3; i++ {
-		q := engine.GetNextQuestion()
-		if q == nil {
+		sq := engine.GetNextSessionQuestion()
+		if sq == nil {
 			t.Fatalf("expected question at position %d, got nil", i)
 		}
+		q := sq.Question
 		if seen[q.ID] {
 			t.Errorf("duplicate question ID %d", q.ID)
 		}
 		seen[q.ID] = true
 	}
 
-	// After all questions, GetNextQuestion returns nil.
-	if q := engine.GetNextQuestion(); q != nil {
-		t.Errorf("expected nil after all questions, got ID=%d", q.ID)
+	// After all questions, GetNextSessionQuestion returns nil.
+	if sq := engine.GetNextSessionQuestion(); sq != nil {
+		t.Errorf("expected nil after all questions, got ID=%d", sq.Question.ID)
 	}
 
 	// End session should not error.
@@ -145,10 +146,11 @@ func TestRecordAttempt_CorrectnessEvaluation(t *testing.T) {
 
 	// Answer each question and check correctness.
 	for {
-		q := engine.GetNextQuestion()
-		if q == nil {
+		sq := engine.GetNextSessionQuestion()
+		if sq == nil {
 			break
 		}
+		q := sq.Question
 
 		// Correct answer.
 		correct, err := engine.RecordAttempt(q.ID, q.CorrectChoiceIDs, false, 100)
@@ -174,10 +176,11 @@ func TestRecordAttempt_SkippedIsNotCorrect(t *testing.T) {
 		t.Fatalf("StartSession: %v", err)
 	}
 
-	q := engine.GetNextQuestion()
-	if q == nil {
+	sq := engine.GetNextSessionQuestion()
+	if sq == nil {
 		t.Fatal("expected a question")
 	}
+	q := sq.Question
 
 	correct, err := engine.RecordAttempt(q.ID, nil, true, 0)
 	if err != nil {
@@ -213,10 +216,11 @@ func TestAttemptStats_AffectSelection(t *testing.T) {
 		t.Fatalf("StartSession 1: %v", err)
 	}
 	for {
-		q := engine.GetNextQuestion()
-		if q == nil {
+		sq := engine.GetNextSessionQuestion()
+		if sq == nil {
 			break
 		}
+		q := sq.Question
 		switch {
 		case q.Prompt == "Q1?":
 			// Wrong answer.
@@ -242,14 +246,14 @@ func TestAttemptStats_AffectSelection(t *testing.T) {
 
 	// The first questions should be Q1 (wrong) or Q3 (skip=wrong in stats),
 	// since they are in the "weak" bucket, while Q2 (all correct) goes to rest.
-	first := engine2.GetNextQuestion()
-	second := engine2.GetNextQuestion()
-	if first == nil || second == nil {
+	firstSQ := engine2.GetNextSessionQuestion()
+	secondSQ := engine2.GetNextSessionQuestion()
+	if firstSQ == nil || secondSQ == nil {
 		t.Fatal("expected at least 2 questions")
 	}
 
 	// Q2 should NOT be in the first two positions (it's the "rest" bucket).
-	for _, q := range []*domain.Question{first, second} {
+	for _, q := range []*domain.Question{firstSQ.Question, secondSQ.Question} {
 		if q.Prompt == "Q2?" {
 			// Q2 was correct, so it should be in the "rest" bucket, served last.
 			// This is acceptable only if all weak ones have been served already.
@@ -281,10 +285,11 @@ func TestAttemptStats_UserScoped(t *testing.T) {
 	if _, err := localEngine.StartSession("test-topic", 1, "practice"); err != nil {
 		t.Fatalf("start local session: %v", err)
 	}
-	qLocal := localEngine.GetNextQuestion()
-	if qLocal == nil {
+	sqLocal := localEngine.GetNextSessionQuestion()
+	if sqLocal == nil {
 		t.Fatal("expected local question")
 	}
+	qLocal := sqLocal.Question
 	if _, err := localEngine.RecordAttempt(qLocal.ID, []string{"B"}, false, 10); err != nil {
 		t.Fatalf("local record attempt: %v", err)
 	}
@@ -293,10 +298,11 @@ func TestAttemptStats_UserScoped(t *testing.T) {
 	if _, err := aliceEngine.StartSession("test-topic", 1, "practice"); err != nil {
 		t.Fatalf("start alice session: %v", err)
 	}
-	qAlice := aliceEngine.GetNextQuestion()
-	if qAlice == nil {
+	sqAlice := aliceEngine.GetNextSessionQuestion()
+	if sqAlice == nil {
 		t.Fatal("expected alice question")
 	}
+	qAlice := sqAlice.Question
 	if _, err := aliceEngine.RecordAttempt(qAlice.ID, qAlice.CorrectChoiceIDs, false, 10); err != nil {
 		t.Fatalf("alice record attempt: %v", err)
 	}

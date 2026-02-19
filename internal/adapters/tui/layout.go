@@ -29,6 +29,10 @@ func (m model) writeCenteredLine(b *strings.Builder, s string) {
 }
 
 func (m model) writeFooter(b *strings.Builder, footer string) {
+	if m.lastError != "" {
+		b.WriteString("\n")
+		m.writeCenteredLine(b, styleIncorrect.Render("Error: "+m.lastError))
+	}
 	b.WriteString("\n")
 	m.writeCenteredLine(b, styleDim.Render(footer))
 }

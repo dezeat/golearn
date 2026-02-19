@@ -9,15 +9,12 @@
 package tui
 
 import (
-	"database/sql"
 	"fmt"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
-	"github.com/dezeat/golearn/internal/adapters/localconfig"
-	"github.com/dezeat/golearn/internal/adapters/sqlite"
 	"github.com/dezeat/golearn/internal/app"
 	"github.com/dezeat/golearn/internal/domain"
 	"github.com/dezeat/golearn/internal/ports"
@@ -34,58 +31,32 @@ var (
 	styleDim       = lipgloss.NewStyle().Foreground(lipgloss.Color("8"))
 )
 
-// Run launches the TUI application. It owns the DB connection and
-// creates all necessary repos and services.
-func Run(db *sql.DB) error {
-	return RunWithConfigPath(db, localconfig.DefaultPath())
+// RunParams holds all dependencies and initial state needed to launch the TUI.
+// The caller (cmd/golearn) is responsible for constructing repos, resolving
+// the current user, and injecting everything here.
+type RunParams struct {
+	TopicRepo    ports.TopicRepository
+	QuestionRepo ports.QuestionRepository
+	SessionRepo  ports.SessionRepository
+	AttemptRepo  ports.AttemptRepository
+	UserRepo     ports.UserRepository
+	StatsRepo    ports.StatsRepository
+	ConfigStore  ports.ConfigStore
+	UserCtx      app.CurrentUserProvider
+	CurrentUser  *domain.User
+	HasContinue  bool
+	Profiles     []domain.User
 }
 
-// RunWithConfigPath launches the TUI using a specific config path.
-// This exists so tests can avoid writing to the real home directory.
-func RunWithConfigPath(db *sql.DB, configPath string) error {
-	topicRepo := sqlite.NewTopicRepo(db)
-	questionRepo := sqlite.NewQuestionRepo(db)
-	sessionRepo := sqlite.NewSessionRepo(db)
-	attemptRepo := sqlite.NewAttemptRepo(db)
-	userRepo := sqlite.NewUserRepo(db)
-	statsRepo := sqlite.NewStatsRepo(db)
-	configStore := localconfig.NewStore(configPath)
-
-	profiles, err := userRepo.List()
-	if err != nil {
-		return fmt.Errorf("load users: %w", err)
-	}
-	if len(profiles) == 0 {
-		localProfile, createErr := userRepo.Create("local", "Local")
-		if createErr != nil {
-			return fmt.Errorf("seed local user: %w", createErr)
-		}
-		profiles = append(profiles, *localProfile)
-	}
-
-	cfg, err := configStore.Load()
-	if err != nil {
-		return fmt.Errorf("load config: %w", err)
-	}
-
-	currentUser, hasContinue, err := resolveCurrentUser(userRepo, cfg.CurrentUserID)
-	if err != nil {
-		return err
-	}
-
-	if !hasContinue {
-		cfg.CurrentUserID = currentUser.ID
-		if err := configStore.Save(cfg); err != nil {
-			return fmt.Errorf("save config: %w", err)
-		}
-		hasContinue = true
-	}
-
-	userCtx := app.NewUserContext(currentUser.ID)
-	m := newModel(topicRepo, questionRepo, sessionRepo, attemptRepo, userRepo, statsRepo, configStore, userCtx)
-	m.currentUser = currentUser
-	m.hasValidCurrentUser = hasContinue
-	m.profiles = profiles
+// Run launches the TUI application with the provided dependencies.
+func Run(p RunParams) error {
+	m := newModel(
+		p.TopicRepo, p.QuestionRepo, p.SessionRepo, p.AttemptRepo,
+		p.UserRepo, p.StatsRepo, p.ConfigStore, p.UserCtx,
+	)
+	m.currentUser = p.CurrentUser
+	m.hasValidCurrentUser = p.HasContinue
+	m.profiles = p.Profiles
 
 	if err := m.reloadTopicsForCurrentUser(); err != nil {
 		return err
@@ -95,38 +66,9 @@ func RunWithConfigPath(db *sql.DB, configPath string) error {
 		return fmt.Errorf("no topics found — import a question pack first: golearn import <path>")
 	}
 
-	p := tea.NewProgram(m, tea.WithAltScreen())
-	_, err = p.Run()
+	prog := tea.NewProgram(m, tea.WithAltScreen())
+	_, err := prog.Run()
 	return err
-}
-
-func resolveCurrentUser(userRepo ports.UserRepository, configuredUserID int64) (*domain.User, bool, error) {
-	if configuredUserID > 0 {
-		u, found, err := userRepo.GetByID(configuredUserID)
-		if err != nil {
-			return nil, false, fmt.Errorf("get configured user %d: %w", configuredUserID, err)
-		}
-		if found {
-			return u, true, nil
-		}
-	}
-
-	localUser, found, err := userRepo.GetByHandle("local")
-	if err != nil {
-		return nil, false, fmt.Errorf("get local user: %w", err)
-	}
-	if found {
-		return localUser, false, nil
-	}
-
-	users, err := userRepo.List()
-	if err != nil {
-		return nil, false, fmt.Errorf("list users: %w", err)
-	}
-	if len(users) == 0 {
-		return nil, false, fmt.Errorf("no users available")
-	}
-	return &users[0], false, nil
 }
 
 // topicInfo extends a Topic with display metadata.
@@ -173,7 +115,7 @@ type model struct {
 	attemptRepo  ports.AttemptRepository
 	userRepo     ports.UserRepository
 	statsRepo    ports.StatsRepository
-	configStore  *localconfig.Store
+	configStore  ports.ConfigStore
 	userCtx      app.CurrentUserProvider
 
 	// Current screen
@@ -263,9 +205,15 @@ type model struct {
 	width  int
 	height int
 
+	// Error display
+	lastError string
+
 	// Quit flag
 	quitting bool
 }
+
+// defaultQuestionCount is the initial number of questions per session in the TUI.
+const defaultQuestionCount = 10
 
 func newModel(
 	topicRepo ports.TopicRepository,
@@ -274,7 +222,7 @@ func newModel(
 	attemptRepo ports.AttemptRepository,
 	userRepo ports.UserRepository,
 	statsRepo ports.StatsRepository,
-	configStore *localconfig.Store,
+	configStore ports.ConfigStore,
 	userCtx app.CurrentUserProvider,
 ) model {
 	return model{
@@ -287,7 +235,7 @@ func newModel(
 		configStore:       configStore,
 		userCtx:           userCtx,
 		screen:            screenProfileMenu,
-		questionCount:     10,
+		questionCount:     defaultQuestionCount,
 		sessionMode:       app.ModeBalanced,
 		sessionDifficulty: "easy",
 		sessionWeakestSub: app.WeakestByQuestion,
@@ -344,7 +292,7 @@ func (m *model) setCurrentUser(u *domain.User, saveConfig bool) error {
 	if !saveConfig {
 		return nil
 	}
-	if err := m.configStore.Save(localconfig.Config{CurrentUserID: u.ID}); err != nil {
+	if err := m.configStore.Save(ports.LocalConfig{CurrentUserID: u.ID}); err != nil {
 		return fmt.Errorf("save config: %w", err)
 	}
 	m.hasValidCurrentUser = true

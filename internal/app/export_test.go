@@ -188,10 +188,11 @@ func TestIntegration_ImportAndSession(t *testing.T) {
 	answered := 0
 	correctCount := 0
 	for {
-		q := engine.GetNextQuestion()
-		if q == nil {
+		sq := engine.GetNextSessionQuestion()
+		if sq == nil {
 			break
 		}
+		q := sq.Question
 
 		// Submit the correct answer.
 		correct, err := engine.RecordAttempt(q.ID, q.CorrectChoiceIDs, false, 100)

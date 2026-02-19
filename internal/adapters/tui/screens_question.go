@@ -3,7 +3,9 @@ package tui
 import (
 	"fmt"
 	"strings"
+	"time"
 
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/dezeat/golearn/internal/domain"
@@ -308,4 +310,169 @@ func (m model) viewReviewBrowse() string {
 	m.writeFooter(&b, footerReview)
 
 	return b.String()
+}
+
+// --- Question Update Handler ---
+
+func (m model) updateQuestion(msg tea.Msg) (tea.Model, tea.Cmd) {
+	switch msg := msg.(type) {
+	case tea.KeyMsg:
+		key := msg.String()
+		switch {
+		case isBackKey(key):
+			// Cancel session and return to previous config screen.
+			if err := m.engine.EndSession(); err != nil {
+				m.lastError = fmt.Sprintf("end session: %v", err)
+			}
+			m.screen = screenSessionConfig
+		case isUpNav(key):
+			if m.choiceCursor > 0 {
+				m.choiceCursor--
+			}
+		case isDownNav(key):
+			if m.currentQuestion != nil && m.choiceCursor < len(m.currentQuestion.ShuffledChoices)-1 {
+				m.choiceCursor++
+			}
+		case isToggleKey(key):
+			// Toggle selection (for multi_select, or single_select).
+			if m.currentQuestion != nil && m.currentQuestion.Question != nil {
+				choiceID := m.currentQuestion.ShuffledChoices[m.choiceCursor].ID
+				if m.currentQuestion.Question.Type == "single_select" {
+					// Single select: clear others, select this one.
+					m.selected = map[string]bool{choiceID: true}
+				} else {
+					// Multi select: toggle.
+					if m.selected[choiceID] {
+						delete(m.selected, choiceID)
+					} else {
+						m.selected[choiceID] = true
+					}
+				}
+			}
+		case isSkipKey(key):
+			// Skip this question.
+			if m.currentQuestion != nil && m.currentQuestion.Question != nil {
+				if _, err := m.engine.RecordAttempt(m.currentQuestion.Question.ID, nil, true, 0); err != nil {
+					m.lastError = fmt.Sprintf("record skip: %v", err)
+				}
+				m.answered++
+				m.lastSkipped = true
+				m.lastCorrect = false
+				m.submitted = true
+				m.showExplanations = false
+				m.screen = screenReview
+			}
+		case isEnterKey(key):
+			if m.currentQuestion != nil && m.currentQuestion.Question != nil && len(m.selected) > 0 {
+				// Submit answer.
+				selectedIDs := make([]string, 0, len(m.selected))
+				for id := range m.selected {
+					selectedIDs = append(selectedIDs, id)
+				}
+
+				latencyMs := int(time.Since(m.questionStarted()).Milliseconds())
+				correct, err := m.engine.RecordAttempt(
+					m.currentQuestion.Question.ID, selectedIDs, false, latencyMs,
+				)
+				if err != nil {
+					m.lastError = fmt.Sprintf("record attempt: %v", err)
+				}
+				m.lastCorrect = correct
+
+				m.answered++
+				m.totalLatency += latencyMs
+				m.lastSkipped = false
+				m.submitted = true
+				if m.lastCorrect {
+					m.correctCount++
+				} else {
+					q := *m.currentQuestion.Question
+					q.Choices = make([]domain.Choice, len(m.currentQuestion.ShuffledChoices))
+					copy(q.Choices, m.currentQuestion.ShuffledChoices)
+					// Track wrong answers for review browse.
+					m.wrongAnswers = append(m.wrongAnswers, wrongAnswer{
+						Question:    q,
+						SelectedIDs: selectedIDs,
+					})
+				}
+				m.showExplanations = false
+				m.screen = screenReview
+			}
+		}
+	}
+	return m, nil
+}
+
+// questionStartedAt is used for latency tracking; we use a simple approach.
+var questionStartedAt time.Time
+
+func (m *model) advanceQuestion() {
+	q := m.engine.GetNextSessionQuestion()
+	if q == nil {
+		if err := m.engine.EndSession(); err != nil {
+			m.lastError = fmt.Sprintf("end session: %v", err)
+		}
+		m.screen = screenSummary
+		return
+	}
+	m.currentQuestion = q
+	m.setDisplayLabelMapping(q.ShuffledChoices)
+	m.questionNum++
+	m.choiceCursor = 0
+	m.selected = make(map[string]bool)
+	m.submitted = false
+	m.showExplanations = false
+	m.screen = screenQuestion
+	questionStartedAt = time.Now()
+}
+
+func (m model) questionStarted() time.Time {
+	return questionStartedAt
+}
+
+// --- Review Update Handler ---
+
+func (m model) updateReview(msg tea.Msg) (tea.Model, tea.Cmd) {
+	switch msg := msg.(type) {
+	case tea.KeyMsg:
+		key := msg.String()
+		switch {
+		case isExplainKey(key):
+			// Toggle explanations.
+			m.showExplanations = !m.showExplanations
+		case isEnterKey(key):
+			// Advance to next question.
+			m.advanceQuestion()
+		case isBackKey(key):
+			if err := m.engine.EndSession(); err != nil {
+				m.lastError = fmt.Sprintf("end session: %v", err)
+			}
+			m.screen = screenSessionConfig
+		}
+	}
+	return m, nil
+}
+
+// --- Review Browse Update Handler ---
+
+func (m model) updateReviewBrowse(msg tea.Msg) (tea.Model, tea.Cmd) {
+	switch msg := msg.(type) {
+	case tea.KeyMsg:
+		key := msg.String()
+		switch {
+		case isEnterKey(key):
+			if m.reviewCursor < len(m.reviewQueue)-1 {
+				m.reviewCursor++
+				m.showExplanations = false
+				m.setDisplayLabelMapping(m.reviewQueue[m.reviewCursor].Question.Choices)
+			} else {
+				m.screen = m.reviewReturnScreen
+			}
+		case isExplainKey(key):
+			m.showExplanations = !m.showExplanations
+		case isBackKey(key):
+			m.screen = m.reviewReturnScreen
+		}
+	}
+	return m, nil
 }

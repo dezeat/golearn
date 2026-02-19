@@ -13,7 +13,12 @@ import (
 	"github.com/dezeat/golearn/internal/adapters/sqlite"
 	"github.com/dezeat/golearn/internal/adapters/tui"
 	"github.com/dezeat/golearn/internal/app"
+	"github.com/dezeat/golearn/internal/domain"
 )
+
+// defaultQuestionCount is the number of questions per session when the user
+// does not specify --questions.
+const defaultQuestionCount = 10
 
 func main() {
 	dbPath := sqlite.DefaultDBPath()
@@ -163,7 +168,52 @@ func runTUI(dbPath string) error {
 	}
 	defer db.Close()
 
-	return tui.Run(db)
+	topicRepo := sqlite.NewTopicRepo(db)
+	questionRepo := sqlite.NewQuestionRepo(db)
+	sessionRepo := sqlite.NewSessionRepo(db)
+	attemptRepo := sqlite.NewAttemptRepo(db)
+	userRepo := sqlite.NewUserRepo(db)
+	statsRepo := sqlite.NewStatsRepo(db)
+	configStore := localconfig.NewStore(localconfig.DefaultPath())
+
+	profiles, err := app.EnsureDefaultUser(userRepo)
+	if err != nil {
+		return err
+	}
+
+	cfg, err := configStore.Load()
+	if err != nil {
+		return fmt.Errorf("load config: %w", err)
+	}
+
+	currentUser, hasContinue, err := app.ResolveUser(userRepo, cfg.CurrentUserID)
+	if err != nil {
+		return err
+	}
+
+	if !hasContinue {
+		cfg.CurrentUserID = currentUser.ID
+		if err := configStore.Save(cfg); err != nil {
+			return fmt.Errorf("save config: %w", err)
+		}
+		hasContinue = true
+	}
+
+	userCtx := app.NewUserContext(currentUser.ID)
+
+	return tui.Run(tui.RunParams{
+		TopicRepo:    topicRepo,
+		QuestionRepo: questionRepo,
+		SessionRepo:  sessionRepo,
+		AttemptRepo:  attemptRepo,
+		UserRepo:     userRepo,
+		StatsRepo:    statsRepo,
+		ConfigStore:  configStore,
+		UserCtx:      userCtx,
+		CurrentUser:  currentUser,
+		HasContinue:  hasContinue,
+		Profiles:     profiles,
+	})
 }
 
 // runExport implements the `golearn export <topic-slug> --out <path> [--format yaml|json]` command.
@@ -234,7 +284,7 @@ func runExport(dbPath string, args []string) error {
 func runSession(dbPath string, args []string) error {
 	// Parse: <topic-slug> [--n N]
 	var topicSlug string
-	n := 10 // default
+	n := defaultQuestionCount
 
 	for i := 0; i < len(args); i++ {
 		arg := args[i]
@@ -278,11 +328,27 @@ func runSession(dbPath string, args []string) error {
 	attemptRepo := sqlite.NewAttemptRepo(db)
 	userRepo := sqlite.NewUserRepo(db)
 
-	currentUserID, err := resolveCurrentUserID(userRepo, localconfig.NewStore(localconfig.DefaultPath()))
+	if _, err := app.EnsureDefaultUser(userRepo); err != nil {
+		return err
+	}
+
+	configStore := localconfig.NewStore(localconfig.DefaultPath())
+	cfg, err := configStore.Load()
+	if err != nil {
+		return fmt.Errorf("load config: %w", err)
+	}
+
+	currentUser, matched, err := app.ResolveUser(userRepo, cfg.CurrentUserID)
 	if err != nil {
 		return err
 	}
-	userCtx := app.NewUserContext(currentUserID)
+	if !matched {
+		cfg.CurrentUserID = currentUser.ID
+		if saveErr := configStore.Save(cfg); saveErr != nil {
+			return fmt.Errorf("save config: %w", saveErr)
+		}
+	}
+	userCtx := app.NewUserContext(currentUser.ID)
 
 	engine := app.NewSessionEngine(topicRepo, questionRepo, sessionRepo, attemptRepo, userCtx, nil)
 
@@ -321,7 +387,7 @@ func runSession(dbPath string, args []string) error {
 		choiceIDByDisplayLabel := make(map[string]string, len(sq.ShuffledChoices))
 		choiceIDByChoiceID := make(map[string]string, len(sq.ShuffledChoices))
 		for i, c := range sq.ShuffledChoices {
-			label := displayLabelForIndex(i)
+			label := domain.DisplayLabelForIndex(i)
 			displayLabelByChoiceID[c.ID] = label
 			choiceIDByDisplayLabel[label] = c.ID
 			choiceIDByChoiceID[strings.ToUpper(c.ID)] = c.ID
@@ -461,63 +527,4 @@ func runDBReset(dbPath string, args []string) error {
 	fmt.Printf("Database deleted: %s\n", dbPath)
 	fmt.Println("A fresh database will be created on next run.")
 	return nil
-}
-
-func displayLabelForIndex(index int) string {
-	if index < 0 {
-		return ""
-	}
-
-	value := index + 1
-	label := ""
-	for value > 0 {
-		value--
-		label = string(rune('A'+(value%26))) + label
-		value /= 26
-	}
-	return label
-}
-
-func resolveCurrentUserID(userRepo *sqlite.UserRepo, configStore *localconfig.Store) (int64, error) {
-	users, err := userRepo.List()
-	if err != nil {
-		return 0, fmt.Errorf("load users: %w", err)
-	}
-	if len(users) == 0 {
-		u, err := userRepo.Create("local", "Local")
-		if err != nil {
-			return 0, fmt.Errorf("seed local user: %w", err)
-		}
-		users = append(users, *u)
-	}
-
-	cfg, err := configStore.Load()
-	if err != nil {
-		return 0, fmt.Errorf("load config: %w", err)
-	}
-
-	if cfg.CurrentUserID > 0 {
-		if _, found, err := userRepo.GetByID(cfg.CurrentUserID); err != nil {
-			return 0, fmt.Errorf("resolve configured user: %w", err)
-		} else if found {
-			return cfg.CurrentUserID, nil
-		}
-	}
-
-	localUser, found, err := userRepo.GetByHandle("local")
-	if err != nil {
-		return 0, fmt.Errorf("get local user: %w", err)
-	}
-	if found {
-		if err := configStore.Save(localconfig.Config{CurrentUserID: localUser.ID}); err != nil {
-			return 0, fmt.Errorf("save config: %w", err)
-		}
-		return localUser.ID, nil
-	}
-
-	fallback := users[0].ID
-	if err := configStore.Save(localconfig.Config{CurrentUserID: fallback}); err != nil {
-		return 0, fmt.Errorf("save config: %w", err)
-	}
-	return fallback, nil
 }

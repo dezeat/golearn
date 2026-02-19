@@ -1,5 +1,5 @@
 // Package app — session.go implements the session lifecycle use cases:
-// StartSession, GetNextQuestion, RecordAttempt, EndSession.
+// StartSession, GetNextSessionQuestion, RecordAttempt, EndSession.
 //
 // The SessionEngine holds in-memory state for the current session's
 // selected question queue and cursor position.
@@ -140,14 +140,14 @@ func (e *SessionEngine) StartSessionWithConfig(cfg SessionConfig) (int64, error)
 			// Load tag stats for weakest-by-tag selection.
 			var tagStats []ports.TagStat
 			if e.stats != nil {
-				tagStats, _ = e.stats.TagStats(e.userCtx.CurrentUserID(), topic.ID, 5)
+				tagStats, _ = e.stats.TagStats(e.userCtx.CurrentUserID(), topic.ID, DefaultMinTagAttempts)
 			}
 			result := SelectWeakestByTag(allQuestions, stats, tagStats, cfg.N, e.rng)
 			selected = result.Questions
 			modeNote = result.Note
 			modeParams.WeakestTag = result.Tag
 		} else {
-			result := SelectWeakestByQuestions(allQuestions, stats, cfg.N, 3, e.rng)
+			result := SelectWeakestByQuestions(allQuestions, stats, cfg.N, DefaultMinAttempts, e.rng)
 			selected = result.Questions
 			modeNote = result.Note
 		}
@@ -206,16 +206,6 @@ func (e *SessionEngine) GetNextSessionQuestion() *SessionQuestion {
 	q := &e.queue[e.cursor]
 	e.cursor++
 	return q
-}
-
-// GetNextQuestion returns the original question for the next queue item.
-// Deprecated: prefer GetNextSessionQuestion() when rendering choices.
-func (e *SessionEngine) GetNextQuestion() *domain.Question {
-	sq := e.GetNextSessionQuestion()
-	if sq == nil {
-		return nil
-	}
-	return sq.Question
 }
 
 // RecordAttempt evaluates correctness and persists the attempt.

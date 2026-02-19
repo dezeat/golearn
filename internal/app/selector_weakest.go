@@ -15,6 +15,14 @@ import (
 	"github.com/dezeat/golearn/internal/ports"
 )
 
+// DefaultMinAttempts is the minimum number of attempts a question must
+// have before it is considered for weakest-question selection.
+const DefaultMinAttempts = 3
+
+// DefaultMinTagAttempts is the minimum number of attempts required for
+// a tag to be included in tag-based stats and weakest-tag selection.
+const DefaultMinTagAttempts = 5
+
 // WeakestResult holds the output of a weakest selection.
 type WeakestResult struct {
 	Questions []domain.Question

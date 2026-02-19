@@ -2,8 +2,21 @@ package tui
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 	"time"
+
+	tea "github.com/charmbracelet/bubbletea"
+
+	"github.com/dezeat/golearn/internal/ports"
+)
+
+// TUI stats display constants.
+const (
+	statsTrendLimit       = 10 // number of recent sessions for trend sparklines
+	statsTagMinAttempts   = 5  // minimum attempts for tag-based stats
+	statsWeakMinAttempts  = 3  // minimum attempts for weak-question list
+	statsWeakQuestionsMax = 10 // maximum weak questions to display
 )
 
 // sparkline renders a unicode sparkline from a slice of float64 values (0–100).
@@ -431,4 +444,261 @@ func (m model) viewStatsPackDetail() string {
 
 	m.writeFooter(&b, footerMenuSub)
 	return b.String()
+}
+
+// --- Home Menu ---
+
+func (m model) homeMenuOptions() []string {
+	opts := []string{"Start Practice", "Review Wrong Answers", "Stats", "Switch Profile", "Quit"}
+	return opts
+}
+
+func (m model) updateHomeMenu(msg tea.Msg) (tea.Model, tea.Cmd) {
+	switch msg := msg.(type) {
+	case tea.KeyMsg:
+		key := msg.String()
+		switch {
+		case isQuitKey(key):
+			m.quitting = true
+			return m, tea.Quit
+		case isBackKey(key):
+			m.profileMenuCursor = 0
+			m.screen = screenProfileMenu
+		case isUpNav(key):
+			if m.homeMenuCursor > 0 {
+				m.homeMenuCursor--
+			}
+		case isDownNav(key):
+			if m.homeMenuCursor < len(m.homeMenuOptions())-1 {
+				m.homeMenuCursor++
+			}
+		case isEnterKey(key):
+			options := m.homeMenuOptions()
+			if m.homeMenuCursor >= len(options) {
+				return m, nil
+			}
+			switch options[m.homeMenuCursor] {
+			case "Start Practice":
+				m.screen = screenTopicSelect
+			case "Review Wrong Answers":
+				if len(m.wrongAnswers) > 0 {
+					m.startReviewSession(screenHomeMenu)
+				}
+			case "Stats":
+				m.statsMenuCursor = 0
+				m.screen = screenStatsMenu
+			case "Switch Profile":
+				m.profileMenuCursor = 0
+				m.screen = screenProfileMenu
+			case "Quit":
+				m.quitting = true
+				return m, tea.Quit
+			}
+		case isReviewKey(key):
+			if len(m.wrongAnswers) > 0 {
+				m.startReviewSession(screenHomeMenu)
+			}
+		}
+	}
+	return m, nil
+}
+
+// --- Stats Update Handlers ---
+
+func (m model) statsMenuOptions() []string {
+	return []string{"Global Stats", "Stats by Pack", "Back"}
+}
+
+func (m model) updateStatsMenu(msg tea.Msg) (tea.Model, tea.Cmd) {
+	switch msg := msg.(type) {
+	case tea.KeyMsg:
+		key := msg.String()
+		switch {
+		case isBackKey(key):
+			m.homeMenuCursor = 0
+			m.screen = screenHomeMenu
+		case isUpNav(key):
+			if m.statsMenuCursor > 0 {
+				m.statsMenuCursor--
+			}
+		case isDownNav(key):
+			opts := m.statsMenuOptions()
+			if m.statsMenuCursor < len(opts)-1 {
+				m.statsMenuCursor++
+			}
+		case isEnterKey(key):
+			opts := m.statsMenuOptions()
+			if m.statsMenuCursor >= len(opts) {
+				return m, nil
+			}
+			switch opts[m.statsMenuCursor] {
+			case "Global Stats":
+				m.loadGlobalStats()
+				m.screen = screenStatsGlobal
+			case "Stats by Pack":
+				m.loadPackListStats()
+				m.screen = screenStatsPackList
+			case "Back":
+				m.homeMenuCursor = 0
+				m.screen = screenHomeMenu
+			}
+		}
+	}
+	return m, nil
+}
+
+func (m *model) loadGlobalStats() {
+	if m.statsRepo == nil || m.userCtx == nil {
+		return
+	}
+	uid := m.userCtx.CurrentUserID()
+	gs, err := m.statsRepo.GlobalStats(uid)
+	if err != nil {
+		m.statsError = err.Error()
+		m.statsGlobal = nil
+		return
+	}
+	m.statsGlobal = gs
+	m.statsError = ""
+
+	// Load trend for global or most practiced topic.
+	trend, err := m.statsRepo.SessionTrendGlobal(uid, statsTrendLimit)
+	if err != nil {
+		m.statsError = fmt.Sprintf("load trend: %v", err)
+	}
+	m.statsGlobalTrend = trend
+}
+
+func (m *model) loadPackListStats() {
+	if m.statsRepo == nil || m.userCtx == nil {
+		return
+	}
+	uid := m.userCtx.CurrentUserID()
+	packs, err := m.statsRepo.TopicSummaries(uid)
+	if err != nil {
+		m.statsError = err.Error()
+		m.statsPacks = nil
+		return
+	}
+
+	// Sort by attempts descending for the current user.
+	sortPacksByAttempts(packs)
+
+	m.statsPacks = packs
+	m.statsError = ""
+	m.statsPackCursor = 0
+}
+
+func (m *model) loadPackDetailStats(topicID int64) {
+	if m.statsRepo == nil || m.userCtx == nil {
+		return
+	}
+	uid := m.userCtx.CurrentUserID()
+	ts, err := m.statsRepo.TopicSummary(uid, topicID)
+	if err != nil {
+		m.statsError = err.Error()
+		m.statsDetail = nil
+		return
+	}
+	m.statsDetail = ts
+	m.statsError = ""
+
+	var errs []string
+
+	diff, err := m.statsRepo.DifficultyStats(uid, topicID)
+	if err != nil {
+		errs = append(errs, fmt.Sprintf("difficulty: %v", err))
+	}
+	m.statsDifficulty = diff
+
+	weakTags, err := m.statsRepo.TagStats(uid, topicID, statsTagMinAttempts)
+	if err != nil {
+		errs = append(errs, fmt.Sprintf("tags: %v", err))
+	}
+	var weak, strong []ports.TagStat
+	for _, t := range weakTags {
+		if t.AccuracyPct < 70 {
+			weak = append(weak, t)
+		} else {
+			strong = append(strong, t)
+		}
+	}
+	m.statsWeakTags = weak
+	m.statsStrongTags = strong
+
+	wqs, err := m.statsRepo.WeakQuestions(uid, topicID, statsWeakMinAttempts, statsWeakQuestionsMax)
+	if err != nil {
+		errs = append(errs, fmt.Sprintf("weak questions: %v", err))
+	}
+	m.statsWeakQs = wqs
+
+	dt, err := m.statsRepo.SessionTrend(uid, topicID, statsTrendLimit)
+	if err != nil {
+		errs = append(errs, fmt.Sprintf("session trend: %v", err))
+	}
+	m.statsDetailTrend = dt
+
+	if len(errs) > 0 {
+		m.statsError = strings.Join(errs, "; ")
+	}
+}
+
+func (m model) updateStatsGlobal(msg tea.Msg) (tea.Model, tea.Cmd) {
+	switch msg := msg.(type) {
+	case tea.KeyMsg:
+		key := msg.String()
+		switch {
+		case isBackKey(key):
+			m.statsMenuCursor = 0
+			m.screen = screenStatsMenu
+		}
+	}
+	return m, nil
+}
+
+func (m model) updateStatsPackList(msg tea.Msg) (tea.Model, tea.Cmd) {
+	switch msg := msg.(type) {
+	case tea.KeyMsg:
+		key := msg.String()
+		switch {
+		case isBackKey(key):
+			m.statsMenuCursor = 0
+			m.screen = screenStatsMenu
+		case isUpNav(key):
+			if m.statsPackCursor > 0 {
+				m.statsPackCursor--
+			}
+		case isDownNav(key):
+			if m.statsPackCursor < len(m.statsPacks)-1 {
+				m.statsPackCursor++
+			}
+		case isEnterKey(key):
+			if len(m.statsPacks) > 0 {
+				sel := m.statsPacks[m.statsPackCursor]
+				m.loadPackDetailStats(sel.TopicID)
+				m.screen = screenStatsPackDetail
+			}
+		}
+	}
+	return m, nil
+}
+
+func (m model) updateStatsPackDetail(msg tea.Msg) (tea.Model, tea.Cmd) {
+	switch msg := msg.(type) {
+	case tea.KeyMsg:
+		key := msg.String()
+		switch {
+		case isBackKey(key):
+			m.loadPackListStats()
+			m.screen = screenStatsPackList
+		}
+	}
+	return m, nil
+}
+
+// sortPacksByAttempts sorts packs by AttemptsAnswered descending.
+func sortPacksByAttempts(packs []ports.TopicSummary) {
+	sort.Slice(packs, func(i, j int) bool {
+		return packs[i].AttemptsAnswered > packs[j].AttemptsAnswered
+	})
 }

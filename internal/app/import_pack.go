@@ -4,6 +4,7 @@ package app
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/dezeat/golearn/internal/domain"
@@ -60,7 +61,7 @@ func (s *ImportService) importDirectory(dir string, result *ImportResult) (*Impo
 		if !strings.HasSuffix(ext, ".yaml") && !strings.HasSuffix(ext, ".yml") && !strings.HasSuffix(ext, ".json") {
 			continue
 		}
-		fullPath := fmt.Sprintf("%s/%s", dir, entry.Name())
+		fullPath := filepath.Join(dir, entry.Name())
 		if _, err := s.importFile(fullPath, result); err != nil {
 			result.Errors = append(result.Errors, err.Error())
 		}

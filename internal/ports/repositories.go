@@ -155,3 +155,17 @@ type StatsRepository interface {
 	// SessionTrendGlobal returns accuracy per session across all topics for last N sessions.
 	SessionTrendGlobal(userID int64, limitN int) ([]float64, error)
 }
+
+// LocalConfig holds persisted CLI/TUI settings.
+type LocalConfig struct {
+	CurrentUserID int64
+}
+
+// ConfigStore reads and writes local user configuration.
+type ConfigStore interface {
+	// Load returns stored config. Missing file returns zero-value config and no error.
+	Load() (LocalConfig, error)
+
+	// Save persists config atomically.
+	Save(cfg LocalConfig) error
+}

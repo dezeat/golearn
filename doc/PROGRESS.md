@@ -43,6 +43,8 @@ available in the git log.
 | 12    | 2026-02-17 | Databricks pack refactor to numeric IDs, full rationale coverage |
 | 13    | 2026-02-17 | Difficulty enum (easy/medium/hard), explanation prefix policy, db reset command |
 | 14    | 2026-02-18 | Selection modes (Balanced, By Difficulty, Weakest), stats menu, strongest pack metric |
+| 15    | 2026-02-19 | Foundation refactors R1–R5: dedup displayLabel/resolveUser/export, stdlib replacements, N+1 query fixes |
+| 16    | 2026-02-19 | Foundation refactors R6–R12: TUI split, DI extraction, error surfacing, magic numbers, missing tests |
 
 ---
 
@@ -54,75 +56,6 @@ available in the git log.
 | D7  | Session state    | Session engine holds in-memory queue; one active session per engine instance. Intentional MVP constraint. | Low |
 
 ---
-
-## Planned: Foundation Refactors
-
-_Identified 2026-02-19. Each item improves code quality, performance, or maintainability
-without changing user-facing behaviour. Work in any order; each is independently mergeable._
-
-- [ ] **R1 — Deduplicate `displayLabelForIndex`**: Identical function exists in both
-      `cmd/golearn/main.go` and `internal/adapters/tui/choice_labels.go`. Extract to a
-      shared location (e.g. `domain` or a new `internal/format` package) and import
-      from both call sites.
-
-- [ ] **R2 — Deduplicate `resolveCurrentUser` logic**: Near-identical user resolution
-      code exists in `main.go` (`resolveCurrentUserID`) and `tui/app.go`
-      (`resolveCurrentUser`). Extract to a shared function in the `app` layer that
-      both CLI and TUI call.
-
-- [ ] **R3 — Deduplicate export pack-building logic**: `Export()` and `ExportToBytes()`
-      in `internal/app/export_pack.go` share ~80% identical pack-construction code.
-      Have `Export()` call `ExportToBytes()` + write to file, eliminating the duplication.
-
-- [ ] **R4 — Replace hand-rolled stdlib reimplementations**: Several adapter files
-      contain unnecessary custom implementations of stdlib functionality:
-      - `selector_difficulty.go`: custom `itoa()` → use `strconv.Itoa`
-      - `stats_repo.go`: custom `parseJSONStringArray`, `trimBrackets`, `trimQuotes`,
-        `trimSpace`, `splitJSON` → use `encoding/json.Unmarshal`
-      - `stats_repo.go`: custom `sortTagStats`, `sortPacksByAttempts` insertion sorts
-        → use `sort.Slice`
-
-- [ ] **R5 — Fix N+1 query patterns in `stats_repo.go`**: Three methods issue queries
-      in loops: `TopicSummaries` (one query per topic), `TagStats` (one per tag × question),
-      `SessionTrend` / `SessionTrendGlobal` (one per session). Rewrite each as a single
-      aggregate SQL query with GROUP BY to eliminate the N+1 pattern. This is the highest-
-      impact performance improvement in the codebase.
-
-- [ ] **R6 — Split TUI `model.go`**: At ~900 lines with ~80 fields and 14 `update*()`
-      handlers, this file is the largest and most complex. Co-locate each screen's
-      `update*()` method with its `view*()` function (e.g. move `updateQuestion` into
-      `screens_question.go`). Consider grouping related model fields into embedded
-      sub-structs (e.g. `quizState`, `reviewState`, `statsState`).
-
-- [ ] **R7 — Move composition root out of TUI adapter**: `tui/app.go` directly imports
-      `sqlite` and `localconfig` packages to construct repositories. This violates
-      hexagonal architecture — the adapter shouldn't wire other adapters. Move DI
-      wiring to `main.go` (or a dedicated `wire.go`) and pass constructed repos into
-      the TUI via its `Run()` function signature.
-
-- [ ] **R8 — Use `filepath.Join` for path construction**: `import_pack.go` builds
-      directory paths with `fmt.Sprintf("%s/%s", ...)` instead of `filepath.Join()`.
-      Not portable on Windows. Replace all path concatenation with `filepath.Join`.
-
-- [ ] **R9 — Surface silently swallowed errors**: Several TUI update handlers discard
-      errors from `RecordAttempt`, `EndSession`, stats loading, and session start.
-      At minimum, display a user-facing error message in the TUI when these fail.
-      Optionally log to a debug log file.
-
-- [ ] **R10 — Add missing test coverage**: The following packages have zero test files:
-      `ImportService` (app/import_pack.go), `pack.Reader` (adapters/pack/reader.go),
-      `localconfig.Store` (adapters/localconfig/config.go), and `UserContext`
-      (app/user_context.go). Add unit tests for each — these are straightforward
-      to test and cover critical paths.
-
-- [ ] **R11 — Remove deprecated `GetNextQuestion`**: `session.go` has both
-      `GetNextQuestion()` (deprecated) and `GetNextSessionQuestion()`. Remove the
-      deprecated method and update any remaining call sites.
-
-- [ ] **R12 — Extract magic numbers to named constants**: Hardcoded thresholds are
-      scattered across the codebase: `minAttempts = 3` (selectors), `minAttempts = 5`
-      (stats), `limitN = 10` (trends), default question count `10`. Define these as
-      package-level constants with descriptive names.
 
 ---
 
@@ -190,3 +123,89 @@ publishable open-source repository. Items are ordered by priority (do top items 
 
 - [ ] **O13 — Set up GitHub Discussions or wiki**: For community questions, pack
       sharing, and feature requests beyond issue tracking.
+
+---
+
+## Changelog
+
+### 2026-02-19 — Foundation Refactors R1–R5
+
+**R1 — Deduplicate `displayLabelForIndex`**
+- Created `internal/domain/choice_label.go` with exported `DisplayLabelForIndex`.
+- Removed duplicate implementations from `cmd/golearn/main.go` and
+  `internal/adapters/tui/choice_labels.go`; both now call `domain.DisplayLabelForIndex`.
+
+**R2 — Deduplicate `resolveCurrentUser` logic**
+- Created `internal/app/resolve_user.go` with `ResolveUser()` and `EnsureDefaultUser()`.
+- Removed `resolveCurrentUserID` from `main.go` and `resolveCurrentUser` from `tui/app.go`.
+- Both CLI `run` command and TUI `Run()` now use the shared app-layer functions.
+
+**R3 — Deduplicate export pack-building logic**
+- Refactored `Export()` in `internal/app/export_pack.go` to delegate to `ExportToBytes()`
+  then write the result to disk. Eliminated ~60 lines of duplicated pack-construction code.
+
+**R4 — Replace hand-rolled stdlib reimplementations**
+- `selector_difficulty.go`: replaced custom `itoa()` (25 lines) with `strconv.Itoa`.
+- `stats_repo.go`: replaced `parseJSONStringArray`, `trimBrackets`, `trimQuotes`,
+  `trimSpace`, `splitJSON` (~50 lines) with `encoding/json.Unmarshal`.
+- `stats_repo.go`: replaced `sortTagStats` insertion sort with `sort.Slice`.
+- `model.go`: replaced `sortPacksByAttempts` insertion sort with `sort.Slice`.
+
+**R5 — Fix N+1 query patterns in `stats_repo.go`**
+- `TopicSummaries`: replaced loop of `TopicSummary()` calls (N+1 × 6 queries per
+  topic) with a single query using correlated subqueries.
+- `TagStats`: replaced inner loop of per-question queries with a single
+  `GROUP BY question_id` batch query, then aggregate per-tag in Go.
+- `SessionTrend` / `SessionTrendGlobal`: replaced per-session accuracy queries with
+  single `GROUP BY s.id` queries using subquery-based session filtering.
+
+All 80+ tests pass. `make check` green.
+
+### 2026-02-19 — Foundation Refactors R6–R12
+
+**R6 — Split TUI `model.go`**
+- Moved all 14 `update*()` handlers from `model.go` into their respective
+  `screens_*.go` files, co-locating each handler with its view function.
+- `model.go` reduced from ~900 lines to ~120 lines (Init/Update/View routing only).
+
+**R7 — Move composition root out of TUI adapter**
+- Defined `ports.ConfigStore` interface and `ports.LocalConfig` struct.
+- Updated `localconfig.Store` to implement `ports.ConfigStore`.
+- Changed `tui.Run()` to accept a `tui.RunParams` struct with all dependencies
+  pre-constructed, eliminating `*sql.DB` parameter.
+- Moved all DI wiring (repo construction, config loading, user resolution) from
+  `tui/app.go` to `cmd/golearn/main.go`.
+- Removed `sqlite` and `localconfig` adapter imports from `tui` package.
+
+**R8 — Use `filepath.Join` for path construction**
+- Replaced `fmt.Sprintf("%s/%s", dir, entry.Name())` in `import_pack.go` with
+  `filepath.Join(dir, entry.Name())`.
+
+**R9 — Surface silently swallowed errors**
+- Added `lastError` field to TUI model, displayed in footer via `writeFooter()`.
+- Replaced `_ = m.engine.EndSession()`, `_, _ = m.engine.RecordAttempt(...)`,
+  and `_ = m.reloadTopicsForCurrentUser()` with proper error capture.
+- Stats loading errors (`DifficultyStats`, `TagStats`, `WeakQuestions`,
+  `SessionTrend`, `SessionTrendGlobal`) now surface via `statsError`.
+- Errors auto-clear on the next keypress.
+
+**R10 — Add missing test coverage**
+- Added `internal/app/user_context_test.go` (4 tests).
+- Added `internal/adapters/localconfig/config_test.go` (6 tests).
+- Added `internal/adapters/pack/reader_test.go` (8 tests).
+- Added `internal/app/import_test.go` (4 tests).
+
+**R11 — Remove deprecated `GetNextQuestion`**
+- Deleted `GetNextQuestion()` from `session.go`.
+- Updated all call sites in `session_test.go` and `export_test.go` to use
+  `GetNextSessionQuestion()` with `.Question` dereference.
+
+**R12 — Extract magic numbers to named constants**
+- `app.DefaultMinAttempts = 3` — weakest-question selection threshold.
+- `app.DefaultMinTagAttempts = 5` — tag-based stats and selection threshold.
+- `tui` constants: `statsTrendLimit = 10`, `statsTagMinAttempts = 5`,
+  `statsWeakMinAttempts = 3`, `statsWeakQuestionsMax = 10`.
+- `cmd/golearn` and `tui`: `defaultQuestionCount = 10`.
+- `stats_repo.go`: added descriptive comment to existing `minForWeak` constant.
+
+All tests pass. `make check` green.

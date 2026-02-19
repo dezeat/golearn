@@ -42,86 +42,9 @@ func (s *ExportService) Export(topicSlug, outPath, format string) error {
 		return fmt.Errorf("unsupported export format %q (must be yaml or json)", format)
 	}
 
-	// Resolve topic by slug.
-	topic, err := s.findTopic(topicSlug)
+	data, err := s.ExportToBytes(topicSlug, format)
 	if err != nil {
 		return err
-	}
-
-	// Load all questions for the topic.
-	questions, err := s.questions.ListByTopic(topic.ID)
-	if err != nil {
-		return fmt.Errorf("list questions for topic %q: %w", topicSlug, err)
-	}
-	if len(questions) == 0 {
-		return fmt.Errorf("topic %q has no questions to export", topicSlug)
-	}
-
-	// Deterministic ordering: created_at ASC, then hash ASC for tie-breaking.
-	sort.Slice(questions, func(i, j int) bool {
-		if questions[i].CreatedAt.Equal(questions[j].CreatedAt) {
-			return questions[i].Hash < questions[j].Hash
-		}
-		return questions[i].CreatedAt.Before(questions[j].CreatedAt)
-	})
-
-	// Build the canonical pack structure.
-	pack := domain.Pack{
-		PackVersion: "0.1.0",
-		Topic: domain.PackTopic{
-			Slug: topic.Slug,
-			Name: topic.Name,
-		},
-		Questions: make([]domain.PackQuestion, 0, len(questions)),
-	}
-
-	for _, q := range questions {
-		pq := domain.PackQuestion{
-			Type:             q.Type,
-			Prompt:           q.Prompt,
-			Choices:          q.Choices,
-			CorrectChoiceIDs: q.CorrectChoiceIDs,
-		}
-		// Only include optional fields when they have meaningful values.
-		if q.Intro != "" {
-			pq.Intro = q.Intro
-		}
-		if len(q.Tags) > 0 {
-			pq.Tags = q.Tags
-		}
-		if q.Difficulty != "" {
-			pq.Difficulty = q.Difficulty
-		}
-		if q.Source != "" && q.Source != "manual:file" {
-			pq.Source = q.Source
-		}
-		if q.SourceRef != "" {
-			pq.SourceRef = q.SourceRef
-		}
-		if q.Rationale.Correct != "" || len(q.Rationale.PerChoice) > 0 {
-			rat := q.Rationale
-			pq.Rationale = &rat
-		}
-		if q.Confidence != 1.0 {
-			conf := q.Confidence
-			pq.Confidence = &conf
-		}
-		pack.Questions = append(pack.Questions, pq)
-	}
-
-	// Serialise to the requested format.
-	var data []byte
-	switch format {
-	case "yaml":
-		data, err = yaml.Marshal(&pack)
-	case "json":
-		data, err = json.MarshalIndent(&pack, "", "  ")
-		if err == nil {
-			data = append(data, '\n') // trailing newline for JSON
-		}
-	}
-	if err != nil {
-		return fmt.Errorf("marshal pack as %s: %w", format, err)
 	}
 
 	// Ensure the output directory exists.
