@@ -1,452 +1,48 @@
 # golearn — Progress
 
-## ✅ MVP COMPLETE
+## Status: MVP Complete (2026-02-18)
 
-All core capabilities are implemented, tested, and documented.
+All core capabilities are implemented, tested (80+ tests), and documented.
+Phases 0–14 were completed over 2026-02-16 → 2026-02-18. Full details are
+available in the git log.
 
-## Current Status
+### Capability Summary
 
-| Area            | Status           | Notes                                |
-|-----------------|------------------|--------------------------------------|
-| Documentation   | ✅ Done          | `WORKFLOW.md`, `PROJECT.md`, `PROGRESS.md`, `SPEC.md` |
-| Go module       | ✅ Done          | `go.mod` with yaml.v3 + modernc.org/sqlite + bubbletea |
-| Domain models   | ✅ Done          | `models.go`, `validation.go`, `hashing.go`, `correctness.go`, `explanation.go` |
-| Ports/interfaces| ✅ Done          | `repositories.go` (incl. StatsRepository), `sources.go` |
-| Pack reader     | ✅ Done          | YAML + JSON parsing                  |
-| SQLite adapter  | ✅ Done          | DB open, WAL, FK, migrations, all repos incl. stats |
-| Import use case | ✅ Done          | Validate → normalise → hash → dedupe → insert |
-| CLI (import)    | ✅ Done          | `golearn import <path>` with `--db` flag |
-| Session engine  | ✅ Done          | StartSession, GetNextQuestion, RecordAttempt, EndSession |
-| Selection policy| ✅ Done          | Balanced, By Difficulty, Weakest modes |
-| CLI (run)       | ✅ Done          | `golearn run <topic-slug> --n N`     |
-| Export use case | ✅ Done          | Deterministic ordering, YAML + JSON output |
-| CLI (export)    | ✅ Done          | `golearn export <slug> --out <path> [--format]` |
-| Bubble Tea TUI  | ✅ Done          | Profile menu, home menu, topic select, config, question, feedback, summary, stats |
-| CLI (tui)       | ✅ Done          | `golearn tui` with alt-screen        |
-| Home Menu       | ✅ Done          | Post-login hub: practice, review, stats, switch profile, quit |
-| Stats feature   | ✅ Done          | Global, per-pack, difficulty, tags, weak questions, trends |
-| Example packs   | ✅ Done          | `go-basics.yaml`, `mvp-basics.yaml`, `databricks-pde-explained-2.yaml` |
-| CLI (help)      | ✅ Done          | `golearn help` with examples         |
-| Tests           | ✅ Done          | 80+ tests: validation, hashing, correctness, selector, modes, session, export, integration, profiles, stats, explanation, reset |
-| Makefile        | ✅ Done          | `fmt`, `vet`, `lint`, `test`, `check` |
-| Lint config     | ✅ Done          | `.golangci.yml` with sensible rules  |
-| CI pipeline     | ✅ Done          | GitHub Actions workflow (`.github/workflows/ci.yml`) |
+| Area                   | Status   |
+|------------------------|----------|
+| Domain layer           | ✅ Done — models, validation (8 rules), hashing (SHA-256), correctness, explanation helpers |
+| Ports & interfaces     | ✅ Done — 6 repository interfaces, PackReader, StatsRepository |
+| SQLite adapter         | ✅ Done — WAL, FK, sequential migrations (v1–v2), all repos |
+| Pack reader            | ✅ Done — YAML + JSON, single file + directory |
+| Import use case        | ✅ Done — validate → normalise → hash → dedupe → upsert |
+| Export use case        | ✅ Done — deterministic ordering, byte-stable YAML/JSON output |
+| Session engine         | ✅ Done — lifecycle, 3 selection modes (Balanced, By Difficulty, Weakest) |
+| Bubble Tea TUI         | ✅ Done — profile, home, topics, config, quiz, review, summary, stats |
+| CLI commands           | ✅ Done — import, run, tui, export, db reset, help |
+| Local profiles         | ✅ Done — multi-user, per-user sessions/stats, persisted config |
+| Stats feature          | ✅ Done — global, per-pack, difficulty, tags, weak questions, trends |
+| Example packs          | ✅ Done — go-basics, mvp-basics, databricks-pde (×2) |
+| Quality gates          | ✅ Done — Makefile (check), golangci-lint, GitHub Actions CI |
 
----
+### Build History (condensed)
 
-## Changelog
-
-### 2026-02-18 — Phase 14: Question Selection Modes + Stats Menu Cleanup
-
-- Added question selection modes: **Balanced**, **By Difficulty**, **Weakest**
-  - Created `internal/app/selection_mode.go` with `SelectionMode` type, `SessionConfig`, `ModeParams`, `ModeLabel`, `ModeParamsJSON`
-  - Created `internal/app/selector_difficulty.go`: filters questions by difficulty bucket, then applies Balanced within
-  - Created `internal/app/selector_weakest.go`: two sub-modes — By Tag (lowest-accuracy tag) and By Question (highest wrong-rate questions)
-  - `SessionConfig` struct replaces ad-hoc mode strings for session creation
-  - Mode and params persisted in `mode_params_json` column on sessions table (migration v2)
-  - `StartSessionWithConfig` routes to correct selector; `StartSession` delegates for backward compat
-  - Added `WithStatsRepo` to session engine for weakest-by-tag stats lookup
-- Updated TUI session config to multi-field picker
-  - Three fields: Questions (◀ N ▶), Mode (◀ Balanced ▶), Sub-option (difficulty level / weakest sub-mode)
-  - ↑/↓ navigates fields, ←/→ adjusts values, Enter starts session
-  - Mode label and note displayed in question and review headers during quiz
-  - Footer updated to show new keybindings
-- Added Stats Menu screen between Home and stats views
-  - Three options: Global Stats / Stats by Pack / Back
-  - Home → Stats → Stats Menu → {Global, Pack List} → back to Stats Menu
-  - Replaced direct Home → Global Stats navigation
-- Updated global stats display
-  - Added strongest pack (highest accuracy, min 5 attempts)
-  - Shows "N/A (not enough attempts)" fallback for both weakest and strongest when below threshold
-- Pack list sorted by attempts descending (most practiced packs first)
-  - Added `sortPacksByAttempts` insertion-sort on `TopicSummary` slice
-- Added/updated tests
-  - `selector_mode_test.go`: 12 tests covering difficulty filtering, N reduction, balanced-within-bucket, deterministic seeding, weakest by questions/tag, fallback, tie-break, mode labels
-  - `stats_test.go`: 3 new tests — strongest topic selection, below-threshold empty, multi-user isolation of strongest/weakest
-  - `tui_test.go`: 3 new tests — sortPacksByAttempts (unsorted, empty, already-sorted)
-- `make check` passes (all 80+ tests green)
-
-### 2026-02-17 — Phase 13: Difficulty Enum + Explanation Prefix + DB Reset
-
-- Refactored difficulty from numeric 1–5 scale to string enum: `easy | medium | hard`
-  - Added `domain.Difficulty` type with constants `DifficultyEasy`, `DifficultyMedium`, `DifficultyHard`, `DifficultyUnset`
-  - Added `ValidDifficulties` map for validation lookup
-  - Changed `Question.Difficulty` and `PackQuestion.Difficulty` from `int` to `Difficulty`
-  - Added validation rule 8: difficulty (if set) must be `easy`, `medium`, or `hard`
-  - Added difficulty to stable content hash (changes hash for all questions with difficulty set)
-  - SQLite `difficulty` column changed from `INTEGER DEFAULT 0` to `TEXT DEFAULT ''`
-  - Stats `difficultyBucket` remapped from int-range to direct enum lookup
-  - Export omits difficulty when empty string instead of when `>0`
-- Updated all example packs (4 files) to enum difficulty values
-  - `go-basics.yaml`: all `1` → `easy`
-  - `mvp-basics.yaml`: `1`→`easy`, `2`→`medium`, `3`→`hard`
-  - `databricks-pde-explained.yaml`: `1`→`easy`, `2`→`medium`, `3`→`hard`
-  - `databricks-pde-explained-2.yaml`: `1`→`easy`, `2`→`medium`, `3`→`hard`, `4`→`hard`
-- Implemented explanation prefix policy
-  - Created `domain/explanation.go` with `StripExplanationPrefix` and `FormatChoiceExplanation`
-  - Pack files store content-only explanations (no Correct:/Incorrect: prefixes)
-  - TUI dynamically prepends "Correct: " or "Incorrect: " at render time
-  - `sanitizeExplanation` in TUI now delegates to `domain.StripExplanationPrefix`
-  - Review screens use `domain.FormatChoiceExplanation` for per-choice rendering
-- Added `db reset` command
-  - Created `sqlite/reset.go` with `ValidateResetPath` (safety checks) and `ResetDB`
-  - CLI: `golearn db reset [--yes]` with interactive confirmation
-  - Deletes DB file + WAL/SHM sidecars
-  - Added `make db-reset` Makefile target
-- Added/updated tests
-  - `domain/explanation_test.go`: 14 test cases (prefix stripping, format correctness)
-  - `sqlite/reset_test.go`: 10 safety sub-tests + functional tests
-  - Updated `validation_test.go`: difficulty enum validation (valid + invalid values)
-  - Updated `hashing_test.go`: difficulty changes produce different hashes
-  - Updated `stats_test.go`: enum-based difficulty bucketing
-  - Updated `tui_test.go`: dynamic prefix rendering assertions
-- Updated documentation
-  - `doc/PROJECT.md`: difficulty type, pack format, bucketing, hashing, validation rules, repo structure, CLI commands, explanation convention, DB reset
-  - `doc/QUESTIONS.md`: difficulty enum, gold standard example
-  - `doc/PROGRESS.md`: this changelog entry
-  - `README.md`: db reset command, pack format update
-- `make check` passes
-
-### 2026-02-17 — Phase 12: Databricks Pack Refactor + Explanations
-
-- Refactored Databricks PDE pack to the new internal choice-ID convention
-  - Renamed `examples/databricks-pde.yaml` → `examples/databricks-pde-explained-2.yaml`
-  - Converted choice IDs from letter labels to stable numeric IDs (`"1"`, `"2"`, ...)
-  - Updated all `correct_choice_ids` to the new internal IDs
-- Added full rationale coverage to all questions in the pack
-  - Added `rationale.correct` for each question
-  - Added `rationale.per_choice` entries for every choice ID
-  - Explanation text follows `doc/QUESTIONS.md` convention (content-only, no Correct/Incorrect prefixes)
-- Updated docs/help references to the renamed pack file
-  - README examples/table entries
-  - CLI help example in `cmd/golearn/main.go`
-  - `doc/PROJECT.md` repository structure
-  - `doc/SPEC.md` import example
-
-### 2026-02-17 — Phase 11: Choice Label Decoupling + Explanation Cleanup
-
-- Decoupled internal `Choice.id` from UI labels in practice/review flows
-  - Added per-question display label mapping in TUI state:
-    - `displayLabelByChoiceID`
-    - `choiceIDByDisplayLabel`
-  - Labels now render by display order (`A/B/C/...`) even when choices are shuffled
-  - Correctness, rationale lookup, hashing, and DB storage continue using stable internal IDs
-- Updated TUI rendering and review behavior
-  - Question, review, and review-browse screens now show generated display labels
-  - Per-choice explanations remain keyed by internal IDs and render in current display order
-- Added defensive explanation sanitization in TUI
-  - Strips leading `Correct:`, `Incorrect:`, `✅`, `❌` during rendering
-  - Keeps explanation content focused on "why" without redundant correctness markers
-- Updated CLI `run` UX for consistency with TUI
-  - Choices display with generated labels (`A/B/C/...`) based on shuffled order
-  - Input parsing maps display labels back to internal IDs (with backward-compatible internal-ID input)
-  - Incorrect-answer feedback shows correct display labels for the current order
-- Updated pack authoring standard and examples
-  - `doc/QUESTIONS.md` now defines `Choice.id` as stable internal identifier (not UI label)
-  - Added guidance for numeric/prefixed IDs and explicit explanation-style rules (no Correct/Incorrect prefix)
-  - Updated examples (`go-basics`, `mvp-basics`, `databricks-pde-explained`) to non-letter internal IDs
-  - Updated explained pack rationale text to content-only explanations
-- Added/updated tests
-  - TUI tests now assert shuffled display labels render as ordered `A/B/C...`
-  - Tests cover explanation lookup by internal ID after shuffle and prefix sanitization
-
-### 2026-02-17 — Phase 10: TUI UX Consistency Refactor
-
-- Unified TUI input handling via central keymap in `internal/adapters/tui/keymap.go`
-  - Standardized keys: `esc` back, `enter` confirm, `↑/↓` + `j/k` navigation,
-    `space` toggle, `e` explanation toggle, `r` review (when available), `s` skip (quiz)
-  - Enforced top-level quit only (`q` on Profile Menu and Home), removing deep-screen quit behavior
-- Refactored screen update handlers to shared key predicates in `model.go`
-  - Removed mixed back conventions (`b` + `esc`) in favor of `esc` only
-  - Removed hidden review-browse shortcuts (`n/p/←/→`) so behavior matches on-screen help
-- Implemented consistent parent-return behavior for review browse
-  - Added `reviewReturnScreen` state and updated `startReviewSession(returnTo screen)`
-  - `esc` and end-of-review now return to the invoking screen (Home or Summary)
-- Added shared layout helpers in `internal/adapters/tui/layout.go`
-  - Horizontal centering support for primary menus/lists
-  - Unified footer renderer used across screens
-- Centered primary menus and list screens:
-  - Profile Menu, Profile Login, Home, Topic Select, Pack Stats List
-- Simplified profile presentation on Login/Home flow
-  - Removed redundant profile duplication when `Continue (...)` is already shown
-- Unified and corrected footer help text across screens to match actual key behavior
-  - Non-session screens: consistent navigate/select/back (and quit only where valid)
-  - Quiz screen: navigate/toggle/submit/cancel/skip
-  - Review screens: next/toggle explanation/back
-- Updated TUI tests for new review parent behavior and footer text expectations
-- Validation:
-  - `go test ./internal/adapters/tui -v -count=1` passes
-
-### 2026-02-17 — Phase 9: Session Shuffle + Stats Timestamp Polish
-
-- Added session-scoped answer shuffling in `SessionEngine`:
-  - Introduced `SessionQuestion` with original `Question` pointer + `ShuffledChoices`
-  - Choices are copied and shuffled per session using the existing session RNG seed
-  - No DB writes/schema changes and no changes to `domain.Question`
-- Preserved correctness logic using original choice IDs:
-  - `RecordAttempt` still evaluates against original `CorrectChoiceIDs`
-  - Multi-select remains order-insensitive via existing `domain.EvaluateCorrectness`
-  - Explanation mapping (`rationale.per_choice`) remains unchanged since shuffled choices retain original IDs
-- Updated consumers to render shuffled choices:
-  - TUI question/review screens render `ShuffledChoices`
-  - CLI `run` command also displays session-shuffled choice order
-- Updated Pack Detail Stats timestamp formatting:
-  - `Last:` now renders as `YYYY-MM-DD HH:MM`
-  - Seconds removed using `t.Format("2006-01-02 15:04")`
-  - Added robust parsing fallback for SQLite/RFC3339 timestamp variants
-- Added tests:
-  - Deterministic shuffle behavior with fixed RNG seed
-  - Correctness preserved when display order changes (including multi-select)
-  - Timestamp formatting test ensuring minute precision output
-
-### 2026-02-17 — Phase 8: Stats Feature + Home Menu Navigation
-
-- Added post-login Home Menu with 5 options:
-  - Start Practice, Review Wrong Answers, Stats, Switch Profile, Quit
-  - Profile login/register now routes to Home Menu instead of direct topic select
-  - Topic select and review browse navigate back to Home Menu
-- Implemented `StatsRepository` interface in `ports/repositories.go`:
-  - `GlobalStats`: overall accuracy, answered/skipped, latency, most practiced, weakest topic
-  - `TopicSummary`: per-topic coverage, accuracy, attempts, latency, last practiced
-  - `DifficultyStats`: per-difficulty-bucket breakdown (Easy/Medium/Hard/Unrated)
-  - `TagStats`: per-tag accuracy with minimum attempts filter
-  - `WeakQuestions`: worst-performing questions ranked by wrong rate
-  - `SessionTrend` / `SessionTrendGlobal`: accuracy per session for sparkline
-- Implemented `sqlite/stats_repo.go` with SQL aggregate queries
-  - All queries filtered by `user_id` for multi-user isolation
-  - Difficulty bucketing: 1–2 → Easy, 3 → Medium, 4–5 → Hard, 0/NULL → Unrated
-  - Tag stats use Go-side JSON array parsing (SQLite compatibility)
-  - Weak questions exclude 100%-correct questions
-- Added 3 new TUI screens:
-  - Global Stats: accuracy, time, trend sparkline, most/weakest packs
-  - Pack Stats List: fixed-column table of all packs with accuracy/attempts
-  - Pack Detail Stats: header metrics, difficulty breakdown, weak/strong tags,
-    weakest questions list, session trend sparkline with delta
-- Updated Summary screen with navigable menu:
-  - Review incorrect questions (if any)
-  - View stats for this pack → Pack Detail Stats
-  - Back to Home
-- Added sparkline rendering with Unicode blocks (▁▂▃▄▅▆▇█)
-  - Trend delta indicator (↑/↓/→) comparing first to last session
-- Added 6 new stats aggregation tests:
-  - `TestStatsRepo_MultiUserIsolation`: two-user same-topic correctness isolation
-  - `TestStatsRepo_DifficultyBucketing`: difficulty 1–5 + 0 mapping verification
-  - `TestStatsRepo_SessionTrend`: multi-session ascending accuracy verification
-  - `TestStatsRepo_WeakQuestions`: wrong_rate ordering + minAttempts filter
-  - `TestStatsRepo_TopicSummary_Coverage`: coverage %, seen questions
-  - `TestStatsRepo_GlobalStats_Skipped`: skipped excluded from accuracy
-- Added 7 new TUI tests:
-  - `TestHomeMenuView`: home menu options rendering
-  - `TestHomeMenuNavigation`: cursor movement
-  - `TestSparkline`: sparkline rendering (4 sub-tests)
-  - `TestTrendDelta`: delta formatting (4 sub-tests)
-  - `TestTruncate`: string truncation
-  - `TestStatsGlobalViewEmpty`: empty state for global stats
-  - `TestSummaryViewHasStatsOption`: stats + home options in summary
-- Updated `doc/PROJECT.md`:
-  - Added Home Menu navigation flow
-  - Added Stats metrics definitions
-  - Added difficulty bucketing mapping
-  - Updated repository structure (stats_repo.go, screens_stats.go)
-- `make check` passes
-
-### 2026-02-17 — Phase 7: Local Multi-User Profiles
-
-- Added local profile system (no passwords, no network auth)
-  - New `users` table with unique `handle`, optional `display_name`, timestamps
-  - Seeded default profile: `local` / `Local`
-- Added persisted current user config at `~/.golearn/config.json`
-  - Stores `current_user_id`
-  - Missing/invalid config falls back to seeded `local` and rewrites config
-  - Config path is injectable in code paths used by tests
-- Made sessions/attempts/stats user-scoped
-  - Added `user_id` to `sessions` and `attempts`
-  - Added indexes: `sessions(user_id, topic_id, started_at)`,
-    `attempts(user_id, question_id, created_at)`, `attempts(user_id, session_id)`
-  - Selection policy stats and topic accuracy now filter by current `user_id`
-  - Review mode remains read-only and only reflects current user's mistakes
-- Replaced startup intro with profile menu flow in TUI
-  - Menu: Continue, Login, Register, Quit
-  - Login: pick existing profile
-  - Register: handle validation (`a-z`, `0-9`, `-`, `_`) + uniqueness
-  - Successful login/register sets current profile and persists config
-- Added schema compatibility reset strategy for dev phase
-  - On startup, if legacy schema (missing user columns/tables) is detected,
-    DB schema is dropped and recreated automatically
-- Added tests
-  - SQLite user repository create/list/get + unique handle enforcement
-  - Two-user stats scoping correctness (`user A` not polluted by `user B`)
-  - TUI profile selection state sets current user context
-- `make check` passes
-
-### 2026-02-17 — Phase 6: TUI UX Polish
-
-- Fixed text overflow: all long text now hard-wraps to terminal width
-  - Created `internal/adapters/tui/wrap.go` with `wrapText` and `wrapAndIndent` helpers
-  - Uses `WindowSizeMsg` width with `contentWidth(padding)` method (default 80, min content 20)
-  - Wrapping applied to: intro, prompt, choice text, rationale.correct, rationale.per_choice
-  - Continuation lines use consistent indentation aligned to content start
-- Redesigned review mode as read-only browse (no new quiz session)
-  - New `screenReviewBrowse` mode: cycles through wrong answers without recording attempts
-  - Shows correct answers (green ✔), user's wrong selections (red ✘), and explanations
-  - Tracks user's original selections via `wrongAnswer{Question, SelectedIDs}` struct
-  - Controls: enter/n/→ next, p/← previous, e toggle explanations, q exit to topics
-  - Removed old review-as-quiz flow that created a new answering session
-- Fixed question-count selection controls to match visual hints
-  - Session config now uses ←/→ (and j/k) to increment/decrement count
-  - Hint text updated from "↑/↓" to "←/→" to match the ◀ N ▶ display
-- Implemented tabular topic list with fixed-column layout
-  - Column 1: topic name (variable width, truncated with "…" to fit)
-  - Column 2: "N questions" (right-aligned, 14-char column)
-  - Column 3: "N%" accuracy (right-aligned, 5-char column)
-  - Layout adapts to terminal width; never overflows horizontally
-  - Selected row highlighting preserves column alignment
-- Added 5 new tests (42 total):
-  - `TestWrapText`: 12 table-driven sub-tests covering word wrap, long words, newlines, edge cases
-  - `TestWrapText_NoLineExceedsWidth`: property test verifying no output line exceeds width
-  - `TestWrapAndIndent`: indent + wrap integration
-  - `TestReviewBrowseView`: browse view renders header, prompt, and controls
-  - `TestContentWidth`: padding and default width calculations
-- Updated `TestReviewSessionSetup` for new browse-mode review (wrongAnswer type, screenReviewBrowse)
-- All 42 tests pass, `make check` green
-
-### 2026-02-17 — Phase 5: UX Polish + Explained Pack + Question Standard
-
-- Created `examples/databricks-pde-explained.yaml`: 15-question PDE pack with full rationale
-  - 10 single_select + 5 multi_select questions
-  - Every question includes `rationale.correct` and `rationale.per_choice` explanations
-  - Topics: Auto Loader schema, Delta ACID, OPTIMIZE+ZORDER, VACUUM, CDF, checkpointing,
-    watermarks, trigger modes, Unity Catalog permissions, medallion architecture,
-    isolation levels, deletion vectors, stream-static joins, MERGE, table constraints
-  - All answers sourced from official Databricks documentation
-- Upgraded TUI to quiz-show review mode:
-  - After submitting: full question + choices remain visible with colour-coded feedback
-  - Green ✔ for correct choices, red ✘ for incorrect selected choices
-  - Press 'e' to toggle per-choice explanations and rationale
-  - Explicit enter required to proceed to next question
-  - Uses Lip Gloss styling for visual clarity
-- Added ASCII intro splash screen on TUI startup (press any key to continue)
-- Improved session summary:
-  - Shows accuracy %, average response time
-  - Shows count of wrong questions with review suggestion
-  - Press 'r' from summary to replay wrong questions in review mode
-- Added review mode: replays only incorrectly answered questions from last session
-- Fixed export to include rationale data (was previously omitted)
-- Created `doc/QUESTIONS.md`: formal question authoring standard
-  - Question philosophy, structure rules, explanation rules
-  - Tone guidelines, validation checklist, reference policy
-  - Gold standard example question
-- Added 8 new tests (37 total):
-  - `TestImport_PDEExplainedPack`: validates pack imports with rationale integrity
-  - `TestExportRoundtrip_WithRationale`: verifies rationale survives export/reimport
-  - `TestReviewState_ExplanationToggle`: TUI explanation toggle state logic
-  - `TestReviewState_CorrectFeedback`: correct answer visual feedback
-  - `TestReviewState_IncorrectFeedback`: incorrect answer visual feedback
-  - `TestReviewState_SkippedFeedback`: skipped answer visual feedback
-  - `TestIntroScreen`: ASCII intro screen renders
-  - `TestReviewSessionSetup`: review session initialisation
-- Updated README with new pack, TUI features, QUESTIONS.md doc link
-- All 37 tests pass, `make check` green
-
-### 2026-02-16 — Phase 4: Polish + Product Reframe + Content Expansion
-
-- Replaced `doc/SPEC.md` with business-unit product specification:
-  - Product vision, value proposition, target personas
-  - Use cases, deployment scenarios, differentiation matrix
-  - 6–12 month roadmap with phased milestones
-  - Enterprise expansion opportunities (LLM generation, team assessment)
-- Resolved technical debt:
-  - D1: Added `.golangci.yml` with errcheck, govet, staticcheck, gocritic, misspell
-  - D5: Documented import error handling strategy (fail-per-file, not fail-fast)
-  - D6: Added `GetBySlug` to `TopicRepository` and `TopicRepo`; refactored
-    `session.go` and `export_pack.go` to use direct lookup instead of List()+filter
-  - D9: Added `.github/workflows/ci.yml` (fmt + vet + lint + test + build + smoke test)
-- Updated `doc/PROJECT.md`:
-  - Repository structure matches actual file layout
-  - Added CLI framework decision rationale (stdlib vs cobra)
-  - Added pack versioning strategy
-  - Added "Export Guarantees" section
-  - Added "Determinism Guarantees" section
-  - Added "Session Engine" constraints documentation
-  - Corrected hashing and selection policy descriptions
-- Updated `doc/PROGRESS.md`:
-  - Added "MVP COMPLETE" marker
-  - Cleaned technical debt log (removed resolved items, updated remaining)
-  - Added Phase 4 changelog entry
-- Created `examples/databricks-pde.yaml`: 30-question Databricks PDE certification pack
-  - 20 single_select + 10 multi_select questions
-  - Topics: Auto Loader, Delta Lake, Structured Streaming, Unity Catalog,
-    Change Data Feed, VACUUM, ZORDER, medallion architecture, DLT, checkpointing,
-    watermarks, CDC, partitioning, isolation levels
-  - Source references to official Databricks documentation
-- Improved CLI help formatting with clearer structure
-- Improved import summary output formatting
-- All tests pass, `make check` green
-
-### 2026-02-16 — Phase 3: Bubble Tea TUI + Export + MVP polish
-
-- Implemented `internal/app/export_pack.go`: pack export use case
-  - Export topics to canonical YAML or JSON format
-  - Deterministic ordering: `created_at ASC`, hash for tie-breaking
-  - Only includes optional fields when they have meaningful values
-  - `ExportToBytes()` method for in-memory testing
-- Implemented Bubble Tea TUI under `internal/adapters/tui/`:
-  - `app.go`: TUI entry point with `Run(db)`, topic metadata loading
-  - `model.go`: Bubble Tea model with `Init/Update/View`, screen routing
-  - `screens_topic.go`: topic selection with question counts and accuracy %
-  - `screens_session.go`: session configuration (adjust question count)
-  - `screens_question.go`: question display with choice navigation, selection, feedback
-  - `screens_summary.go`: session summary with total/correct/accuracy
-  - Full TUI flow: topics → config → question → feedback → summary → back to topics
-  - Controls: ↑/↓ or j/k navigate, space toggle, enter submit, s skip, q quit
-- Wired CLI commands:
-  - `golearn tui` — launches Bubble Tea TUI with alt-screen
-  - `golearn export <slug> --out <path> [--format yaml|json]` — exports topic to file
-  - `golearn help` / `--help` / `-h` — improved help with examples
-  - Format auto-detection from file extension for export
-- Created `examples/mvp-basics.yaml`: 10 questions (5 single_select, 5 multi_select)
-  - Covers Go basics, CLI, databases, concurrency, general programming
-  - Mixed formats: with/without intro, 2/4/5 choices, varied difficulty
-- Added 4 new tests (31 total):
-  - `TestExportRoundtrip`: import → export → re-import → 0 duplicates
-  - `TestExportDeterministic`: two exports produce identical output
-  - `TestExportJSON`: JSON export and re-import roundtrip
-  - `TestIntegration_ImportAndSession`: end-to-end import → session → stats verification
-- Added dependencies: `github.com/charmbracelet/bubbletea`, `github.com/charmbracelet/lipgloss`
-- Updated README with TUI, export, and example pack documentation
-- All 31 tests pass, `make check` green
-
-### 2026-02-16 — Phase 2: Session engine + selection policy + CLI run loop
-
-- Added `domain/correctness.go`: centralised answer evaluation — exact, order-insensitive set match
-- Extended `ports/repositories.go`: added `SessionRepository`, `AttemptRepository`, `QuestionStats` type
-- Implemented `sqlite/session_repo.go`: Create (insert session row) + Finish (set ended_at)
-- Implemented `sqlite/attempt_repo.go`: Record (insert attempt) + StatsByTopic (aggregated per-question stats)
-- Implemented `app/selector.go`: question selection policy — unseen → weak (highest wrong rate) → random fill
-  - Uses seeded `*rand.Rand` for test determinism
-  - Weak bucket sorted by wrong rate descending
-- Implemented `app/session.go`: full session lifecycle engine
-  - `StartSession(topicSlug, n, mode)` — validates topic, selects questions, persists session
-  - `GetNextQuestion()` — serves from in-memory queue, no duplicates
-  - `RecordAttempt()` — evaluates correctness via domain layer, persists attempt
-  - `EndSession()` — sets ended_at timestamp
-- Added CLI `golearn run <topic-slug> [--n N]` command
-- Added 16 new tests (27 total)
-- All tests deterministic with fixed random seeds
-
-### 2026-02-16 — Phase 1: Foundation layer
-
-- Implemented domain models: `Topic`, `Question`, `Session`, `Attempt`, `Pack*` types
-- Implemented validation (7 rules), stable hashing, normalisation
-- Defined port interfaces, implemented pack reader, SQLite adapter, import use case
-- Wired CLI: `golearn import <path>` with `--db` flag
-- Added unit tests, Makefile, `.gitignore`
-- Dependencies: `gopkg.in/yaml.v3`, `modernc.org/sqlite`
-
-### 2026-02-16 — Phase 0: Initial scaffold
-
-- Created doc files, README, `go.mod`, stub `main.go`, Makefile
-- Added example pack `examples/go-basics.yaml`
+| Phase | Date       | Milestone |
+|-------|------------|-----------|
+| 0     | 2026-02-16 | Initial scaffold, go.mod, stub CLI, go-basics pack |
+| 1     | 2026-02-16 | Domain models, validation, hashing, pack reader, SQLite adapter, import CLI |
+| 2     | 2026-02-16 | Session engine, selection policy, correctness evaluation, `run` CLI |
+| 3     | 2026-02-16 | Bubble Tea TUI, export use case, mvp-basics pack |
+| 4     | 2026-02-16 | Product spec rewrite, lint config, CI pipeline, databricks-pde pack (30 Q) |
+| 5     | 2026-02-17 | Quiz-show review mode, rationale/explanations, QUESTIONS.md, databricks-pde-explained pack (15 Q) |
+| 6     | 2026-02-17 | Text wrapping, tabular topic list, read-only review browse, UX polish |
+| 7     | 2026-02-17 | Local multi-user profiles, per-user stats scoping, config persistence |
+| 8     | 2026-02-17 | Stats feature (global, per-pack, difficulty, tags, weak Qs, trends), home menu, sparklines |
+| 9     | 2026-02-17 | Session-scoped answer shuffling, timestamp formatting |
+| 10    | 2026-02-17 | Unified TUI keymap, consistent navigation, layout helpers, footer standardisation |
+| 11    | 2026-02-17 | Choice ID / UI label decoupling, explanation cleanup, pack authoring standard update |
+| 12    | 2026-02-17 | Databricks pack refactor to numeric IDs, full rationale coverage |
+| 13    | 2026-02-17 | Difficulty enum (easy/medium/hard), explanation prefix policy, db reset command |
+| 14    | 2026-02-18 | Selection modes (Balanced, By Difficulty, Weakest), stats menu, strongest pack metric |
 
 ---
 
@@ -456,3 +52,141 @@ All core capabilities are implemented, tested, and documented.
 |-----|------------------|-----------------------------------------------------|----------|
 | D3  | Export versioning | Pack format `0.1.0`; import accepts any version string. Version-aware parsing needed if schema evolves. | Low |
 | D7  | Session state    | Session engine holds in-memory queue; one active session per engine instance. Intentional MVP constraint. | Low |
+
+---
+
+## Planned: Foundation Refactors
+
+_Identified 2026-02-19. Each item improves code quality, performance, or maintainability
+without changing user-facing behaviour. Work in any order; each is independently mergeable._
+
+- [ ] **R1 — Deduplicate `displayLabelForIndex`**: Identical function exists in both
+      `cmd/golearn/main.go` and `internal/adapters/tui/choice_labels.go`. Extract to a
+      shared location (e.g. `domain` or a new `internal/format` package) and import
+      from both call sites.
+
+- [ ] **R2 — Deduplicate `resolveCurrentUser` logic**: Near-identical user resolution
+      code exists in `main.go` (`resolveCurrentUserID`) and `tui/app.go`
+      (`resolveCurrentUser`). Extract to a shared function in the `app` layer that
+      both CLI and TUI call.
+
+- [ ] **R3 — Deduplicate export pack-building logic**: `Export()` and `ExportToBytes()`
+      in `internal/app/export_pack.go` share ~80% identical pack-construction code.
+      Have `Export()` call `ExportToBytes()` + write to file, eliminating the duplication.
+
+- [ ] **R4 — Replace hand-rolled stdlib reimplementations**: Several adapter files
+      contain unnecessary custom implementations of stdlib functionality:
+      - `selector_difficulty.go`: custom `itoa()` → use `strconv.Itoa`
+      - `stats_repo.go`: custom `parseJSONStringArray`, `trimBrackets`, `trimQuotes`,
+        `trimSpace`, `splitJSON` → use `encoding/json.Unmarshal`
+      - `stats_repo.go`: custom `sortTagStats`, `sortPacksByAttempts` insertion sorts
+        → use `sort.Slice`
+
+- [ ] **R5 — Fix N+1 query patterns in `stats_repo.go`**: Three methods issue queries
+      in loops: `TopicSummaries` (one query per topic), `TagStats` (one per tag × question),
+      `SessionTrend` / `SessionTrendGlobal` (one per session). Rewrite each as a single
+      aggregate SQL query with GROUP BY to eliminate the N+1 pattern. This is the highest-
+      impact performance improvement in the codebase.
+
+- [ ] **R6 — Split TUI `model.go`**: At ~900 lines with ~80 fields and 14 `update*()`
+      handlers, this file is the largest and most complex. Co-locate each screen's
+      `update*()` method with its `view*()` function (e.g. move `updateQuestion` into
+      `screens_question.go`). Consider grouping related model fields into embedded
+      sub-structs (e.g. `quizState`, `reviewState`, `statsState`).
+
+- [ ] **R7 — Move composition root out of TUI adapter**: `tui/app.go` directly imports
+      `sqlite` and `localconfig` packages to construct repositories. This violates
+      hexagonal architecture — the adapter shouldn't wire other adapters. Move DI
+      wiring to `main.go` (or a dedicated `wire.go`) and pass constructed repos into
+      the TUI via its `Run()` function signature.
+
+- [ ] **R8 — Use `filepath.Join` for path construction**: `import_pack.go` builds
+      directory paths with `fmt.Sprintf("%s/%s", ...)` instead of `filepath.Join()`.
+      Not portable on Windows. Replace all path concatenation with `filepath.Join`.
+
+- [ ] **R9 — Surface silently swallowed errors**: Several TUI update handlers discard
+      errors from `RecordAttempt`, `EndSession`, stats loading, and session start.
+      At minimum, display a user-facing error message in the TUI when these fail.
+      Optionally log to a debug log file.
+
+- [ ] **R10 — Add missing test coverage**: The following packages have zero test files:
+      `ImportService` (app/import_pack.go), `pack.Reader` (adapters/pack/reader.go),
+      `localconfig.Store` (adapters/localconfig/config.go), and `UserContext`
+      (app/user_context.go). Add unit tests for each — these are straightforward
+      to test and cover critical paths.
+
+- [ ] **R11 — Remove deprecated `GetNextQuestion`**: `session.go` has both
+      `GetNextQuestion()` (deprecated) and `GetNextSessionQuestion()`. Remove the
+      deprecated method and update any remaining call sites.
+
+- [ ] **R12 — Extract magic numbers to named constants**: Hardcoded thresholds are
+      scattered across the codebase: `minAttempts = 3` (selectors), `minAttempts = 5`
+      (stats), `limitN = 10` (trends), default question count `10`. Define these as
+      package-level constants with descriptive names.
+
+---
+
+## Planned: OSS Release Preparation
+
+_Identified 2026-02-19. Checklist to transform this from a personal project into a
+publishable open-source repository. Items are ordered by priority (do top items first)._
+
+### Must-Have (before first public release)
+
+- [ ] **O1 — Fix `go.mod` Go version**: Currently declares `go 1.25.7` which doesn't
+      exist. Change to a real stable release (e.g. `go 1.22` or `go 1.23`). Verify
+      CI also pins the same version.
+
+- [ ] **O2 — Add CONTRIBUTING.md**: Write a contributor guide covering: how to build,
+      how to run tests, how to submit a PR, code style expectations (link to
+      WORKFLOW.md code standards), branch naming convention, commit message format.
+
+- [ ] **O3 — Add CODE_OF_CONDUCT.md**: Adopt Contributor Covenant v2.1 or similar.
+      Required for most OSS hosting platforms' community standards.
+
+- [ ] **O4 — Add issue and PR templates**: Create `.github/ISSUE_TEMPLATE/bug_report.md`
+      and `.github/ISSUE_TEMPLATE/feature_request.md`, plus
+      `.github/PULL_REQUEST_TEMPLATE.md` with a checklist (tests pass, docs updated,
+      `make check` green).
+
+- [ ] **O5 — Add GoDoc package comments**: Every exported package (domain, ports, app,
+      and each adapter) needs a package-level doc comment. Add doc comments to all
+      exported functions and types that currently lack them. This enables
+      `pkg.go.dev` documentation to render correctly.
+
+- [ ] **O6 — Add `go install` support**: Ensure the module path supports
+      `go install github.com/<org>/golearn/cmd/golearn@latest`. Test the install
+      path works end-to-end. Document it in the README quickstart.
+
+- [ ] **O7 — Review and clean README**: The README is already good, but needs:
+      - A project logo/banner or clear one-liner at the very top
+      - Badges (CI status, Go version, license)
+      - A GIF or screenshot of the TUI in action
+      - Remove references to `databricks-pde-explained.yaml` (internal content
+        that may have IP concerns for public release)
+      - Add a "Why golearn?" section with 3–4 bullet differentiators
+
+- [ ] **O8 — Audit example packs for public release**: The Databricks PDE packs
+      reference specific certification content. Evaluate whether these can be
+      published as-is or need to be replaced with generic example packs. Consider
+      creating a `examples/sample-quiz.yaml` with technology-agnostic questions.
+
+- [ ] **O9 — Add LICENSE header to source files**: Apache 2.0 recommends adding
+      a boilerplate copyright notice to source files. Add a one-line header
+      or use a tool like `addlicense` to automate it.
+
+### Nice-to-Have (post-launch polish)
+
+- [ ] **O10 — Create GitHub Releases with binaries**: Set up GoReleaser or a GitHub
+      Actions workflow that builds cross-platform binaries (linux/amd64, darwin/arm64,
+      windows/amd64) on tag push and attaches them to a GitHub Release.
+
+- [ ] **O11 — Add a CHANGELOG.md**: The PROGRESS.md build history is internal.
+      Create a user-facing CHANGELOG.md following Keep a Changelog format, starting
+      from v0.1.0.
+
+- [ ] **O12 — Add Homebrew / package manager formula**: After binary releases work,
+      create a Homebrew tap for easy macOS/Linux installation.
+
+- [ ] **O13 — Set up GitHub Discussions or wiki**: For community questions, pack
+      sharing, and feature requests beyond issue tracking.

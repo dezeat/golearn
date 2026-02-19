@@ -245,7 +245,7 @@ func TestIntegration_ImportAndSession(t *testing.T) {
 	}
 }
 
-// TestImport_PDEExplainedPack validates that the databricks-pde-explained.yaml
+// TestImport_PDEExplainedPack validates that the databricks-pde-explained-1.yaml
 // pack imports cleanly and has the expected number of questions.
 func TestImport_PDEExplainedPack(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "pde_explained.db")
@@ -261,12 +261,12 @@ func TestImport_PDEExplainedPack(t *testing.T) {
 	reader := pack.NewReader()
 	importSvc := app.NewImportService(reader, topicRepo, questionRepo)
 
-	result, err := importSvc.Import("../../examples/databricks-pde-explained.yaml")
+	result, err := importSvc.Import("../../examples/databricks-pde-explained-1.yaml")
 	if err != nil {
 		t.Fatalf("import pde-explained: %v", err)
 	}
-	if result.Inserted != 15 {
-		t.Errorf("expected 15 inserted, got %d", result.Inserted)
+	if result.Inserted != 38 {
+		t.Errorf("expected 38 inserted, got %d", result.Inserted)
 	}
 	if result.Duplicates != 0 {
 		t.Errorf("expected 0 duplicates, got %d", result.Duplicates)
@@ -276,7 +276,7 @@ func TestImport_PDEExplainedPack(t *testing.T) {
 	}
 
 	// Verify questions have rationale data.
-	topic, err := topicRepo.GetBySlug("databricks-pde-explained")
+	topic, err := topicRepo.GetBySlug("databricks-pde-explained-1")
 	if err != nil {
 		t.Fatalf("get topic: %v", err)
 	}
@@ -301,15 +301,15 @@ func TestImport_PDEExplainedPack(t *testing.T) {
 	}
 
 	// Re-import should produce all duplicates.
-	result2, err := importSvc.Import("../../examples/databricks-pde-explained.yaml")
+	result2, err := importSvc.Import("../../examples/databricks-pde-explained-1.yaml")
 	if err != nil {
 		t.Fatalf("re-import: %v", err)
 	}
 	if result2.Inserted != 0 {
 		t.Errorf("re-import: expected 0 inserts, got %d", result2.Inserted)
 	}
-	if result2.Duplicates != 15 {
-		t.Errorf("re-import: expected 15 duplicates, got %d", result2.Duplicates)
+	if result2.Duplicates != 38 {
+		t.Errorf("re-import: expected 38 duplicates, got %d", result2.Duplicates)
 	}
 }
 
@@ -328,14 +328,14 @@ func TestExportRoundtrip_WithRationale(t *testing.T) {
 	reader := pack.NewReader()
 	importSvc := app.NewImportService(reader, topicRepo, questionRepo)
 
-	if _, err := importSvc.Import("../../examples/databricks-pde-explained.yaml"); err != nil {
+	if _, err := importSvc.Import("../../examples/databricks-pde-explained-1.yaml"); err != nil {
 		t.Fatalf("import: %v", err)
 	}
 
 	// Export.
 	exportPath := filepath.Join(t.TempDir(), "exported_rationale.yaml")
 	exportSvc := app.NewExportService(topicRepo, questionRepo)
-	if err := exportSvc.Export("databricks-pde-explained", exportPath, "yaml"); err != nil {
+	if err := exportSvc.Export("databricks-pde-explained-1", exportPath, "yaml"); err != nil {
 		t.Fatalf("export: %v", err)
 	}
 
@@ -355,12 +355,12 @@ func TestExportRoundtrip_WithRationale(t *testing.T) {
 	if err != nil {
 		t.Fatalf("re-import: %v", err)
 	}
-	if result.Inserted != 15 {
-		t.Errorf("expected 15 inserted from exported file, got %d", result.Inserted)
+	if result.Inserted != 38 {
+		t.Errorf("expected 38 inserted from exported file, got %d", result.Inserted)
 	}
 
 	// Verify rationale preserved.
-	topic, err := topicRepo2.GetBySlug("databricks-pde-explained")
+	topic, err := topicRepo2.GetBySlug("databricks-pde-explained-1")
 	if err != nil {
 		t.Fatalf("get topic: %v", err)
 	}
