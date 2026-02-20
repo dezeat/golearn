@@ -12,9 +12,12 @@ import "encoding/json"
 type SelectionMode string
 
 const (
-	ModeBalanced     SelectionMode = "balanced"
+	// ModeBalanced selects questions using unseen → weak → random fill.
+	ModeBalanced SelectionMode = "balanced"
+	// ModeByDifficulty filters to a chosen difficulty, then applies Balanced.
 	ModeByDifficulty SelectionMode = "by_difficulty"
-	ModeWeakest      SelectionMode = "weakest"
+	// ModeWeakest focuses on the user's weakest tag or questions.
+	ModeWeakest SelectionMode = "weakest"
 )
 
 // ValidModes lists all accepted selection modes.
@@ -42,7 +45,9 @@ func ModeDisplayName(m SelectionMode) string {
 type WeakestSubMode string
 
 const (
-	WeakestByTag      WeakestSubMode = "by_tag"
+	// WeakestByTag selects questions from the weakest tag.
+	WeakestByTag WeakestSubMode = "by_tag"
+	// WeakestByQuestion selects individual questions with the highest wrong rate.
 	WeakestByQuestion WeakestSubMode = "by_question"
 )
 

@@ -1,15 +1,21 @@
 # golearn
 
-A local-first TUI tool for practising multiple-choice questions — built for
-certification prep and learning new technologies.
+**Local-first TUI for practising multiple-choice questions — certification prep, team knowledge, and self-directed learning.**
 
-## Features
+[![CI](https://github.com/dezeat/golearn/actions/workflows/ci.yml/badge.svg)](https://github.com/dezeat/golearn/actions/workflows/ci.yml)
+[![Go](https://img.shields.io/badge/Go-1.22+-00ADD8?logo=go&logoColor=white)](https://go.dev)
+[![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 
-- **Import** question packs from YAML or JSON files
-- **Practice** in an interactive Bubble Tea TUI with immediate feedback
-- **Track** your sessions, accuracy, and weak areas in SQLite
-- **Export** packs back to canonical format for sharing
-- **Deduplicate** questions automatically via content hashing
+---
+
+## Why golearn?
+
+- **Zero dependencies, zero accounts** — runs entirely offline with a single SQLite file. No cloud, no subscriptions, no sign-up.
+- **Adaptive practice** — automatically surfaces unseen and weak questions so you study what matters most.
+- **Author-friendly packs** — write questions in YAML with full rationale, version-control them with Git, share via any channel.
+- **Terminal-native** — a polished Bubble Tea TUI that fits into your existing dev workflow. No browser tabs required.
+
+---
 
 ## Quickstart
 
@@ -17,17 +23,17 @@ certification prep and learning new technologies.
 # Build
 make build
 
-# Import the Databricks PDE certification practice pack (30 questions)
-./bin/golearn import examples/databricks-pde-explained-2.yaml
+# Import a question pack
+./bin/golearn import packs/go-basics.yaml
 
 # Launch the interactive TUI
 ./bin/golearn tui
 
 # Or use the text-mode session runner
-./bin/golearn run databricks-pde --n 10
+./bin/golearn run go-basics --n 5
 
 # Export a topic back to a pack file
-./bin/golearn export databricks-pde --out out.yaml
+./bin/golearn export go-basics --out out.yaml
 
 # Reset the database (delete all data)
 ./bin/golearn db reset --yes
@@ -49,9 +55,9 @@ internal/
   adapters/
     sqlite/               SQLite persistence + migrations
     pack/                 YAML/JSON pack reader
+    localconfig/          Local user profile config
     tui/                  Bubble Tea terminal UI
-examples/                 Sample question packs
-doc/                      Spec, workflow, project docs, progress
+packs/                    Bundled question packs
 ```
 
 ## Development
@@ -84,92 +90,68 @@ topic:
   name: "Go Basics"
 questions:
   - type: "single_select"
-    prompt: "What does `defer` do in Go?"
+    intro: "Go's `defer` statement schedules calls for function return."
+    prompt: "When does a deferred function call execute in Go?"
     choices:
-      - { id: "1", text: "Executes immediately" }
-      - { id: "2", text: "Schedules call for function return" }
-      - { id: "3", text: "Pauses the goroutine" }
+      - { id: "1", text: "Immediately when the defer statement is reached" }
+      - { id: "2", text: "When the surrounding function returns" }
+      - { id: "3", text: "When the program exits" }
+      - { id: "4", text: "At the end of the current block scope" }
     correct_choice_ids: ["2"]
-    difficulty: easy  # optional: easy | medium | hard
+    tags: ["defer", "control-flow"]
+    difficulty: easy
+    rationale:
+      correct: "Deferred calls execute when the surrounding function returns, in LIFO order."
+      per_choice:
+        1: "Arguments are evaluated immediately, but the call is deferred."
+        2: "Deferred calls run on function return in reverse order (LIFO)."
+        3: "Defers are function-scoped, not program-scoped."
+        4: "Go's defer is function-scoped, not block-scoped."
 ```
 
-See [doc/PROJECT.md](doc/PROJECT.md) for the full schema and validation rules.
+## Bundled Packs
 
-## Example Packs
+| Pack                      | Questions | Description                                       |
+|---------------------------|-----------|----------------------------------------------------|
+| `packs/go-basics.yaml`   | 15        | Go language fundamentals with full rationale       |
+| `packs/llm-agents.yaml`  | 15        | LLM agents & agentic AI for curious non-engineers  |
 
-| Pack                                    | Questions | Description                                        |
-|-----------------------------------------|-----------|----------------------------------------------------|
-| `examples/go-basics.yaml`              | 3         | Go language fundamentals                           |
-| `examples/mvp-basics.yaml`             | 10        | Mixed topics (Go, CLI, databases, general)         |
-| `examples/databricks-pde-explained-2.yaml` | 30        | Databricks Professional Data Engineer prep         |
-| `examples/databricks-pde-explained.yaml`| 15       | Databricks PDE with per-choice explanations        |
-
-### Professional Data Engineer — Practice Pack
-
-The `databricks-pde-explained-2.yaml` pack contains 30 exam-style questions covering:
-
-- **Auto Loader** — file notification mode, schema inference
-- **Delta Lake** — transaction log, VACUUM, isolation levels, time travel
-- **Structured Streaming** — checkpointing, watermarks, output modes, triggers
-- **Change Data Feed** — enabling CDF, _change_type values, CDC processing
-- **Unity Catalog** — namespace hierarchy, metastore concepts
-- **Medallion Architecture** — Bronze/Silver/Gold layer purposes
-- **Delta Live Tables** — dataset types, decorators, expectations, APPLY CHANGES
-- **Optimization** — OPTIMIZE, ZORDER, auto compaction, partitioning best practices
-
-All answers are based on official Databricks documentation with `source_ref` links.
+Additional packs (certification prep, technology deep-dives) live in the
+separate [golearn-packs](https://github.com/dezeat/golearn-packs) repository.
 
 ```bash
-./bin/golearn import examples/databricks-pde-explained-2.yaml
-./bin/golearn tui
-# → Select "Databricks Professional Data Engineer"
-```
-
-### Databricks Professional Data Engineer — Explained Practice Pack
-
-The `databricks-pde-explained.yaml` pack contains 15 exam-style questions with
-**full per-choice explanations**. Each answer option includes a rationale explaining
-why it is correct or incorrect — optimised for deep learning, not just answer checking.
-
-Topics covered: Auto Loader, Delta Lake ACID, OPTIMIZE + ZORDER, VACUUM, Change Data
-Feed, Structured Streaming checkpointing, watermarks, trigger modes, Unity Catalog
-permissions, medallion architecture, isolation levels, deletion vectors, stream-static
-joins, MERGE semantics, and Delta table constraints.
-
-```bash
-./bin/golearn import examples/databricks-pde-explained.yaml
-./bin/golearn tui
-# → Select "Databricks PDE — Explained Practice"
-# → Answer a question → see quiz-show feedback → press 'e' for explanations
+# Import from the packs repo
+git clone https://github.com/dezeat/golearn-packs.git
+./bin/golearn import golearn-packs/packs/
 ```
 
 ## Import
 
 ```bash
 # Import a single file
-./bin/golearn import examples/go-basics.yaml
+./bin/golearn import packs/go-basics.yaml
 
 # Import all packs in a directory
-./bin/golearn import path/to/packs/
+./bin/golearn import packs/
 
 # Use a custom DB path
-./bin/golearn --db /tmp/test.db import examples/go-basics.yaml
+./bin/golearn --db /tmp/test.db import packs/go-basics.yaml
 ```
 
 Import validates every question and reports errors with file path, question index, and field:
 
 ```
-examples/bad.yaml: question[2].choices: must have >= 2 choices, got 1
+packs/bad.yaml: question[2].choices: must have >= 2 choices, got 1
 ```
 
 ## Export
 
 ```bash
 # Export a topic to YAML
-./bin/golearn export mvp-basics --out pack.yaml
+./bin/golearn export go-basics --out pack.yaml
 
 # Export to JSON
-./bin/golearn export mvp-basics --out pack.json --format json
+./bin/golearn export llm-agents --out pack.json --format json
 
 # Re-import the exported file — zero duplicates
 ./bin/golearn import pack.yaml
@@ -182,23 +164,14 @@ examples/bad.yaml: question[2].choices: must have >= 2 choices, got 1
 ```
 
 The TUI provides:
-- **ASCII intro** — polished splash screen on startup
+- **Profile select** — multi-user local profiles with per-user stats
 - **Topic select** — browse topics with question counts and accuracy
-- **Session config** — choose number of questions
-- **Question screen** — navigate choices with ↑/↓, toggle with space, submit with enter
-- **Quiz-show review** — colour-coded feedback with ✔/✘ markers, press 'e' for explanations
-- **Summary** — accuracy %, average response time, review wrong questions with 'r'
-
-## Documentation
-
-| Document                              | Purpose                              |
-|---------------------------------------|--------------------------------------|
-| [doc/PROJECT.md](doc/PROJECT.md)      | Technical spec, data model, pack schema |
-| [doc/WORKFLOW.md](doc/WORKFLOW.md)    | Agent workflow and code standards     |
-| [doc/PROGRESS.md](doc/PROGRESS.md)   | Status, changelog, milestones         |
-| [doc/SPEC.md](doc/SPEC.md)           | Product specification                 |
-| [doc/QUESTIONS.md](doc/QUESTIONS.md)  | Question authoring standard           |
+- **Session config** — choose number of questions and selection mode
+- **Question screen** — navigate choices with ↑/↓, toggle with Space, submit with Enter
+- **Quiz-show review** — colour-coded feedback with ✔/✘ markers, press `E` for explanations
+- **Summary** — accuracy %, average response time, review wrong questions with `R`
+- **Stats dashboard** — global accuracy, per-pack breakdowns, difficulty distribution, weak questions, trends
 
 ## License
 
-See [LICENSE](LICENSE).
+[Apache 2.0](LICENSE)

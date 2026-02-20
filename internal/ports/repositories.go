@@ -99,9 +99,13 @@ type TopicSummary struct {
 
 // DifficultyBucket labels for stats breakdown.
 const (
-	DifficultyEasy    = "Easy"
-	DifficultyMedium  = "Medium"
-	DifficultyHard    = "Hard"
+	// DifficultyEasy is the easy bucket label.
+	DifficultyEasy = "Easy"
+	// DifficultyMedium is the medium bucket label.
+	DifficultyMedium = "Medium"
+	// DifficultyHard is the hard bucket label.
+	DifficultyHard = "Hard"
+	// DifficultyUnrated is the bucket for questions with no difficulty set.
 	DifficultyUnrated = "Unrated"
 )
 

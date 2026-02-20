@@ -13,6 +13,7 @@ type ValidationError struct {
 	Message string // human-readable description
 }
 
+// Error returns the formatted validation error string.
 func (e ValidationError) Error() string {
 	loc := fmt.Sprintf("question[%d]", e.Index)
 	if e.File != "" {

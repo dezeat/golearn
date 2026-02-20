@@ -110,13 +110,13 @@ func printUsage() {
 	fmt.Printf("  --db <path>    SQLite database path (default: %s)\n", sqlite.DefaultDBPath())
 	fmt.Println()
 	fmt.Println("Examples:")
-	fmt.Println("  golearn import examples/databricks-pde-explained-2.yaml")
+	fmt.Println("  golearn import packs/go-basics.yaml")
 	fmt.Println("  golearn tui")
-	fmt.Println("  golearn run databricks-pde --n 15")
-	fmt.Println("  golearn export databricks-pde --out backup.yaml")
-	fmt.Println("  golearn export mvp-basics --out out.json --format json")
+	fmt.Println("  golearn run go-basics --n 3")
+	fmt.Println("  golearn export go-basics --out backup.yaml")
+	fmt.Println("  golearn export llm-agents --out out.json --format json")
 	fmt.Println()
-	fmt.Println("Pack files use YAML or JSON format. See doc/PROJECT.md for the schema.")
+	fmt.Println("Pack files use YAML or JSON format. See README.md for the pack schema.")
 }
 
 func runImport(dbPath string, args []string) error {

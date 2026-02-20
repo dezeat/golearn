@@ -1,3 +1,5 @@
+// Package localconfig implements persistent local configuration storage
+// for golearn, using a JSON file at ~/.golearn/config.json.
 package localconfig
 
 import (

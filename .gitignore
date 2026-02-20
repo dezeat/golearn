@@ -38,3 +38,5 @@ go.work.sum
 bin/
 dist/
 tmp/
+
+agentic_docs/*

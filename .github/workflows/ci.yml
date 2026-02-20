@@ -39,6 +39,6 @@ jobs:
 
       - name: Smoke test — import + export roundtrip
         run: |
-          ./bin/golearn import examples/mvp-basics.yaml
-          ./bin/golearn export mvp-basics --out /tmp/export-test.yaml
+          ./bin/golearn import packs/go-basics.yaml
+          ./bin/golearn export go-basics --out /tmp/export-test.yaml
           ./bin/golearn import /tmp/export-test.yaml

@@ -8,18 +8,24 @@ import "time"
 type QuestionType string
 
 const (
+	// SingleSelect allows exactly one correct answer.
 	SingleSelect QuestionType = "single_select"
-	MultiSelect  QuestionType = "multi_select"
+	// MultiSelect allows one or more correct answers.
+	MultiSelect QuestionType = "multi_select"
 )
 
 // Difficulty represents the difficulty level of a question.
 type Difficulty string
 
 const (
-	DifficultyEasy   Difficulty = "easy"
+	// DifficultyEasy marks a question as easy.
+	DifficultyEasy Difficulty = "easy"
+	// DifficultyMedium marks a question as medium.
 	DifficultyMedium Difficulty = "medium"
-	DifficultyHard   Difficulty = "hard"
-	DifficultyUnset  Difficulty = "" // optional; packs may omit difficulty
+	// DifficultyHard marks a question as hard.
+	DifficultyHard Difficulty = "hard"
+	// DifficultyUnset means the pack author omitted difficulty.
+	DifficultyUnset Difficulty = "" // optional; packs may omit difficulty
 )
 
 // ValidDifficulties is the set of allowed non-empty difficulty values.

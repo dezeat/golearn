@@ -29,18 +29,18 @@ func TestExportRoundtrip(t *testing.T) {
 	reader := pack.NewReader()
 	importSvc := app.NewImportService(reader, topicRepo, questionRepo)
 
-	result, err := importSvc.Import("../../examples/mvp-basics.yaml")
+	result, err := importSvc.Import("../../packs/go-basics.yaml")
 	if err != nil {
 		t.Fatalf("import: %v", err)
 	}
-	if result.Inserted != 10 {
-		t.Fatalf("expected 10 inserted, got %d", result.Inserted)
+	if result.Inserted != 15 {
+		t.Fatalf("expected 15 inserted, got %d", result.Inserted)
 	}
 
 	// Export to a temp file.
 	exportPath := filepath.Join(t.TempDir(), "exported.yaml")
 	exportSvc := app.NewExportService(topicRepo, questionRepo)
-	if err := exportSvc.Export("mvp-basics", exportPath, "yaml"); err != nil {
+	if err := exportSvc.Export("go-basics", exportPath, "yaml"); err != nil {
 		t.Fatalf("export: %v", err)
 	}
 
@@ -52,8 +52,8 @@ func TestExportRoundtrip(t *testing.T) {
 	if result2.Inserted != 0 {
 		t.Errorf("expected 0 inserts on re-import, got %d", result2.Inserted)
 	}
-	if result2.Duplicates != 10 {
-		t.Errorf("expected 10 duplicates on re-import, got %d", result2.Duplicates)
+	if result2.Duplicates != 15 {
+		t.Errorf("expected 15 duplicates on re-import, got %d", result2.Duplicates)
 	}
 }
 
@@ -72,7 +72,7 @@ func TestExportDeterministic(t *testing.T) {
 
 	reader := pack.NewReader()
 	importSvc := app.NewImportService(reader, topicRepo, questionRepo)
-	if _, err := importSvc.Import("../../examples/mvp-basics.yaml"); err != nil {
+	if _, err := importSvc.Import("../../packs/go-basics.yaml"); err != nil {
 		t.Fatalf("import: %v", err)
 	}
 
@@ -81,10 +81,10 @@ func TestExportDeterministic(t *testing.T) {
 	// Export twice to different paths.
 	path1 := filepath.Join(t.TempDir(), "export1.yaml")
 	path2 := filepath.Join(t.TempDir(), "export2.yaml")
-	if err := exportSvc.Export("mvp-basics", path1, "yaml"); err != nil {
+	if err := exportSvc.Export("go-basics", path1, "yaml"); err != nil {
 		t.Fatalf("export1: %v", err)
 	}
-	if err := exportSvc.Export("mvp-basics", path2, "yaml"); err != nil {
+	if err := exportSvc.Export("go-basics", path2, "yaml"); err != nil {
 		t.Fatalf("export2: %v", err)
 	}
 
@@ -116,13 +116,13 @@ func TestExportJSON(t *testing.T) {
 
 	reader := pack.NewReader()
 	importSvc := app.NewImportService(reader, topicRepo, questionRepo)
-	if _, err := importSvc.Import("../../examples/mvp-basics.yaml"); err != nil {
+	if _, err := importSvc.Import("../../packs/go-basics.yaml"); err != nil {
 		t.Fatalf("import: %v", err)
 	}
 
 	exportPath := filepath.Join(t.TempDir(), "exported.json")
 	exportSvc := app.NewExportService(topicRepo, questionRepo)
-	if err := exportSvc.Export("mvp-basics", exportPath, "json"); err != nil {
+	if err := exportSvc.Export("go-basics", exportPath, "json"); err != nil {
 		t.Fatalf("export json: %v", err)
 	}
 
@@ -162,18 +162,18 @@ func TestIntegration_ImportAndSession(t *testing.T) {
 	// Import the example pack.
 	reader := pack.NewReader()
 	importSvc := app.NewImportService(reader, topicRepo, questionRepo)
-	result, err := importSvc.Import("../../examples/mvp-basics.yaml")
+	result, err := importSvc.Import("../../packs/go-basics.yaml")
 	if err != nil {
 		t.Fatalf("import: %v", err)
 	}
-	if result.Inserted != 10 {
-		t.Fatalf("expected 10 inserted, got %d", result.Inserted)
+	if result.Inserted != 15 {
+		t.Fatalf("expected 15 inserted, got %d", result.Inserted)
 	}
 
 	// Start a session with 5 questions.
 	rng := rand.New(rand.NewSource(42))
 	engine := app.NewSessionEngine(topicRepo, questionRepo, sessionRepo, attemptRepo, app.NewUserContext(localUser.ID), rng)
-	sessionID, err := engine.StartSession("mvp-basics", 5, "practice")
+	sessionID, err := engine.StartSession("go-basics", 5, "practice")
 	if err != nil {
 		t.Fatalf("start session: %v", err)
 	}
@@ -223,7 +223,7 @@ func TestIntegration_ImportAndSession(t *testing.T) {
 	}
 	var topicID int64
 	for _, tp := range topics {
-		if tp.Slug == "mvp-basics" {
+		if tp.Slug == "go-basics" {
 			topicID = tp.ID
 			break
 		}
@@ -246,10 +246,10 @@ func TestIntegration_ImportAndSession(t *testing.T) {
 	}
 }
 
-// TestImport_PDEExplainedPack validates that the databricks-pde-explained-1.yaml
-// pack imports cleanly and has the expected number of questions.
-func TestImport_PDEExplainedPack(t *testing.T) {
-	dbPath := filepath.Join(t.TempDir(), "pde_explained.db")
+// TestImport_RationalePack validates that a pack with full rationale
+// imports cleanly and has the expected number of questions.
+func TestImport_RationalePack(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "rationale.db")
 	db, err := sqlite.Open(dbPath)
 	if err != nil {
 		t.Fatalf("open db: %v", err)
@@ -262,12 +262,12 @@ func TestImport_PDEExplainedPack(t *testing.T) {
 	reader := pack.NewReader()
 	importSvc := app.NewImportService(reader, topicRepo, questionRepo)
 
-	result, err := importSvc.Import("../../examples/databricks-pde-explained-1.yaml")
+	result, err := importSvc.Import("testdata/rationale-pack.yaml")
 	if err != nil {
-		t.Fatalf("import pde-explained: %v", err)
+		t.Fatalf("import rationale pack: %v", err)
 	}
-	if result.Inserted != 38 {
-		t.Errorf("expected 38 inserted, got %d", result.Inserted)
+	if result.Inserted != 3 {
+		t.Errorf("expected 3 inserted, got %d", result.Inserted)
 	}
 	if result.Duplicates != 0 {
 		t.Errorf("expected 0 duplicates, got %d", result.Duplicates)
@@ -277,7 +277,7 @@ func TestImport_PDEExplainedPack(t *testing.T) {
 	}
 
 	// Verify questions have rationale data.
-	topic, err := topicRepo.GetBySlug("databricks-pde-explained-1")
+	topic, err := topicRepo.GetBySlug("rationale-test")
 	if err != nil {
 		t.Fatalf("get topic: %v", err)
 	}
@@ -302,15 +302,15 @@ func TestImport_PDEExplainedPack(t *testing.T) {
 	}
 
 	// Re-import should produce all duplicates.
-	result2, err := importSvc.Import("../../examples/databricks-pde-explained-1.yaml")
+	result2, err := importSvc.Import("testdata/rationale-pack.yaml")
 	if err != nil {
 		t.Fatalf("re-import: %v", err)
 	}
 	if result2.Inserted != 0 {
 		t.Errorf("re-import: expected 0 inserts, got %d", result2.Inserted)
 	}
-	if result2.Duplicates != 38 {
-		t.Errorf("re-import: expected 38 duplicates, got %d", result2.Duplicates)
+	if result2.Duplicates != 3 {
+		t.Errorf("re-import: expected 3 duplicates, got %d", result2.Duplicates)
 	}
 }
 
@@ -329,14 +329,14 @@ func TestExportRoundtrip_WithRationale(t *testing.T) {
 	reader := pack.NewReader()
 	importSvc := app.NewImportService(reader, topicRepo, questionRepo)
 
-	if _, err := importSvc.Import("../../examples/databricks-pde-explained-1.yaml"); err != nil {
+	if _, err := importSvc.Import("testdata/rationale-pack.yaml"); err != nil {
 		t.Fatalf("import: %v", err)
 	}
 
 	// Export.
 	exportPath := filepath.Join(t.TempDir(), "exported_rationale.yaml")
 	exportSvc := app.NewExportService(topicRepo, questionRepo)
-	if err := exportSvc.Export("databricks-pde-explained-1", exportPath, "yaml"); err != nil {
+	if err := exportSvc.Export("rationale-test", exportPath, "yaml"); err != nil {
 		t.Fatalf("export: %v", err)
 	}
 
@@ -356,12 +356,12 @@ func TestExportRoundtrip_WithRationale(t *testing.T) {
 	if err != nil {
 		t.Fatalf("re-import: %v", err)
 	}
-	if result.Inserted != 38 {
-		t.Errorf("expected 38 inserted from exported file, got %d", result.Inserted)
+	if result.Inserted != 3 {
+		t.Errorf("expected 3 inserted from exported file, got %d", result.Inserted)
 	}
 
 	// Verify rationale preserved.
-	topic, err := topicRepo2.GetBySlug("databricks-pde-explained-1")
+	topic, err := topicRepo2.GetBySlug("rationale-test")
 	if err != nil {
 		t.Fatalf("get topic: %v", err)
 	}

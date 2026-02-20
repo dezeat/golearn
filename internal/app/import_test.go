@@ -23,7 +23,7 @@ func TestImportService_SingleFile(t *testing.T) {
 	reader := pack.NewReader()
 	svc := app.NewImportService(reader, topicRepo, questionRepo)
 
-	result, err := svc.Import("../../examples/mvp-basics.yaml")
+	result, err := svc.Import("../../packs/go-basics.yaml")
 	if err != nil {
 		t.Fatalf("Import: %v", err)
 	}
@@ -52,14 +52,14 @@ func TestImportService_DuplicateSkipped(t *testing.T) {
 	svc := app.NewImportService(reader, topicRepo, questionRepo)
 
 	// First import.
-	r1, err := svc.Import("../../examples/mvp-basics.yaml")
+	r1, err := svc.Import("../../packs/go-basics.yaml")
 	if err != nil {
 		t.Fatalf("first import: %v", err)
 	}
 	inserted := r1.Inserted
 
 	// Second import — should all be duplicates.
-	r2, err := svc.Import("../../examples/mvp-basics.yaml")
+	r2, err := svc.Import("../../packs/go-basics.yaml")
 	if err != nil {
 		t.Fatalf("second import: %v", err)
 	}
