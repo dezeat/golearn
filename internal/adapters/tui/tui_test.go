@@ -468,12 +468,6 @@ func TestHomeMenuView(t *testing.T) {
 	if !containsSubstring(view, "Stats") {
 		t.Error("expected Stats option")
 	}
-	if !containsSubstring(view, "Switch Profile") {
-		t.Error("expected Switch Profile option")
-	}
-	if !containsSubstring(view, "Quit") {
-		t.Error("expected Quit option")
-	}
 }
 
 func TestHomeMenuNavigation(t *testing.T) {
@@ -601,9 +595,6 @@ func TestSummaryViewHasStatsOption(t *testing.T) {
 	view := m.viewSummary()
 	if !containsSubstring(view, "View stats for this pack") {
 		t.Error("expected stats option in summary view")
-	}
-	if !containsSubstring(view, "Back to Home") {
-		t.Error("expected home option in summary view")
 	}
 }
 

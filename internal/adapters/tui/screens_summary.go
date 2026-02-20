@@ -29,7 +29,7 @@ func (m model) summaryOptions() []string {
 	if len(m.wrongAnswers) > 0 {
 		opts = append(opts, "Review incorrect questions")
 	}
-	opts = append(opts, "View stats for this pack", "Back to Home")
+	opts = append(opts, "View stats for this pack")
 	return opts
 }
 
@@ -51,11 +51,7 @@ func (m model) updateSummary(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.summaryCursor--
 			}
 		case isDownNav(key):
-			maxCursor := 2 // stats, home
-			if len(m.wrongAnswers) > 0 {
-				maxCursor = 3 // review, stats, home
-			}
-			if m.summaryCursor < maxCursor {
+			if m.summaryCursor < len(m.summaryOptions())-1 {
 				m.summaryCursor++
 			}
 		case isEnterKey(key):
@@ -71,12 +67,6 @@ func (m model) updateSummary(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case "View stats for this pack":
 				m.loadPackDetailStats(m.selectedTopic.Topic.ID)
 				m.screen = screenStatsPackDetail
-			case "Back to Home":
-				if err := m.reloadTopicsForCurrentUser(); err != nil {
-					m.lastError = fmt.Sprintf("reload topics: %v", err)
-				}
-				m.homeMenuCursor = 0
-				m.screen = screenHomeMenu
 			}
 		case isReviewKey(key):
 			if len(m.wrongAnswers) > 0 {

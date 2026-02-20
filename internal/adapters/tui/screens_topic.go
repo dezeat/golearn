@@ -36,7 +36,7 @@ func (m model) viewProfileMenu() string {
 		m.writeCenteredLine(&b, styleIncorrect.Render(m.profileError))
 	}
 
-	m.writeFooter(&b, footerMenuTop)
+	m.writeFooter(&b, footerMenuRoot)
 	return b.String()
 }
 
@@ -99,7 +99,7 @@ func (m model) viewProfileRegister() string {
 		m.writeCenteredLine(&b, styleIncorrect.Render(m.profileError))
 	}
 
-	m.writeFooter(&b, footerMenuSub)
+	m.writeFooter(&b, footerRegister)
 
 	return b.String()
 }
@@ -201,9 +201,6 @@ func (m model) updateProfileMenu(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.registerField = 0
 				m.profileError = ""
 				m.screen = screenProfileRegister
-			case selected == "Quit":
-				m.quitting = true
-				return m, tea.Quit
 			default: // Continue
 				if m.currentUser == nil {
 					m.profileError = "No active profile"

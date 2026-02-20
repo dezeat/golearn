@@ -234,20 +234,20 @@ func (m model) viewStatsGlobal() string {
 
 	if m.statsError != "" {
 		b.WriteString(styleIncorrect.Render("  Error: "+m.statsError) + "\n")
-		m.writeFooter(&b, footerMenuSub)
+		m.writeFooter(&b, footerBackOnly)
 		return b.String()
 	}
 
 	gs := m.statsGlobal
 	if gs == nil {
 		b.WriteString("  No stats data yet. Complete a practice session first.\n")
-		m.writeFooter(&b, footerMenuSub)
+		m.writeFooter(&b, footerBackOnly)
 		return b.String()
 	}
 
 	if gs.TotalAnswered == 0 && gs.TotalSkipped == 0 {
 		b.WriteString("  No attempts recorded yet.\n")
-		m.writeFooter(&b, footerMenuSub)
+		m.writeFooter(&b, footerBackOnly)
 		return b.String()
 	}
 
@@ -279,7 +279,7 @@ func (m model) viewStatsGlobal() string {
 			trendDelta(m.statsGlobalTrend)))
 	}
 
-	m.writeFooter(&b, footerMenuSub)
+	m.writeFooter(&b, footerBackOnly)
 	return b.String()
 }
 
@@ -358,14 +358,14 @@ func (m model) viewStatsPackDetail() string {
 
 	if m.statsError != "" {
 		b.WriteString(styleIncorrect.Render("  Error: "+m.statsError) + "\n")
-		m.writeFooter(&b, footerMenuSub)
+		m.writeFooter(&b, footerBackOnly)
 		return b.String()
 	}
 
 	ts := m.statsDetail
 	if ts == nil {
 		b.WriteString("  No stats loaded.\n")
-		m.writeFooter(&b, footerMenuSub)
+		m.writeFooter(&b, footerBackOnly)
 		return b.String()
 	}
 
@@ -442,15 +442,14 @@ func (m model) viewStatsPackDetail() string {
 			trendDelta(m.statsDetailTrend)))
 	}
 
-	m.writeFooter(&b, footerMenuSub)
+	m.writeFooter(&b, footerBackOnly)
 	return b.String()
 }
 
 // --- Home Menu ---
 
 func (m model) homeMenuOptions() []string {
-	opts := []string{"Start Practice", "Review Wrong Answers", "Stats", "Switch Profile", "Quit"}
-	return opts
+	return []string{"Start Practice", "Review Wrong Answers", "Stats"}
 }
 
 func (m model) updateHomeMenu(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -487,12 +486,6 @@ func (m model) updateHomeMenu(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case "Stats":
 				m.statsMenuCursor = 0
 				m.screen = screenStatsMenu
-			case "Switch Profile":
-				m.profileMenuCursor = 0
-				m.screen = screenProfileMenu
-			case "Quit":
-				m.quitting = true
-				return m, tea.Quit
 			}
 		case isReviewKey(key):
 			if len(m.wrongAnswers) > 0 {
@@ -506,7 +499,7 @@ func (m model) updateHomeMenu(msg tea.Msg) (tea.Model, tea.Cmd) {
 // --- Stats Update Handlers ---
 
 func (m model) statsMenuOptions() []string {
-	return []string{"Global Stats", "Stats by Pack", "Back"}
+	return []string{"Global Stats", "Stats by Pack"}
 }
 
 func (m model) updateStatsMenu(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -538,9 +531,6 @@ func (m model) updateStatsMenu(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case "Stats by Pack":
 				m.loadPackListStats()
 				m.screen = screenStatsPackList
-			case "Back":
-				m.homeMenuCursor = 0
-				m.screen = screenHomeMenu
 			}
 		}
 	}

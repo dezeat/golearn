@@ -300,7 +300,7 @@ func (m *model) setCurrentUser(u *domain.User, saveConfig bool) error {
 }
 
 func (m model) profileMenuOptions() []string {
-	options := make([]string, 0, 4)
+	options := make([]string, 0, 3)
 	if m.hasValidCurrentUser && m.currentUser != nil {
 		label := "Continue"
 		if m.currentUser.DisplayName != "" {
@@ -310,7 +310,7 @@ func (m model) profileMenuOptions() []string {
 		}
 		options = append(options, label)
 	}
-	options = append(options, "Login", "Register", "Quit")
+	options = append(options, "Login", "Register")
 	return options
 }
 

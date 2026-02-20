@@ -45,6 +45,7 @@ available in the git log.
 | 14    | 2026-02-18 | Selection modes (Balanced, By Difficulty, Weakest), stats menu, strongest pack metric |
 | 15    | 2026-02-19 | Foundation refactors R1–R5: dedup displayLabel/resolveUser/export, stdlib replacements, N+1 query fixes |
 | 16    | 2026-02-19 | Foundation refactors R6–R12: TUI split, DI extraction, error surfacing, magic numbers, missing tests |
+| 17    | 2026-02-20 | TUI footer/menu cleanup: remove redundant hints and menu items that duplicate keybinds |
 
 ---
 
@@ -127,6 +128,29 @@ publishable open-source repository. Items are ordered by priority (do top items 
 ---
 
 ## Changelog
+
+### 2026-02-20 — TUI Footer and Menu Cleanup
+
+**Principle:** footer hints must only advertise keys that have an effect on the
+current screen; menu items must not duplicate actions already accessible via
+keybinds shown in the footer.
+
+- Added `footerMenuRoot`, `footerRegister`, and `footerBackOnly` footer constants
+  to [keymap.go](../internal/adapters/tui/keymap.go).
+- **Profile menu**: switched to `footerMenuRoot` (removed non-functional `[Esc] Back`);
+  removed "Quit" menu item (duplicates `[Q]`).
+- **Profile register**: switched to `footerRegister` (register uses Tab, not ↑/↓,
+  so the old `footerMenuSub` was misleading).
+- **Home menu**: removed "Switch Profile" (duplicates `[Esc] Back`) and "Quit"
+  (duplicates `[Q]`) from menu options.
+- **Stats menu**: removed "Back" menu item (duplicates `[Esc] Back`).
+- **Stats global / stats pack detail**: switched to `footerBackOnly` — `[↑/↓]` and
+  `[Enter]` had no effect on these read-only views.
+- **Summary**: removed "Back to Home" menu item (duplicates `[Esc] Back`); replaced
+  hardcoded cursor bounds with `len(summaryOptions())-1`.
+- Updated `tui_test.go` assertions to match the revised menu contents.
+
+All tests pass. `make check` green.
 
 ### 2026-02-19 — Foundation Refactors R1–R5
 
