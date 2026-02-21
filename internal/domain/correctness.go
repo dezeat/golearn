@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Package domain — correctness.go centralises answer evaluation logic.
+// Package domain — correctness.go centralizes answer evaluation logic.
 // Correctness is an exact, order-insensitive set match between
 // the user's selected choice IDs and the question's correct_choice_ids.
 package domain

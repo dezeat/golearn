@@ -42,7 +42,7 @@ func (r *QuestionRepo) InsertMany(questions []domain.Question) (*ports.InsertRes
 	if err != nil {
 		return nil, fmt.Errorf("begin tx: %w", err)
 	}
-	defer tx.Rollback() //nolint:errcheck
+	defer tx.Rollback() //nolint:errcheck // Best effort in defer; transaction may already be committed.
 
 	stmt, err := tx.Prepare(`INSERT OR IGNORE INTO questions (
 		topic_id, type, intro, prompt,
@@ -55,7 +55,8 @@ func (r *QuestionRepo) InsertMany(questions []domain.Question) (*ports.InsertRes
 	}
 	defer func() { _ = stmt.Close() }()
 
-	for _, q := range questions {
+	for i := range questions {
+		q := questions[i]
 		choicesJSON, err := json.Marshal(q.Choices)
 		if err != nil {
 			return nil, fmt.Errorf("marshal choices: %w", err)

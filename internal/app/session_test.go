@@ -257,7 +257,7 @@ func TestAttemptStats_AffectSelection(t *testing.T) {
 		t.Fatalf("EndSession 1: %v", err)
 	}
 
-	// Session 2: selection should prioritise weak questions.
+	// Session 2: selection should prioritize weak questions.
 	// We use a fresh engine with the same repos so stats are visible.
 	rng2 := rand.New(rand.NewSource(42))
 	engine2 := app.NewSessionEngine(topicRepo, questionRepo, sessionRepo, attemptRepo, app.NewUserContext(userID), rng2)

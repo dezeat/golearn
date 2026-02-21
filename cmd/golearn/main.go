@@ -215,7 +215,7 @@ func runTUI(dbPath string) error {
 
 	userCtx := app.NewUserContext(currentUser.ID)
 
-	return tui.Run(tui.RunParams{
+	return tui.Run(&tui.RunParams{
 		TopicRepo:    topicRepo,
 		QuestionRepo: questionRepo,
 		SessionRepo:  sessionRepo,
@@ -526,11 +526,11 @@ func runDBReset(dbPath string, args []string) error {
 
 		scanner := bufio.NewScanner(os.Stdin)
 		if !scanner.Scan() {
-			return fmt.Errorf("cancelled (no input)")
+			return fmt.Errorf("canceled (no input)")
 		}
 		answer := strings.TrimSpace(strings.ToLower(scanner.Text()))
 		if answer != "y" && answer != "yes" {
-			fmt.Println("Cancelled.")
+			fmt.Println("Canceled.")
 			return nil
 		}
 	}

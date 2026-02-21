@@ -29,7 +29,7 @@ func (m *model) setDisplayLabelMapping(choices []domain.Choice) {
 	}
 }
 
-func (m model) displayLabelForChoiceID(choiceID string) string {
+func (m *model) displayLabelForChoiceID(choiceID string) string {
 	if m.displayLabelByChoiceID == nil {
 		return choiceID
 	}

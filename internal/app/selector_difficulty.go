@@ -35,20 +35,20 @@ func SelectByDifficulty(
 	n int,
 	difficulty string,
 	rng *rand.Rand,
-) ([]domain.Question, string) {
+) (selected []domain.Question, note string) {
 	if n <= 0 || len(questions) == 0 {
 		return nil, ""
 	}
 
 	// Filter to the chosen difficulty bucket.
 	filtered := make([]domain.Question, 0, len(questions))
-	for _, q := range questions {
+	for i := range questions {
+		q := questions[i]
 		if string(q.Difficulty) == difficulty {
 			filtered = append(filtered, q)
 		}
 	}
 
-	note := ""
 	if len(filtered) == 0 {
 		return nil, "No questions available for difficulty '" + difficulty + "'."
 	}
@@ -57,7 +57,7 @@ func SelectByDifficulty(
 		n = len(filtered)
 	}
 
-	selected := SelectQuestions(filtered, stats, n, rng)
+	selected = SelectQuestions(filtered, stats, n, rng)
 	return selected, note
 }
 

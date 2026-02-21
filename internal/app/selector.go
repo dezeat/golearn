@@ -31,7 +31,7 @@ import (
 	"github.com/dezeat/golearn/internal/ports"
 )
 
-// SelectQuestions picks up to n questions for a session, prioritising
+// SelectQuestions picks up to n questions for a session, prioritizing
 // unseen and weak questions. rng controls shuffle order (use a seeded
 // *rand.Rand for deterministic tests).
 func SelectQuestions(
@@ -46,7 +46,8 @@ func SelectQuestions(
 
 	// Partition questions into buckets.
 	var unseen, weak, rest []domain.Question
-	for _, q := range questions {
+	for i := range questions {
+		q := questions[i]
 		s, found := stats[q.ID]
 		switch {
 		case !found || s.Attempts == 0:
@@ -80,7 +81,8 @@ func SelectQuestions(
 	// Concatenate buckets: unseen → weak → rest.
 	selected := make([]domain.Question, 0, n)
 	for _, bucket := range [][]domain.Question{unseen, weak, rest} {
-		for _, q := range bucket {
+		for i := range bucket {
+			q := bucket[i]
 			if len(selected) >= n {
 				return selected
 			}

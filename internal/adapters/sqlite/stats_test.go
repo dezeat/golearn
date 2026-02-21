@@ -73,8 +73,8 @@ func insertQuestions(t *testing.T, qRepo *sqlite.QuestionRepo, topicID int64, co
 		t.Fatalf("list questions: %v", err)
 	}
 	ids := make([]int64, len(stored))
-	for i, q := range stored {
-		ids[i] = q.ID
+	for i := range stored {
+		ids[i] = stored[i].ID
 	}
 	return ids
 }

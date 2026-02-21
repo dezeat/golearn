@@ -25,7 +25,7 @@ import (
 	"github.com/dezeat/golearn/internal/ports"
 )
 
-// ImportResult summarises the outcome of an import operation.
+// ImportResult summarizes the outcome of an import operation.
 type ImportResult struct {
 	FilesProcessed int
 	Inserted       int

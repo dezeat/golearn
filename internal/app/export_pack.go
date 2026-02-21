@@ -76,7 +76,7 @@ func (s *ExportService) Export(topicSlug, outPath, format string) error {
 	return nil
 }
 
-// ExportToBytes returns the serialised pack as bytes (for testing).
+// ExportToBytes returns the serialized pack as bytes (for testing).
 func (s *ExportService) ExportToBytes(topicSlug, format string) ([]byte, error) {
 	if format == "" {
 		format = "yaml"
@@ -112,7 +112,8 @@ func (s *ExportService) ExportToBytes(topicSlug, format string) ([]byte, error) 
 		Questions: make([]domain.PackQuestion, 0, len(questions)),
 	}
 
-	for _, q := range questions {
+	for i := range questions {
+		q := questions[i]
 		pq := domain.PackQuestion{
 			Type:             q.Type,
 			Prompt:           q.Prompt,

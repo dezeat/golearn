@@ -20,14 +20,14 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-func (m model) terminalWidth() int {
+func (m *model) terminalWidth() int {
 	if m.width <= 0 {
 		return 80
 	}
 	return m.width
 }
 
-func (m model) centerLine(s string) string {
+func (m *model) centerLine(s string) string {
 	w := m.terminalWidth()
 	lw := lipgloss.Width(s)
 	if lw >= w {
@@ -37,7 +37,7 @@ func (m model) centerLine(s string) string {
 	return strings.Repeat(" ", left) + s
 }
 
-func (m model) writeCenteredLine(b *strings.Builder, s string) {
+func (m *model) writeCenteredLine(b *strings.Builder, s string) {
 	b.WriteString(m.centerLine(s))
 	b.WriteString("\n")
 }

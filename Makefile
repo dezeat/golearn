@@ -33,9 +33,12 @@ fmt:
 ## lint: run golangci-lint (install separately)
 lint:
 	@if [ -x "$(GOLANGCI_LINT)" ]; then \
-		$(GOLANGCI_LINT) run ./...; \
+		echo "Validating configuration..."; \
+		$(GOLANGCI_LINT) config verify --config=.golangci.yml; \
+		echo "Running golangci-lint..."; \
+		$(GOLANGCI_LINT) run --config=.golangci.yml ./...; \
 	else \
-		echo "golangci-lint not installed — skipping (not found on PATH or at $(shell go env GOPATH)/bin/golangci-lint)"; \
+		echo "golangci-lint not installed — skipping"; \
 	fi
 
 ## check: full CI gate (fmt + vet + lint + test)

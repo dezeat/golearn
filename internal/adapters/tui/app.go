@@ -14,7 +14,7 @@
 
 // Package tui implements the Bubble Tea terminal UI for golearn.
 //
-// The TUI provides an interactive experience for practising MCQs:
+// The TUI provides an interactive experience for practicing MCQs:
 //   - ASCII intro splash screen
 //   - Topic selection screen
 //   - Session configuration screen
@@ -63,7 +63,11 @@ type RunParams struct {
 }
 
 // Run launches the TUI application with the provided dependencies.
-func Run(p RunParams) error {
+func Run(p *RunParams) error {
+	if p == nil {
+		return fmt.Errorf("run params must not be nil")
+	}
+
 	m := newModel(
 		p.TopicRepo, p.QuestionRepo, p.SessionRepo, p.AttemptRepo,
 		p.UserRepo, p.StatsRepo, p.ConfigStore, p.UserCtx,
@@ -312,7 +316,7 @@ func (m *model) setCurrentUser(u *domain.User, saveConfig bool) error {
 	return nil
 }
 
-func (m model) profileMenuOptions() []string {
+func (m *model) profileMenuOptions() []string {
 	options := make([]string, 0, 3)
 	if m.hasValidCurrentUser && m.currentUser != nil {
 		var label string

@@ -113,7 +113,8 @@ func SelectWeakestByQuestions(
 	}
 
 	var candidates []weakCandidate
-	for _, q := range questions {
+	for i := range questions {
+		q := questions[i]
 		s, ok := stats[q.ID]
 		if !ok || s.Attempts < minAttempts || s.Wrong == 0 {
 			continue
@@ -138,7 +139,8 @@ func SelectWeakestByQuestions(
 	// Take up to n weak candidates.
 	selected := make([]domain.Question, 0, n)
 	usedIDs := make(map[int64]bool)
-	for _, c := range candidates {
+	for i := range candidates {
+		c := candidates[i]
 		if len(selected) >= n {
 			break
 		}
@@ -150,7 +152,8 @@ func SelectWeakestByQuestions(
 	if len(selected) < n {
 		// Fill remainder with Balanced selection from unused questions.
 		remaining := make([]domain.Question, 0, len(questions)-len(selected))
-		for _, q := range questions {
+		for i := range questions {
+			q := questions[i]
 			if !usedIDs[q.ID] {
 				remaining = append(remaining, q)
 			}
@@ -191,7 +194,8 @@ func findWeakestTag(tagStats []ports.TagStat) string {
 // filterQuestionsByTag returns questions that contain the given tag.
 func filterQuestionsByTag(questions []domain.Question, tag string) []domain.Question {
 	var result []domain.Question
-	for _, q := range questions {
+	for i := range questions {
+		q := questions[i]
 		for _, t := range q.Tags {
 			if t == tag {
 				result = append(result, q)

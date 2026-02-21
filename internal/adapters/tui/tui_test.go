@@ -304,7 +304,7 @@ func TestProfileLoginSetsCurrentUserID(t *testing.T) {
 	}
 }
 
-// TestReviewSessionSetup verifies startReviewSession initialises correctly.
+// TestReviewSessionSetup verifies startReviewSession initializes correctly.
 func TestReviewSessionSetup(t *testing.T) {
 	wrongAs := []wrongAnswer{
 		{Question: domain.Question{ID: 1, Prompt: "Q1"}, SelectedIDs: []string{"B"}},
