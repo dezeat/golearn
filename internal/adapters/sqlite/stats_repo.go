@@ -1,3 +1,17 @@
+// Copyright 2026 dezeat
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package sqlite
 
 import (
@@ -235,7 +249,7 @@ func (r *StatsRepo) TopicSummaries(userID int64) ([]ports.TopicSummary, error) {
 	if err != nil {
 		return nil, fmt.Errorf("topic summaries: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var summaries []ports.TopicSummary
 	for rows.Next() {
@@ -294,7 +308,7 @@ func (r *StatsRepo) DifficultyStats(userID, topicID int64) ([]ports.DifficultySt
 	if err != nil {
 		return nil, fmt.Errorf("difficulty stats: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	// Accumulate into buckets.
 	buckets := map[string]*ports.DifficultyStat{}
@@ -332,7 +346,7 @@ func (r *StatsRepo) DifficultyStats(userID, topicID int64) ([]ports.DifficultySt
 		correctCount := ds.AccuracyPct // was stored as raw correct count
 		if ds.AttemptsAnswered > 0 {
 			ds.AccuracyPct = correctCount / float64(ds.AttemptsAnswered) * 100
-			ds.AvgLatencySeconds = ds.AvgLatencySeconds / float64(ds.AttemptsAnswered)
+			ds.AvgLatencySeconds /= float64(ds.AttemptsAnswered)
 		}
 		result = append(result, *ds)
 	}
@@ -351,7 +365,7 @@ func (r *StatsRepo) TagStats(userID, topicID int64, minAttempts int) ([]ports.Ta
 	if err != nil {
 		return nil, fmt.Errorf("load question tags: %w", err)
 	}
-	defer tagRows.Close()
+	defer func() { _ = tagRows.Close() }()
 
 	tagQuestions := map[string][]int64{}
 	for tagRows.Next() {
@@ -389,7 +403,7 @@ func (r *StatsRepo) TagStats(userID, topicID int64, minAttempts int) ([]ports.Ta
 	if err != nil {
 		return nil, fmt.Errorf("tag stats batch query: %w", err)
 	}
-	defer statRows.Close()
+	defer func() { _ = statRows.Close() }()
 
 	for statRows.Next() {
 		var qID int64
@@ -451,7 +465,7 @@ func (r *StatsRepo) WeakQuestions(userID, topicID int64, minAttempts, limit int)
 	if err != nil {
 		return nil, fmt.Errorf("weak questions: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var result []ports.QuestionWeakStat
 	for rows.Next() {
@@ -484,7 +498,7 @@ func (r *StatsRepo) SessionTrend(userID, topicID int64, limitN int) ([]float64, 
 	if err != nil {
 		return nil, fmt.Errorf("session trend query: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var trend []float64
 	for rows.Next() {
@@ -519,7 +533,7 @@ func (r *StatsRepo) SessionTrendGlobal(userID int64, limitN int) ([]float64, err
 	if err != nil {
 		return nil, fmt.Errorf("global trend query: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var trend []float64
 	for rows.Next() {

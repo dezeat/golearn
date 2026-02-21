@@ -1,3 +1,17 @@
+// Copyright 2026 dezeat
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package tui
 
 import (
@@ -45,7 +59,7 @@ func (m model) viewQuestion() string {
 	if q.Type == "multi_select" {
 		typeHint = "Select all that apply"
 	}
-	b.WriteString(fmt.Sprintf("  [%s]\n\n", typeHint))
+	fmt.Fprintf(&b, "  [%s]\n\n", typeHint)
 
 	// Show intro if present.
 	if q.Intro != "" {
@@ -75,7 +89,7 @@ func (m model) viewQuestion() string {
 		choiceText := fmt.Sprintf("%s) %s", m.displayLabelForChoiceID(c.ID), c.Text)
 		wrappedLines := strings.Split(wrapText(choiceText, choiceCW), "\n")
 
-		b.WriteString(fmt.Sprintf("  %s%s %s\n", cursor, marker, wrappedLines[0]))
+		fmt.Fprintf(&b, "  %s%s %s\n", cursor, marker, wrappedLines[0])
 		for _, l := range wrappedLines[1:] {
 			b.WriteString(contIndent + l + "\n")
 		}
@@ -118,11 +132,12 @@ func (m model) viewReview() string {
 	}
 	b.WriteString(styleBold.Render(wrapAndIndent(q.Prompt, cw, "  ")) + "\n\n")
 
-	if m.lastSkipped {
+	switch {
+	case m.lastSkipped:
 		b.WriteString("  ⏭  " + styleDim.Render("Skipped") + "\n\n")
-	} else if m.lastCorrect {
+	case m.lastCorrect:
 		b.WriteString("  " + styleCorrect.Render("✔ Correct!") + "\n\n")
-	} else {
+	default:
 		b.WriteString("  " + styleIncorrect.Render("✘ Incorrect") + "\n\n")
 	}
 
@@ -175,7 +190,7 @@ func (m model) viewReview() string {
 				l = choiceStyle.Render(l)
 			}
 			if li == 0 {
-				b.WriteString(fmt.Sprintf("  %s %s %s\n", selectIndicator, marker, l))
+				fmt.Fprintf(&b, "  %s %s %s\n", selectIndicator, marker, l)
 			} else {
 				b.WriteString(contIndent + l + "\n")
 			}
@@ -226,7 +241,7 @@ func (m model) viewReviewBrowse() string {
 	if q.Type == "multi_select" {
 		typeHint = "Multi select"
 	}
-	b.WriteString(fmt.Sprintf("  [%s]\n\n", typeHint))
+	fmt.Fprintf(&b, "  [%s]\n\n", typeHint)
 
 	// Intro.
 	if q.Intro != "" {
@@ -284,7 +299,7 @@ func (m model) viewReviewBrowse() string {
 				l = choiceStyle.Render(l)
 			}
 			if li == 0 {
-				b.WriteString(fmt.Sprintf("  %s %s %s\n", indicator, marker, l))
+				fmt.Fprintf(&b, "  %s %s %s\n", indicator, marker, l)
 			} else {
 				b.WriteString(contIndent + l + "\n")
 			}
@@ -315,89 +330,91 @@ func (m model) viewReviewBrowse() string {
 // --- Question Update Handler ---
 
 func (m model) updateQuestion(msg tea.Msg) (tea.Model, tea.Cmd) {
-	switch msg := msg.(type) {
-	case tea.KeyMsg:
-		key := msg.String()
-		switch {
-		case isBackKey(key):
-			// Cancel session and return to previous config screen.
-			if err := m.engine.EndSession(); err != nil {
-				m.lastError = fmt.Sprintf("end session: %v", err)
-			}
-			m.screen = screenSessionConfig
-		case isUpNav(key):
-			if m.choiceCursor > 0 {
-				m.choiceCursor--
-			}
-		case isDownNav(key):
-			if m.currentQuestion != nil && m.choiceCursor < len(m.currentQuestion.ShuffledChoices)-1 {
-				m.choiceCursor++
-			}
-		case isToggleKey(key):
-			// Toggle selection (for multi_select, or single_select).
-			if m.currentQuestion != nil && m.currentQuestion.Question != nil {
-				choiceID := m.currentQuestion.ShuffledChoices[m.choiceCursor].ID
-				if m.currentQuestion.Question.Type == "single_select" {
-					// Single select: clear others, select this one.
-					m.selected = map[string]bool{choiceID: true}
-				} else {
-					// Multi select: toggle.
-					if m.selected[choiceID] {
-						delete(m.selected, choiceID)
-					} else {
-						m.selected[choiceID] = true
-					}
-				}
-			}
-		case isSkipKey(key):
-			// Skip this question.
-			if m.currentQuestion != nil && m.currentQuestion.Question != nil {
-				if _, err := m.engine.RecordAttempt(m.currentQuestion.Question.ID, nil, true, 0); err != nil {
-					m.lastError = fmt.Sprintf("record skip: %v", err)
-				}
-				m.answered++
-				m.lastSkipped = true
-				m.lastCorrect = false
-				m.submitted = true
-				m.showExplanations = false
-				m.screen = screenReview
-			}
-		case isEnterKey(key):
-			if m.currentQuestion != nil && m.currentQuestion.Question != nil && len(m.selected) > 0 {
-				// Submit answer.
-				selectedIDs := make([]string, 0, len(m.selected))
-				for id := range m.selected {
-					selectedIDs = append(selectedIDs, id)
-				}
+	keyMsg, ok := msg.(tea.KeyMsg)
+	if !ok {
+		return m, nil
+	}
 
-				latencyMs := int(time.Since(m.questionStarted()).Milliseconds())
-				correct, err := m.engine.RecordAttempt(
-					m.currentQuestion.Question.ID, selectedIDs, false, latencyMs,
-				)
-				if err != nil {
-					m.lastError = fmt.Sprintf("record attempt: %v", err)
-				}
-				m.lastCorrect = correct
-
-				m.answered++
-				m.totalLatency += latencyMs
-				m.lastSkipped = false
-				m.submitted = true
-				if m.lastCorrect {
-					m.correctCount++
+	key := keyMsg.String()
+	switch {
+	case isBackKey(key):
+		// Cancel session and return to previous config screen.
+		if err := m.engine.EndSession(); err != nil {
+			m.lastError = fmt.Sprintf("end session: %v", err)
+		}
+		m.screen = screenSessionConfig
+	case isUpNav(key):
+		if m.choiceCursor > 0 {
+			m.choiceCursor--
+		}
+	case isDownNav(key):
+		if m.currentQuestion != nil && m.choiceCursor < len(m.currentQuestion.ShuffledChoices)-1 {
+			m.choiceCursor++
+		}
+	case isToggleKey(key):
+		// Toggle selection (for multi_select, or single_select).
+		if m.currentQuestion != nil && m.currentQuestion.Question != nil {
+			choiceID := m.currentQuestion.ShuffledChoices[m.choiceCursor].ID
+			if m.currentQuestion.Question.Type == "single_select" {
+				// Single select: clear others, select this one.
+				m.selected = map[string]bool{choiceID: true}
+			} else {
+				// Multi select: toggle.
+				if m.selected[choiceID] {
+					delete(m.selected, choiceID)
 				} else {
-					q := *m.currentQuestion.Question
-					q.Choices = make([]domain.Choice, len(m.currentQuestion.ShuffledChoices))
-					copy(q.Choices, m.currentQuestion.ShuffledChoices)
-					// Track wrong answers for review browse.
-					m.wrongAnswers = append(m.wrongAnswers, wrongAnswer{
-						Question:    q,
-						SelectedIDs: selectedIDs,
-					})
+					m.selected[choiceID] = true
 				}
-				m.showExplanations = false
-				m.screen = screenReview
 			}
+		}
+	case isSkipKey(key):
+		// Skip this question.
+		if m.currentQuestion != nil && m.currentQuestion.Question != nil {
+			if _, err := m.engine.RecordAttempt(m.currentQuestion.Question.ID, nil, true, 0); err != nil {
+				m.lastError = fmt.Sprintf("record skip: %v", err)
+			}
+			m.answered++
+			m.lastSkipped = true
+			m.lastCorrect = false
+			m.submitted = true
+			m.showExplanations = false
+			m.screen = screenReview
+		}
+	case isEnterKey(key):
+		if m.currentQuestion != nil && m.currentQuestion.Question != nil && len(m.selected) > 0 {
+			// Submit answer.
+			selectedIDs := make([]string, 0, len(m.selected))
+			for id := range m.selected {
+				selectedIDs = append(selectedIDs, id)
+			}
+
+			latencyMs := int(time.Since(m.questionStarted()).Milliseconds())
+			correct, err := m.engine.RecordAttempt(
+				m.currentQuestion.Question.ID, selectedIDs, false, latencyMs,
+			)
+			if err != nil {
+				m.lastError = fmt.Sprintf("record attempt: %v", err)
+			}
+			m.lastCorrect = correct
+
+			m.answered++
+			m.totalLatency += latencyMs
+			m.lastSkipped = false
+			m.submitted = true
+			if m.lastCorrect {
+				m.correctCount++
+			} else {
+				q := *m.currentQuestion.Question
+				q.Choices = make([]domain.Choice, len(m.currentQuestion.ShuffledChoices))
+				copy(q.Choices, m.currentQuestion.ShuffledChoices)
+				// Track wrong answers for review browse.
+				m.wrongAnswers = append(m.wrongAnswers, wrongAnswer{
+					Question:    q,
+					SelectedIDs: selectedIDs,
+				})
+			}
+			m.showExplanations = false
+			m.screen = screenReview
 		}
 	}
 	return m, nil
@@ -433,22 +450,24 @@ func (m model) questionStarted() time.Time {
 // --- Review Update Handler ---
 
 func (m model) updateReview(msg tea.Msg) (tea.Model, tea.Cmd) {
-	switch msg := msg.(type) {
-	case tea.KeyMsg:
-		key := msg.String()
-		switch {
-		case isExplainKey(key):
-			// Toggle explanations.
-			m.showExplanations = !m.showExplanations
-		case isEnterKey(key):
-			// Advance to next question.
-			m.advanceQuestion()
-		case isBackKey(key):
-			if err := m.engine.EndSession(); err != nil {
-				m.lastError = fmt.Sprintf("end session: %v", err)
-			}
-			m.screen = screenSessionConfig
+	keyMsg, ok := msg.(tea.KeyMsg)
+	if !ok {
+		return m, nil
+	}
+
+	key := keyMsg.String()
+	switch {
+	case isExplainKey(key):
+		// Toggle explanations.
+		m.showExplanations = !m.showExplanations
+	case isEnterKey(key):
+		// Advance to next question.
+		m.advanceQuestion()
+	case isBackKey(key):
+		if err := m.engine.EndSession(); err != nil {
+			m.lastError = fmt.Sprintf("end session: %v", err)
 		}
+		m.screen = screenSessionConfig
 	}
 	return m, nil
 }
@@ -456,23 +475,25 @@ func (m model) updateReview(msg tea.Msg) (tea.Model, tea.Cmd) {
 // --- Review Browse Update Handler ---
 
 func (m model) updateReviewBrowse(msg tea.Msg) (tea.Model, tea.Cmd) {
-	switch msg := msg.(type) {
-	case tea.KeyMsg:
-		key := msg.String()
-		switch {
-		case isEnterKey(key):
-			if m.reviewCursor < len(m.reviewQueue)-1 {
-				m.reviewCursor++
-				m.showExplanations = false
-				m.setDisplayLabelMapping(m.reviewQueue[m.reviewCursor].Question.Choices)
-			} else {
-				m.screen = m.reviewReturnScreen
-			}
-		case isExplainKey(key):
-			m.showExplanations = !m.showExplanations
-		case isBackKey(key):
+	keyMsg, ok := msg.(tea.KeyMsg)
+	if !ok {
+		return m, nil
+	}
+
+	key := keyMsg.String()
+	switch {
+	case isEnterKey(key):
+		if m.reviewCursor < len(m.reviewQueue)-1 {
+			m.reviewCursor++
+			m.showExplanations = false
+			m.setDisplayLabelMapping(m.reviewQueue[m.reviewCursor].Question.Choices)
+		} else {
 			m.screen = m.reviewReturnScreen
 		}
+	case isExplainKey(key):
+		m.showExplanations = !m.showExplanations
+	case isBackKey(key):
+		m.screen = m.reviewReturnScreen
 	}
 	return m, nil
 }

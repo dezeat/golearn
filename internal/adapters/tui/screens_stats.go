@@ -1,3 +1,17 @@
+// Copyright 2026 dezeat
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package tui
 
 import (
@@ -81,7 +95,7 @@ func fmtDuration(totalSec float64) string {
 		return fmt.Sprintf("%dm %ds", m, s)
 	}
 	h := m / 60
-	m = m % 60
+	m %= 60
 	return fmt.Sprintf("%dh %dm", h, m)
 }
 
@@ -175,20 +189,20 @@ func (m model) viewSummary() string {
 	b.WriteString(styleHeader.Render("golearn — Session Summary") + "\n")
 	b.WriteString("═════════════════════════\n\n")
 
-	b.WriteString(fmt.Sprintf("  Topic:          %s\n", m.selectedTopic.Topic.Name))
-	b.WriteString(fmt.Sprintf("  Total answered: %d\n", m.answered))
-	b.WriteString(fmt.Sprintf("  Correct:        %d\n", m.correctCount))
+	fmt.Fprintf(&b, "  Topic:          %s\n", m.selectedTopic.Topic.Name)
+	fmt.Fprintf(&b, "  Total answered: %d\n", m.answered)
+	fmt.Fprintf(&b, "  Correct:        %d\n", m.correctCount)
 
 	if m.answered > 0 {
 		pct := float64(m.correctCount) / float64(m.answered) * 100
-		b.WriteString(fmt.Sprintf("  Accuracy:       %.1f%%\n", pct))
+		fmt.Fprintf(&b, "  Accuracy:       %.1f%%\n", pct)
 
 		if m.totalLatency > 0 {
 			avgMs := m.totalLatency / m.answered
 			if avgMs >= 1000 {
-				b.WriteString(fmt.Sprintf("  Avg response:   %.1fs\n", float64(avgMs)/1000))
+				fmt.Fprintf(&b, "  Avg response:   %.1fs\n", float64(avgMs)/1000)
 			} else {
-				b.WriteString(fmt.Sprintf("  Avg response:   %dms\n", avgMs))
+				fmt.Fprintf(&b, "  Avg response:   %dms\n", avgMs)
 			}
 		}
 	} else {
@@ -197,8 +211,8 @@ func (m model) viewSummary() string {
 
 	wrongCount := len(m.wrongAnswers)
 	if wrongCount > 0 {
-		b.WriteString(fmt.Sprintf("\n  %s\n",
-			styleIncorrect.Render(fmt.Sprintf("  %d question(s) answered incorrectly", wrongCount))))
+		fmt.Fprintf(&b, "\n  %s\n",
+			styleIncorrect.Render(fmt.Sprintf("  %d question(s) answered incorrectly", wrongCount)))
 	}
 
 	// Menu options.
@@ -229,7 +243,7 @@ func (m model) viewStatsGlobal() string {
 	b.WriteString("══════════════════════\n\n")
 
 	if m.currentUser != nil {
-		b.WriteString(fmt.Sprintf("  Profile: %s\n\n", displayProfile(*m.currentUser)))
+		fmt.Fprintf(&b, "  Profile: %s\n\n", displayProfile(*m.currentUser))
 	}
 
 	if m.statsError != "" {
@@ -251,32 +265,32 @@ func (m model) viewStatsGlobal() string {
 		return b.String()
 	}
 
-	b.WriteString(fmt.Sprintf("  Accuracy:        %.1f%%\n", gs.AccuracyPct))
-	b.WriteString(fmt.Sprintf("  Answered:        %d\n", gs.TotalAnswered))
-	b.WriteString(fmt.Sprintf("  Skipped:         %d\n", gs.TotalSkipped))
-	b.WriteString(fmt.Sprintf("  Avg response:    %s\n", fmtDuration(gs.AvgLatencySeconds)))
-	b.WriteString(fmt.Sprintf("  Total time:      %s\n", fmtDuration(gs.TotalTimeSeconds)))
+	fmt.Fprintf(&b, "  Accuracy:        %.1f%%\n", gs.AccuracyPct)
+	fmt.Fprintf(&b, "  Answered:        %d\n", gs.TotalAnswered)
+	fmt.Fprintf(&b, "  Skipped:         %d\n", gs.TotalSkipped)
+	fmt.Fprintf(&b, "  Avg response:    %s\n", fmtDuration(gs.AvgLatencySeconds))
+	fmt.Fprintf(&b, "  Total time:      %s\n", fmtDuration(gs.TotalTimeSeconds))
 
 	if gs.MostPracticedTopic != "" {
-		b.WriteString(fmt.Sprintf("  Most practiced:  %s\n", gs.MostPracticedTopic))
+		fmt.Fprintf(&b, "  Most practiced:  %s\n", gs.MostPracticedTopic)
 	}
 	if gs.WeakestTopic != "" {
-		b.WriteString(fmt.Sprintf("  Weakest pack:    %s\n", gs.WeakestTopic))
+		fmt.Fprintf(&b, "  Weakest pack:    %s\n", gs.WeakestTopic)
 	} else {
-		b.WriteString(fmt.Sprintf("  Weakest pack:    %s\n", styleDim.Render("N/A (not enough attempts)")))
+		fmt.Fprintf(&b, "  Weakest pack:    %s\n", styleDim.Render("N/A (not enough attempts)"))
 	}
 	if gs.StrongestTopic != "" {
-		b.WriteString(fmt.Sprintf("  Strongest pack:  %s\n", gs.StrongestTopic))
+		fmt.Fprintf(&b, "  Strongest pack:  %s\n", gs.StrongestTopic)
 	} else {
-		b.WriteString(fmt.Sprintf("  Strongest pack:  %s\n", styleDim.Render("N/A (not enough attempts)")))
+		fmt.Fprintf(&b, "  Strongest pack:  %s\n", styleDim.Render("N/A (not enough attempts)"))
 	}
 
 	// Trend sparkline.
 	if len(m.statsGlobalTrend) > 0 {
-		b.WriteString(fmt.Sprintf("\n  Trend (last %d sessions): %s%s\n",
+		fmt.Fprintf(&b, "\n  Trend (last %d sessions): %s%s\n",
 			len(m.statsGlobalTrend),
 			sparkline(m.statsGlobalTrend),
-			trendDelta(m.statsGlobalTrend)))
+			trendDelta(m.statsGlobalTrend))
 	}
 
 	m.writeFooter(&b, footerBackOnly)
@@ -372,33 +386,33 @@ func (m model) viewStatsPackDetail() string {
 	cw := m.contentWidth(2)
 
 	// Header metrics.
-	b.WriteString(fmt.Sprintf("  %s\n\n", styleBold.Render(truncate(ts.TopicName, cw-2))))
+	fmt.Fprintf(&b, "  %s\n\n", styleBold.Render(truncate(ts.TopicName, cw-2)))
 
 	accStr := "—"
 	if ts.AttemptsAnswered > 0 {
 		accStr = fmt.Sprintf("%.1f%%", ts.AccuracyPct)
 	}
-	b.WriteString(fmt.Sprintf("  Accuracy:    %s\n", accStr))
-	b.WriteString(fmt.Sprintf("  Attempts:    %d answered, %d skipped\n", ts.AttemptsAnswered, ts.AttemptsSkipped))
-	b.WriteString(fmt.Sprintf("  Coverage:    %d/%d questions (%.0f%%)\n", ts.SeenQuestions, ts.TotalQuestions, ts.CoveragePct))
+	fmt.Fprintf(&b, "  Accuracy:    %s\n", accStr)
+	fmt.Fprintf(&b, "  Attempts:    %d answered, %d skipped\n", ts.AttemptsAnswered, ts.AttemptsSkipped)
+	fmt.Fprintf(&b, "  Coverage:    %d/%d questions (%.0f%%)\n", ts.SeenQuestions, ts.TotalQuestions, ts.CoveragePct)
 	if ts.AttemptsAnswered > 0 {
-		b.WriteString(fmt.Sprintf("  Avg time:    %s\n", fmtDuration(ts.AvgLatencySeconds)))
+		fmt.Fprintf(&b, "  Avg time:    %s\n", fmtDuration(ts.AvgLatencySeconds))
 	}
 	if ts.LastPracticedAt != "" {
-		b.WriteString(fmt.Sprintf("  Last:        %s\n", formatStatsTimestamp(ts.LastPracticedAt)))
+		fmt.Fprintf(&b, "  Last:        %s\n", formatStatsTimestamp(ts.LastPracticedAt))
 	}
 
 	// Difficulty breakdown.
 	b.WriteString("\n")
 	if len(m.statsDifficulty) > 0 {
 		b.WriteString(styleBold.Render("  Difficulty Breakdown") + "\n")
-		b.WriteString(fmt.Sprintf("  %-10s  %8s  %8s  %8s\n", "Level", "Attempts", "Accuracy", "Avg Time"))
-		b.WriteString(fmt.Sprintf("  %s  %s  %s  %s\n",
+		fmt.Fprintf(&b, "  %-10s  %8s  %8s  %8s\n", "Level", "Attempts", "Accuracy", "Avg Time")
+		fmt.Fprintf(&b, "  %s  %s  %s  %s\n",
 			strings.Repeat("─", 10), strings.Repeat("─", 8),
-			strings.Repeat("─", 8), strings.Repeat("─", 8)))
+			strings.Repeat("─", 8), strings.Repeat("─", 8))
 		for _, ds := range m.statsDifficulty {
-			b.WriteString(fmt.Sprintf("  %-10s  %8d  %7.0f%%  %8s\n",
-				ds.Bucket, ds.AttemptsAnswered, ds.AccuracyPct, fmtDuration(ds.AvgLatencySeconds)))
+			fmt.Fprintf(&b, "  %-10s  %8d  %7.0f%%  %8s\n",
+				ds.Bucket, ds.AttemptsAnswered, ds.AccuracyPct, fmtDuration(ds.AvgLatencySeconds))
 		}
 	} else {
 		b.WriteString(styleDim.Render("  No difficulty ratings yet.") + "\n")
@@ -408,15 +422,15 @@ func (m model) viewStatsPackDetail() string {
 	if len(m.statsWeakTags) > 0 {
 		b.WriteString("\n" + styleBold.Render("  Weak Tags (accuracy < 70%)") + "\n")
 		for _, t := range m.statsWeakTags {
-			b.WriteString(fmt.Sprintf("    %-20s  %.0f%% (%d attempts)\n",
-				truncate(t.Tag, 20), t.AccuracyPct, t.AttemptsAnswered))
+			fmt.Fprintf(&b, "    %-20s  %.0f%% (%d attempts)\n",
+				truncate(t.Tag, 20), t.AccuracyPct, t.AttemptsAnswered)
 		}
 	}
 	if len(m.statsStrongTags) > 0 {
 		b.WriteString("\n" + styleBold.Render("  Strong Tags (accuracy ≥ 70%)") + "\n")
 		for _, t := range m.statsStrongTags {
-			b.WriteString(fmt.Sprintf("    %-20s  %.0f%% (%d attempts)\n",
-				truncate(t.Tag, 20), t.AccuracyPct, t.AttemptsAnswered))
+			fmt.Fprintf(&b, "    %-20s  %.0f%% (%d attempts)\n",
+				truncate(t.Tag, 20), t.AccuracyPct, t.AttemptsAnswered)
 		}
 	}
 
@@ -429,17 +443,17 @@ func (m model) viewStatsPackDetail() string {
 		}
 		for i, wq := range m.statsWeakQs {
 			preview := truncate(wq.PromptPreview, previewW)
-			b.WriteString(fmt.Sprintf("  %2d. %s  (wrong %.0f%%, %d att)\n",
-				i+1, preview, wq.WrongRate*100, wq.AttemptsAnswered))
+			fmt.Fprintf(&b, "  %2d. %s  (wrong %.0f%%, %d att)\n",
+				i+1, preview, wq.WrongRate*100, wq.AttemptsAnswered)
 		}
 	}
 
 	// Trend.
 	if len(m.statsDetailTrend) > 0 {
-		b.WriteString(fmt.Sprintf("\n  Trend (last %d sessions): %s%s\n",
+		fmt.Fprintf(&b, "\n  Trend (last %d sessions): %s%s\n",
 			len(m.statsDetailTrend),
 			sparkline(m.statsDetailTrend),
-			trendDelta(m.statsDetailTrend)))
+			trendDelta(m.statsDetailTrend))
 	}
 
 	m.writeFooter(&b, footerBackOnly)
@@ -453,44 +467,46 @@ func (m model) homeMenuOptions() []string {
 }
 
 func (m model) updateHomeMenu(msg tea.Msg) (tea.Model, tea.Cmd) {
-	switch msg := msg.(type) {
-	case tea.KeyMsg:
-		key := msg.String()
-		switch {
-		case isQuitKey(key):
-			m.quitting = true
-			return m, tea.Quit
-		case isBackKey(key):
-			m.profileMenuCursor = 0
-			m.screen = screenProfileMenu
-		case isUpNav(key):
-			if m.homeMenuCursor > 0 {
-				m.homeMenuCursor--
-			}
-		case isDownNav(key):
-			if m.homeMenuCursor < len(m.homeMenuOptions())-1 {
-				m.homeMenuCursor++
-			}
-		case isEnterKey(key):
-			options := m.homeMenuOptions()
-			if m.homeMenuCursor >= len(options) {
-				return m, nil
-			}
-			switch options[m.homeMenuCursor] {
-			case "Start Practice":
-				m.screen = screenTopicSelect
-			case "Review Wrong Answers":
-				if len(m.wrongAnswers) > 0 {
-					m.startReviewSession(screenHomeMenu)
-				}
-			case "Stats":
-				m.statsMenuCursor = 0
-				m.screen = screenStatsMenu
-			}
-		case isReviewKey(key):
+	keyMsg, ok := msg.(tea.KeyMsg)
+	if !ok {
+		return m, nil
+	}
+
+	key := keyMsg.String()
+	switch {
+	case isQuitKey(key):
+		m.quitting = true
+		return m, tea.Quit
+	case isBackKey(key):
+		m.profileMenuCursor = 0
+		m.screen = screenProfileMenu
+	case isUpNav(key):
+		if m.homeMenuCursor > 0 {
+			m.homeMenuCursor--
+		}
+	case isDownNav(key):
+		if m.homeMenuCursor < len(m.homeMenuOptions())-1 {
+			m.homeMenuCursor++
+		}
+	case isEnterKey(key):
+		options := m.homeMenuOptions()
+		if m.homeMenuCursor >= len(options) {
+			return m, nil
+		}
+		switch options[m.homeMenuCursor] {
+		case "Start Practice":
+			m.screen = screenTopicSelect
+		case "Review Wrong Answers":
 			if len(m.wrongAnswers) > 0 {
 				m.startReviewSession(screenHomeMenu)
 			}
+		case "Stats":
+			m.statsMenuCursor = 0
+			m.screen = screenStatsMenu
+		}
+	case isReviewKey(key):
+		if len(m.wrongAnswers) > 0 {
+			m.startReviewSession(screenHomeMenu)
 		}
 	}
 	return m, nil
@@ -503,35 +519,37 @@ func (m model) statsMenuOptions() []string {
 }
 
 func (m model) updateStatsMenu(msg tea.Msg) (tea.Model, tea.Cmd) {
-	switch msg := msg.(type) {
-	case tea.KeyMsg:
-		key := msg.String()
-		switch {
-		case isBackKey(key):
-			m.homeMenuCursor = 0
-			m.screen = screenHomeMenu
-		case isUpNav(key):
-			if m.statsMenuCursor > 0 {
-				m.statsMenuCursor--
-			}
-		case isDownNav(key):
-			opts := m.statsMenuOptions()
-			if m.statsMenuCursor < len(opts)-1 {
-				m.statsMenuCursor++
-			}
-		case isEnterKey(key):
-			opts := m.statsMenuOptions()
-			if m.statsMenuCursor >= len(opts) {
-				return m, nil
-			}
-			switch opts[m.statsMenuCursor] {
-			case "Global Stats":
-				m.loadGlobalStats()
-				m.screen = screenStatsGlobal
-			case "Stats by Pack":
-				m.loadPackListStats()
-				m.screen = screenStatsPackList
-			}
+	keyMsg, ok := msg.(tea.KeyMsg)
+	if !ok {
+		return m, nil
+	}
+
+	key := keyMsg.String()
+	switch {
+	case isBackKey(key):
+		m.homeMenuCursor = 0
+		m.screen = screenHomeMenu
+	case isUpNav(key):
+		if m.statsMenuCursor > 0 {
+			m.statsMenuCursor--
+		}
+	case isDownNav(key):
+		opts := m.statsMenuOptions()
+		if m.statsMenuCursor < len(opts)-1 {
+			m.statsMenuCursor++
+		}
+	case isEnterKey(key):
+		opts := m.statsMenuOptions()
+		if m.statsMenuCursor >= len(opts) {
+			return m, nil
+		}
+		switch opts[m.statsMenuCursor] {
+		case "Global Stats":
+			m.loadGlobalStats()
+			m.screen = screenStatsGlobal
+		case "Stats by Pack":
+			m.loadPackListStats()
+			m.screen = screenStatsPackList
 		}
 	}
 	return m, nil
@@ -634,54 +652,57 @@ func (m *model) loadPackDetailStats(topicID int64) {
 }
 
 func (m model) updateStatsGlobal(msg tea.Msg) (tea.Model, tea.Cmd) {
-	switch msg := msg.(type) {
-	case tea.KeyMsg:
-		key := msg.String()
-		switch {
-		case isBackKey(key):
-			m.statsMenuCursor = 0
-			m.screen = screenStatsMenu
-		}
+	keyMsg, ok := msg.(tea.KeyMsg)
+	if !ok {
+		return m, nil
+	}
+
+	if isBackKey(keyMsg.String()) {
+		m.statsMenuCursor = 0
+		m.screen = screenStatsMenu
 	}
 	return m, nil
 }
 
 func (m model) updateStatsPackList(msg tea.Msg) (tea.Model, tea.Cmd) {
-	switch msg := msg.(type) {
-	case tea.KeyMsg:
-		key := msg.String()
-		switch {
-		case isBackKey(key):
-			m.statsMenuCursor = 0
-			m.screen = screenStatsMenu
-		case isUpNav(key):
-			if m.statsPackCursor > 0 {
-				m.statsPackCursor--
-			}
-		case isDownNav(key):
-			if m.statsPackCursor < len(m.statsPacks)-1 {
-				m.statsPackCursor++
-			}
-		case isEnterKey(key):
-			if len(m.statsPacks) > 0 {
-				sel := m.statsPacks[m.statsPackCursor]
-				m.loadPackDetailStats(sel.TopicID)
-				m.screen = screenStatsPackDetail
-			}
+	keyMsg, ok := msg.(tea.KeyMsg)
+	if !ok {
+		return m, nil
+	}
+
+	key := keyMsg.String()
+	switch {
+	case isBackKey(key):
+		m.statsMenuCursor = 0
+		m.screen = screenStatsMenu
+	case isUpNav(key):
+		if m.statsPackCursor > 0 {
+			m.statsPackCursor--
+		}
+	case isDownNav(key):
+		if m.statsPackCursor < len(m.statsPacks)-1 {
+			m.statsPackCursor++
+		}
+	case isEnterKey(key):
+		if len(m.statsPacks) > 0 {
+			sel := m.statsPacks[m.statsPackCursor]
+			m.loadPackDetailStats(sel.TopicID)
+			m.screen = screenStatsPackDetail
 		}
 	}
 	return m, nil
 }
 
 func (m model) updateStatsPackDetail(msg tea.Msg) (tea.Model, tea.Cmd) {
-	switch msg := msg.(type) {
-	case tea.KeyMsg:
-		key := msg.String()
-		switch {
-		case isBackKey(key):
-			m.loadPackListStats()
-			m.screen = screenStatsPackList
-		}
+	keyMsg, ok := msg.(tea.KeyMsg)
+	if !ok {
+		return m, nil
+	}
+
+	key := keyMsg.String()
+	if isBackKey(key) {
+		m.loadPackListStats()
+		m.screen = screenStatsPackList
 	}
 	return m, nil
 }

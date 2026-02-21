@@ -1,3 +1,17 @@
+// Copyright 2026 dezeat
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package sqlite_test
 
 import (
@@ -21,7 +35,7 @@ func TestOpen_CreatesDB(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	if _, err := os.Stat(dbPath); os.IsNotExist(err) {
 		t.Error("db file was not created")
@@ -33,7 +47,7 @@ func TestTopicRepo_UpsertAndList(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	repo := sqlite.NewTopicRepo(db)
 
@@ -73,7 +87,7 @@ func TestQuestionRepo_InsertAndDedupe(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	topicRepo := sqlite.NewTopicRepo(db)
 	topic, err := topicRepo.UpsertBySlug("test-topic", "Test Topic")
@@ -143,7 +157,7 @@ func TestQuestionRepo_ListByTopic_Empty(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	topicRepo := sqlite.NewTopicRepo(db)
 	topic, err := topicRepo.UpsertBySlug("empty", "Empty")
@@ -166,7 +180,7 @@ func TestUserRepo_CreateListGet(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	repo := sqlite.NewUserRepo(db)
 
@@ -222,7 +236,7 @@ func TestUserRepo_UniqueHandleEnforced(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	repo := sqlite.NewUserRepo(db)
 	if _, err := repo.Create("bob", "Bob"); err != nil {

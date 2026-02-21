@@ -1,3 +1,17 @@
+// Copyright 2026 dezeat
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package tui
 
 import (
@@ -29,31 +43,32 @@ func (m model) viewSessionConfig() string {
 	b.WriteString("golearn — Session Config\n")
 	b.WriteString("════════════════════════\n\n")
 
-	b.WriteString(fmt.Sprintf("  Topic:     %s\n", m.selectedTopic.Topic.Name))
-	b.WriteString(fmt.Sprintf("  Available: %d questions\n\n", m.selectedTopic.QuestionCount))
+	fmt.Fprintf(&b, "  Topic:     %s\n", m.selectedTopic.Topic.Name)
+	fmt.Fprintf(&b, "  Available: %d questions\n\n", m.selectedTopic.QuestionCount)
 
 	// Field 0: Questions count.
 	qCursor := "  "
 	if m.sessionConfigField == 0 {
 		qCursor = "▸ "
 	}
-	b.WriteString(fmt.Sprintf("%sQuestions: ◀ %d ▶\n", qCursor, m.questionCount))
+	fmt.Fprintf(&b, "%sQuestions: ◀ %d ▶\n", qCursor, m.questionCount)
 
 	// Field 1: Mode.
 	mCursor := "  "
 	if m.sessionConfigField == 1 {
 		mCursor = "▸ "
 	}
-	b.WriteString(fmt.Sprintf("%sMode:      ◀ %s ▶\n", mCursor, app.ModeDisplayName(m.sessionMode)))
+	fmt.Fprintf(&b, "%sMode:      ◀ %s ▶\n", mCursor, app.ModeDisplayName(m.sessionMode))
 
 	// Field 2: Sub-option (only shown when needed).
-	if m.sessionMode == app.ModeByDifficulty {
+	switch m.sessionMode {
+	case app.ModeByDifficulty:
 		dCursor := "  "
 		if m.sessionConfigField == 2 {
 			dCursor = "▸ "
 		}
-		b.WriteString(fmt.Sprintf("%sDifficulty: ◀ %s ▶\n", dCursor, m.sessionDifficulty))
-	} else if m.sessionMode == app.ModeWeakest {
+		fmt.Fprintf(&b, "%sDifficulty: ◀ %s ▶\n", dCursor, m.sessionDifficulty)
+	case app.ModeWeakest:
 		wCursor := "  "
 		if m.sessionConfigField == 2 {
 			wCursor = "▸ "
@@ -62,7 +77,7 @@ func (m model) viewSessionConfig() string {
 		if m.sessionWeakestSub == app.WeakestByTag {
 			subLabel = "by Tag"
 		}
-		b.WriteString(fmt.Sprintf("%sWeakest:    ◀ %s ▶\n", wCursor, subLabel))
+		fmt.Fprintf(&b, "%sWeakest:    ◀ %s ▶\n", wCursor, subLabel)
 	}
 
 	b.WriteString("\n")
@@ -73,31 +88,33 @@ func (m model) viewSessionConfig() string {
 // --- Session Config Update Handler ---
 
 func (m model) updateSessionConfig(msg tea.Msg) (tea.Model, tea.Cmd) {
-	switch msg := msg.(type) {
-	case tea.KeyMsg:
-		key := msg.String()
-		switch {
-		case isBackKey(key):
-			m.screen = screenTopicSelect
-		case isUpNav(key):
-			if m.sessionConfigField > 0 {
-				m.sessionConfigField--
-			}
-		case isDownNav(key):
-			maxField := 1 // questions, mode
-			if m.sessionMode == app.ModeByDifficulty || m.sessionMode == app.ModeWeakest {
-				maxField = 2 // + sub-option
-			}
-			if m.sessionConfigField < maxField {
-				m.sessionConfigField++
-			}
-		case isAdjustUp(key):
-			m.adjustSessionConfigField(1)
-		case isAdjustDown(key):
-			m.adjustSessionConfigField(-1)
-		case isEnterKey(key):
-			m.startConfiguredSession()
+	keyMsg, ok := msg.(tea.KeyMsg)
+	if !ok {
+		return m, nil
+	}
+
+	key := keyMsg.String()
+	switch {
+	case isBackKey(key):
+		m.screen = screenTopicSelect
+	case isUpNav(key):
+		if m.sessionConfigField > 0 {
+			m.sessionConfigField--
 		}
+	case isDownNav(key):
+		maxField := 1 // questions, mode
+		if m.sessionMode == app.ModeByDifficulty || m.sessionMode == app.ModeWeakest {
+			maxField = 2 // + sub-option
+		}
+		if m.sessionConfigField < maxField {
+			m.sessionConfigField++
+		}
+	case isAdjustUp(key):
+		m.adjustSessionConfigField(1)
+	case isAdjustDown(key):
+		m.adjustSessionConfigField(-1)
+	case isEnterKey(key):
+		m.startConfiguredSession()
 	}
 	return m, nil
 }
@@ -126,7 +143,8 @@ func (m *model) adjustSessionConfigField(dir int) {
 		// Reset sub-field cursor when mode changes.
 		m.sessionConfigField = 1
 	case 2: // sub-option
-		if m.sessionMode == app.ModeByDifficulty {
+		switch m.sessionMode {
+		case app.ModeByDifficulty:
 			m.sessionDiffCursor += dir
 			if m.sessionDiffCursor < 0 {
 				m.sessionDiffCursor = len(difficultyOptions) - 1
@@ -135,7 +153,7 @@ func (m *model) adjustSessionConfigField(dir int) {
 				m.sessionDiffCursor = 0
 			}
 			m.sessionDifficulty = difficultyOptions[m.sessionDiffCursor]
-		} else if m.sessionMode == app.ModeWeakest {
+		case app.ModeWeakest:
 			m.sessionWeakCursor += dir
 			if m.sessionWeakCursor < 0 {
 				m.sessionWeakCursor = len(weakestOptions) - 1

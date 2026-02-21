@@ -1,3 +1,17 @@
+// Copyright 2026 dezeat
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package main
 
 import (
@@ -129,7 +143,7 @@ func runImport(dbPath string, args []string) error {
 	if err != nil {
 		return fmt.Errorf("open database: %w", err)
 	}
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	reader := pack.NewReader()
 	topicRepo := sqlite.NewTopicRepo(db)
@@ -166,7 +180,7 @@ func runTUI(dbPath string) error {
 	if err != nil {
 		return fmt.Errorf("open database: %w", err)
 	}
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	topicRepo := sqlite.NewTopicRepo(db)
 	questionRepo := sqlite.NewQuestionRepo(db)
@@ -266,7 +280,7 @@ func runExport(dbPath string, args []string) error {
 	if err != nil {
 		return fmt.Errorf("open database: %w", err)
 	}
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	topicRepo := sqlite.NewTopicRepo(db)
 	questionRepo := sqlite.NewQuestionRepo(db)
@@ -320,7 +334,7 @@ func runSession(dbPath string, args []string) error {
 	if err != nil {
 		return fmt.Errorf("open database: %w", err)
 	}
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	topicRepo := sqlite.NewTopicRepo(db)
 	questionRepo := sqlite.NewQuestionRepo(db)
@@ -435,12 +449,13 @@ func runSession(dbPath string, args []string) error {
 		}
 
 		answered++
-		if skipped {
+		switch {
+		case skipped:
 			fmt.Println("  -> Skipped")
-		} else if correct {
+		case correct:
 			correctCount++
 			fmt.Println("  -> Correct!")
-		} else {
+		default:
 			correctSet := make(map[string]bool, len(q.CorrectChoiceIDs))
 			for _, cid := range q.CorrectChoiceIDs {
 				correctSet[cid] = true

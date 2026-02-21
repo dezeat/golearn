@@ -1,3 +1,17 @@
+// Copyright 2026 dezeat
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package tui
 
 import (
@@ -36,42 +50,44 @@ func (m model) summaryOptions() []string {
 // --- Summary Update Handler ---
 
 func (m model) updateSummary(msg tea.Msg) (tea.Model, tea.Cmd) {
-	switch msg := msg.(type) {
-	case tea.KeyMsg:
-		key := msg.String()
-		switch {
-		case isBackKey(key):
-			if err := m.reloadTopicsForCurrentUser(); err != nil {
-				m.lastError = fmt.Sprintf("reload topics: %v", err)
-			}
-			m.homeMenuCursor = 0
-			m.screen = screenHomeMenu
-		case isUpNav(key):
-			if m.summaryCursor > 0 {
-				m.summaryCursor--
-			}
-		case isDownNav(key):
-			if m.summaryCursor < len(m.summaryOptions())-1 {
-				m.summaryCursor++
-			}
-		case isEnterKey(key):
-			options := m.summaryOptions()
-			if m.summaryCursor >= len(options) {
-				break
-			}
-			switch options[m.summaryCursor] {
-			case "Review incorrect questions":
-				if len(m.wrongAnswers) > 0 {
-					m.startReviewSession(screenSummary)
-				}
-			case "View stats for this pack":
-				m.loadPackDetailStats(m.selectedTopic.Topic.ID)
-				m.screen = screenStatsPackDetail
-			}
-		case isReviewKey(key):
+	keyMsg, ok := msg.(tea.KeyMsg)
+	if !ok {
+		return m, nil
+	}
+
+	key := keyMsg.String()
+	switch {
+	case isBackKey(key):
+		if err := m.reloadTopicsForCurrentUser(); err != nil {
+			m.lastError = fmt.Sprintf("reload topics: %v", err)
+		}
+		m.homeMenuCursor = 0
+		m.screen = screenHomeMenu
+	case isUpNav(key):
+		if m.summaryCursor > 0 {
+			m.summaryCursor--
+		}
+	case isDownNav(key):
+		if m.summaryCursor < len(m.summaryOptions())-1 {
+			m.summaryCursor++
+		}
+	case isEnterKey(key):
+		options := m.summaryOptions()
+		if m.summaryCursor >= len(options) {
+			return m, nil
+		}
+		switch options[m.summaryCursor] {
+		case "Review incorrect questions":
 			if len(m.wrongAnswers) > 0 {
 				m.startReviewSession(screenSummary)
 			}
+		case "View stats for this pack":
+			m.loadPackDetailStats(m.selectedTopic.Topic.ID)
+			m.screen = screenStatsPackDetail
+		}
+	case isReviewKey(key):
+		if len(m.wrongAnswers) > 0 {
+			m.startReviewSession(screenSummary)
 		}
 	}
 	return m, nil

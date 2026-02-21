@@ -1,3 +1,17 @@
+// Copyright 2026 dezeat
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package app_test
 
 import (
@@ -36,7 +50,7 @@ func setupTestDB(t *testing.T) (
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}
-	t.Cleanup(func() { db.Close() })
+	t.Cleanup(func() { _ = db.Close() })
 
 	topicRepo := sqlite.NewTopicRepo(db)
 	questionRepo := sqlite.NewQuestionRepo(db)
@@ -221,19 +235,27 @@ func TestAttemptStats_AffectSelection(t *testing.T) {
 			break
 		}
 		q := sq.Question
-		switch {
-		case q.Prompt == "Q1?":
+		switch q.Prompt {
+		case "Q1?":
 			// Wrong answer.
-			engine.RecordAttempt(q.ID, []string{"B"}, false, 50)
-		case q.Prompt == "Q2?":
+			if _, err := engine.RecordAttempt(q.ID, []string{"B"}, false, 50); err != nil {
+				t.Fatalf("RecordAttempt wrong: %v", err)
+			}
+		case "Q2?":
 			// Correct answer.
-			engine.RecordAttempt(q.ID, []string{"A", "C"}, false, 50)
+			if _, err := engine.RecordAttempt(q.ID, []string{"A", "C"}, false, 50); err != nil {
+				t.Fatalf("RecordAttempt correct: %v", err)
+			}
 		default:
 			// Skip.
-			engine.RecordAttempt(q.ID, nil, true, 50)
+			if _, err := engine.RecordAttempt(q.ID, nil, true, 50); err != nil {
+				t.Fatalf("RecordAttempt skip: %v", err)
+			}
 		}
 	}
-	engine.EndSession()
+	if err := engine.EndSession(); err != nil {
+		t.Fatalf("EndSession 1: %v", err)
+	}
 
 	// Session 2: selection should prioritise weak questions.
 	// We use a fresh engine with the same repos so stats are visible.
@@ -262,7 +284,9 @@ func TestAttemptStats_AffectSelection(t *testing.T) {
 		}
 	}
 
-	engine2.EndSession()
+	if err := engine2.EndSession(); err != nil {
+		t.Fatalf("EndSession 2: %v", err)
+	}
 }
 
 func TestAttemptStats_UserScoped(t *testing.T) {

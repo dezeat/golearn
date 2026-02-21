@@ -3,6 +3,11 @@
 BINARY  := golearn
 BIN_DIR := ./bin
 SRC     := ./cmd/golearn
+GOLANGCI_LINT := $(shell command -v golangci-lint 2>/dev/null)
+
+ifeq ($(GOLANGCI_LINT),)
+GOLANGCI_LINT := $(shell go env GOPATH)/bin/golangci-lint
+endif
 
 ## run: run without building
 run:
@@ -27,10 +32,10 @@ fmt:
 
 ## lint: run golangci-lint (install separately)
 lint:
-	@if command -v golangci-lint >/dev/null 2>&1; then \
-		golangci-lint run ./...; \
+	@if [ -x "$(GOLANGCI_LINT)" ]; then \
+		$(GOLANGCI_LINT) run ./...; \
 	else \
-		echo "golangci-lint not installed — skipping"; \
+		echo "golangci-lint not installed — skipping (not found on PATH or at $(shell go env GOPATH)/bin/golangci-lint)"; \
 	fi
 
 ## check: full CI gate (fmt + vet + lint + test)

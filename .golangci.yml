@@ -1,6 +1,8 @@
 # golangci-lint configuration for golearn.
 # Run: golangci-lint run ./...
 
+version: "2"
+
 run:
   timeout: 3m
 
@@ -11,10 +13,8 @@ linters:
     - staticcheck
     - unused
     - ineffassign
-    - gosimple
     - gocritic
     - misspell
-    - gofmt
   disable:
     - depguard
 
