@@ -16,6 +16,7 @@ package domain
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 )
 
@@ -43,6 +44,8 @@ func ValidatePack(p *Pack, filePath string) []ValidationError {
 
 	if strings.TrimSpace(p.PackVersion) == "" {
 		errs = append(errs, ValidationError{File: filePath, Index: -1, Field: "pack_version", Message: "required"})
+	} else if msg := ValidatePackVersion(p.PackVersion); msg != "" {
+		errs = append(errs, ValidationError{File: filePath, Index: -1, Field: "pack_version", Message: msg})
 	}
 	if strings.TrimSpace(p.Topic.Slug) == "" {
 		errs = append(errs, ValidationError{File: filePath, Index: -1, Field: "topic.slug", Message: "required"})
@@ -58,6 +61,54 @@ func ValidatePack(p *Pack, filePath string) []ValidationError {
 		errs = append(errs, ValidateQuestion(&p.Questions[i], i, filePath)...)
 	}
 	return errs
+}
+
+// ValidatePackVersion validates pack_version syntax and compatibility.
+// Returns an empty string when valid, otherwise a human-readable error message.
+func ValidatePackVersion(version string) string {
+	major, minor, _, err := ParsePackVersion(version)
+	if err != nil {
+		return err.Error()
+	}
+	if major != SupportedPackMajor || minor != SupportedPackMinor {
+		return fmt.Sprintf("unsupported version %q (supported: %d.%d.x)", version, SupportedPackMajor, SupportedPackMinor)
+	}
+	return ""
+}
+
+// ParsePackVersion parses a strict x.y.z semantic version string.
+func ParsePackVersion(version string) (major int, minor int, patch int, err error) {
+	v := strings.TrimSpace(version)
+	parts := strings.Split(v, ".")
+	if len(parts) != 3 {
+		return 0, 0, 0, fmt.Errorf("must be semantic version x.y.z, got %q", version)
+	}
+
+	major, err = parseVersionPart(parts[0])
+	if err != nil {
+		return 0, 0, 0, fmt.Errorf("must be semantic version x.y.z, got %q", version)
+	}
+	minor, err = parseVersionPart(parts[1])
+	if err != nil {
+		return 0, 0, 0, fmt.Errorf("must be semantic version x.y.z, got %q", version)
+	}
+	patch, err = parseVersionPart(parts[2])
+	if err != nil {
+		return 0, 0, 0, fmt.Errorf("must be semantic version x.y.z, got %q", version)
+	}
+
+	return major, minor, patch, nil
+}
+
+func parseVersionPart(part string) (int, error) {
+	if part == "" {
+		return 0, fmt.Errorf("empty version component")
+	}
+	v, err := strconv.Atoi(part)
+	if err != nil || v < 0 {
+		return 0, fmt.Errorf("invalid version component")
+	}
+	return v, nil
 }
 
 // ValidateQuestion checks a single question against all canonical rules.

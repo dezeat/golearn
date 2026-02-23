@@ -30,6 +30,7 @@ func NormalizeText(s string) string {
 
 // NormalizePack normalises all string fields in a pack in-place.
 func NormalizePack(p *Pack) {
+	p.PackVersion = strings.TrimSpace(p.PackVersion)
 	p.Topic.Slug = strings.TrimSpace(p.Topic.Slug)
 	p.Topic.Name = strings.TrimSpace(p.Topic.Name)
 	for i := range p.Questions {

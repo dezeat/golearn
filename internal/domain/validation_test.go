@@ -182,3 +182,51 @@ func TestValidateQuestion_DifficultyEnum(t *testing.T) {
 		}
 	}
 }
+
+func TestValidatePack_PackVersionCompatibility(t *testing.T) {
+	base := domain.Pack{
+		Topic: domain.PackTopic{Slug: "go-basics", Name: "Go Basics"},
+		Questions: []domain.PackQuestion{{
+			Type:             domain.SingleSelect,
+			Prompt:           "Q?",
+			Choices:          []domain.Choice{{ID: "A", Text: "a"}, {ID: "B", Text: "b"}},
+			CorrectChoiceIDs: []string{"A"},
+		}},
+	}
+
+	valid := base
+	valid.PackVersion = "0.1.7"
+	if errs := domain.ValidatePack(&valid, "valid.yaml"); len(errs) != 0 {
+		t.Fatalf("expected no errors for supported version, got %v", errs)
+	}
+
+	unsupported := base
+	unsupported.PackVersion = "1.0.0"
+	errList := domain.ValidatePack(&unsupported, "unsupported.yaml")
+	found := false
+	for _, e := range errList {
+		if e.Field == "pack_version" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("expected pack_version compatibility error, got %v", errList)
+	}
+}
+
+func TestParsePackVersion(t *testing.T) {
+	major, minor, patch, err := domain.ParsePackVersion("0.1.2")
+	if err != nil {
+		t.Fatalf("ParsePackVersion unexpected error: %v", err)
+	}
+	if major != 0 || minor != 1 || patch != 2 {
+		t.Fatalf("unexpected parse result: %d.%d.%d", major, minor, patch)
+	}
+
+	for _, bad := range []string{"", "0.1", "v0.1.0", "0.1.x", "-1.1.0"} {
+		if _, _, _, err := domain.ParsePackVersion(bad); err == nil {
+			t.Fatalf("expected parse error for %q", bad)
+		}
+	}
+}

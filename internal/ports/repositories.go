@@ -64,6 +64,9 @@ type SessionRepository interface {
 	// Create inserts a new session and returns its ID.
 	Create(session *domain.Session) (int64, error)
 
+	// GetByID returns a session by ID, or nil if not found.
+	GetByID(id int64) (*domain.Session, error)
+
 	// Finish marks a session as ended (sets ended_at).
 	Finish(id int64) error
 }
@@ -79,6 +82,9 @@ type QuestionStats struct {
 type AttemptRepository interface {
 	// Record inserts a single attempt.
 	Record(attempt *domain.Attempt) error
+
+	// CountBySession returns number of attempts recorded for a session.
+	CountBySession(sessionID int64) (int, error)
 
 	// StatsByTopic returns per-question attempt stats for all
 	// questions in a topic, keyed by question ID.

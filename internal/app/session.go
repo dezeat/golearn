@@ -20,6 +20,7 @@
 package app
 
 import (
+	"encoding/json"
 	"fmt"
 	"math/rand"
 	"time"
@@ -36,6 +37,25 @@ type SessionQuestion struct {
 	ShuffledChoices []domain.Choice
 }
 
+type sessionQuestionSnapshot struct {
+	QuestionID int64    `json:"question_id"`
+	ChoiceIDs  []string `json:"choice_ids"`
+}
+
+type persistedSessionState struct {
+	ModeParams
+	ModeNote string                    `json:"mode_note,omitempty"`
+	Queue    []sessionQuestionSnapshot `json:"queue,omitempty"`
+}
+
+type sessionRuntime struct {
+	queue      []SessionQuestion
+	cursor     int
+	activeMode SelectionMode
+	modeParams ModeParams
+	modeNote   string
+}
+
 // SessionEngine manages the lifecycle of a practice session.
 type SessionEngine struct {
 	topics    ports.TopicRepository
@@ -45,16 +65,10 @@ type SessionEngine struct {
 	stats     ports.StatsRepository // optional; needed for weakest-by-tag
 	userCtx   CurrentUserProvider
 
-	// In-memory state for the active session.
-	sessionID int64
-	queue     []SessionQuestion // ordered list of selected questions
-	cursor    int               // index of the next question to serve
-	rng       *rand.Rand
+	rng *rand.Rand
 
-	// Mode context for display.
-	activeMode       SelectionMode
-	activeModeParams ModeParams
-	modeNote         string // informational note from selector
+	activeSessionID int64
+	states          map[int64]*sessionRuntime
 }
 
 // NewSessionEngine creates a session engine with the given dependencies.
@@ -80,6 +94,7 @@ func NewSessionEngine(
 		attempts:  attempts,
 		userCtx:   userCtx,
 		rng:       rng,
+		states:    make(map[int64]*sessionRuntime),
 	}
 }
 
@@ -175,11 +190,7 @@ func (e *SessionEngine) StartSessionWithConfig(cfg SessionConfig) (int64, error)
 		return 0, fmt.Errorf("no questions selected for topic %q with mode %s", cfg.TopicSlug, mode)
 	}
 
-	e.activeMode = mode
-	e.activeModeParams = modeParams
-	e.modeNote = modeNote
-
-	e.queue = make([]SessionQuestion, 0, len(selected))
+	queue := make([]SessionQuestion, 0, len(selected))
 	for i := range selected {
 		q := &selected[i]
 		shuffled := make([]domain.Choice, len(q.Choices))
@@ -187,19 +198,38 @@ func (e *SessionEngine) StartSessionWithConfig(cfg SessionConfig) (int64, error)
 		e.rng.Shuffle(len(shuffled), func(i, j int) {
 			shuffled[i], shuffled[j] = shuffled[j], shuffled[i]
 		})
-		e.queue = append(e.queue, SessionQuestion{
+		queue = append(queue, SessionQuestion{
 			Question:        q,
 			ShuffledChoices: shuffled,
 		})
 	}
-	e.cursor = 0
+
+	persisted := persistedSessionState{
+		ModeParams: modeParams,
+		ModeNote:   modeNote,
+		Queue:      make([]sessionQuestionSnapshot, 0, len(queue)),
+	}
+	for i := range queue {
+		choiceIDs := make([]string, 0, len(queue[i].ShuffledChoices))
+		for j := range queue[i].ShuffledChoices {
+			choiceIDs = append(choiceIDs, queue[i].ShuffledChoices[j].ID)
+		}
+		persisted.Queue = append(persisted.Queue, sessionQuestionSnapshot{
+			QuestionID: queue[i].Question.ID,
+			ChoiceIDs:  choiceIDs,
+		})
+	}
+	modeParamsJSON := "{}"
+	if b, err := json.Marshal(persisted); err == nil {
+		modeParamsJSON = string(b)
+	}
 
 	// Persist the session row.
 	sess := &domain.Session{
 		UserID:         e.userCtx.CurrentUserID(),
 		TopicID:        topic.ID,
 		Mode:           string(mode),
-		ModeParamsJSON: ModeParamsJSON(modeParams),
+		ModeParamsJSON: modeParamsJSON,
 		RequestedN:     cfg.N,
 		StartedAt:      time.Now().UTC(),
 	}
@@ -207,33 +237,73 @@ func (e *SessionEngine) StartSessionWithConfig(cfg SessionConfig) (int64, error)
 	if err != nil {
 		return 0, fmt.Errorf("create session: %w", err)
 	}
-	e.sessionID = id
+	e.states[id] = &sessionRuntime{
+		queue:      queue,
+		cursor:     0,
+		activeMode: mode,
+		modeParams: modeParams,
+		modeNote:   modeNote,
+	}
+	e.activeSessionID = id
 	return id, nil
+}
+
+// LoadSession loads a persisted session into engine memory and sets it active.
+// It enables resuming sessions across engine instances.
+func (e *SessionEngine) LoadSession(sessionID int64) error {
+	runtime, err := e.loadSessionRuntime(sessionID)
+	if err != nil {
+		return err
+	}
+	e.states[sessionID] = runtime
+	e.activeSessionID = sessionID
+	return nil
+}
+
+// GetNextSessionQuestionForSession returns next question for a specific session.
+func (e *SessionEngine) GetNextSessionQuestionForSession(sessionID int64) (*SessionQuestion, error) {
+	runtime, err := e.ensureState(sessionID)
+	if err != nil {
+		return nil, err
+	}
+	if runtime.cursor >= len(runtime.queue) {
+		return nil, nil
+	}
+	q := &runtime.queue[runtime.cursor]
+	runtime.cursor++
+	return q, nil
 }
 
 // GetNextSessionQuestion returns the next session question in the queue,
 // or nil when all questions have been served.
 func (e *SessionEngine) GetNextSessionQuestion() *SessionQuestion {
-	if e.cursor >= len(e.queue) {
+	if e.activeSessionID == 0 {
 		return nil
 	}
-	q := &e.queue[e.cursor]
-	e.cursor++
+	q, err := e.GetNextSessionQuestionForSession(e.activeSessionID)
+	if err != nil {
+		return nil
+	}
 	return q
 }
 
-// RecordAttempt evaluates correctness and persists the attempt.
-func (e *SessionEngine) RecordAttempt(
+// RecordAttemptForSession evaluates correctness and persists an attempt for a specific session.
+func (e *SessionEngine) RecordAttemptForSession(
+	sessionID int64,
 	questionID int64,
 	selectedChoiceIDs []string,
 	skipped bool,
 	latencyMs int,
 ) (bool, error) {
-	// Find the question to check correctness against.
+	runtime, err := e.ensureState(sessionID)
+	if err != nil {
+		return false, err
+	}
+
 	var correctIDs []string
-	for i := range e.queue {
-		if e.queue[i].Question != nil && e.queue[i].Question.ID == questionID {
-			correctIDs = e.queue[i].Question.CorrectChoiceIDs
+	for i := range runtime.queue {
+		if runtime.queue[i].Question != nil && runtime.queue[i].Question.ID == questionID {
+			correctIDs = runtime.queue[i].Question.CorrectChoiceIDs
 			break
 		}
 	}
@@ -245,7 +315,7 @@ func (e *SessionEngine) RecordAttempt(
 
 	attempt := &domain.Attempt{
 		UserID:            e.userCtx.CurrentUserID(),
-		SessionID:         e.sessionID,
+		SessionID:         sessionID,
 		QuestionID:        questionID,
 		SelectedChoiceIDs: selectedChoiceIDs,
 		Correct:           correct,
@@ -258,30 +328,180 @@ func (e *SessionEngine) RecordAttempt(
 	return correct, nil
 }
 
-// EndSession marks the session as finished.
-func (e *SessionEngine) EndSession() error {
-	if e.sessionID == 0 {
+// RecordAttempt evaluates correctness and persists the attempt.
+func (e *SessionEngine) RecordAttempt(
+	questionID int64,
+	selectedChoiceIDs []string,
+	skipped bool,
+	latencyMs int,
+) (bool, error) {
+	if e.activeSessionID == 0 {
+		return false, fmt.Errorf("no active session")
+	}
+	return e.RecordAttemptForSession(e.activeSessionID, questionID, selectedChoiceIDs, skipped, latencyMs)
+}
+
+// EndSessionByID marks a specific session as finished and unloads in-memory state.
+func (e *SessionEngine) EndSessionByID(sessionID int64) error {
+	if sessionID == 0 {
 		return nil
 	}
-	return e.sessions.Finish(e.sessionID)
+	if err := e.sessions.Finish(sessionID); err != nil {
+		return err
+	}
+	delete(e.states, sessionID)
+	if e.activeSessionID == sessionID {
+		e.activeSessionID = 0
+	}
+	return nil
+}
+
+// EndSession marks the session as finished.
+func (e *SessionEngine) EndSession() error {
+	return e.EndSessionByID(e.activeSessionID)
+}
+
+// QueueLengthForSession returns question count for a specific session.
+func (e *SessionEngine) QueueLengthForSession(sessionID int64) (int, error) {
+	runtime, err := e.ensureState(sessionID)
+	if err != nil {
+		return 0, err
+	}
+	return len(runtime.queue), nil
 }
 
 // QueueLength returns the total number of questions selected for this session.
 func (e *SessionEngine) QueueLength() int {
-	return len(e.queue)
+	if e.activeSessionID == 0 {
+		return 0
+	}
+	runtime, ok := e.states[e.activeSessionID]
+	if !ok || runtime == nil {
+		return 0
+	}
+	return len(runtime.queue)
 }
 
 // ActiveMode returns the resolved selection mode for the current session.
 func (e *SessionEngine) ActiveMode() SelectionMode {
-	return e.activeMode
+	runtime, ok := e.states[e.activeSessionID]
+	if !ok || runtime == nil {
+		return ModeBalanced
+	}
+	return runtime.activeMode
 }
 
 // ActiveModeParams returns the resolved mode parameters for the current session.
 func (e *SessionEngine) ActiveModeParams() ModeParams {
-	return e.activeModeParams
+	runtime, ok := e.states[e.activeSessionID]
+	if !ok || runtime == nil {
+		return ModeParams{}
+	}
+	return runtime.modeParams
 }
 
 // ModeNote returns any informational note from the selector (e.g., reduced N).
 func (e *SessionEngine) ModeNote() string {
-	return e.modeNote
+	runtime, ok := e.states[e.activeSessionID]
+	if !ok || runtime == nil {
+		return ""
+	}
+	return runtime.modeNote
+}
+
+func (e *SessionEngine) ensureState(sessionID int64) (*sessionRuntime, error) {
+	if sessionID == 0 {
+		return nil, fmt.Errorf("session ID is required")
+	}
+	if runtime, ok := e.states[sessionID]; ok && runtime != nil {
+		return runtime, nil
+	}
+	runtime, err := e.loadSessionRuntime(sessionID)
+	if err != nil {
+		return nil, err
+	}
+	e.states[sessionID] = runtime
+	return runtime, nil
+}
+
+func (e *SessionEngine) loadSessionRuntime(sessionID int64) (*sessionRuntime, error) {
+	session, err := e.sessions.GetByID(sessionID)
+	if err != nil {
+		return nil, fmt.Errorf("load session %d: %w", sessionID, err)
+	}
+	if session == nil {
+		return nil, fmt.Errorf("session %d not found", sessionID)
+	}
+
+	var persisted persistedSessionState
+	if err := json.Unmarshal([]byte(session.ModeParamsJSON), &persisted); err != nil {
+		persisted = persistedSessionState{}
+	}
+	if len(persisted.Queue) == 0 {
+		return nil, fmt.Errorf("session %d has no persisted queue", sessionID)
+	}
+
+	questions, err := e.questions.ListByTopic(session.TopicID)
+	if err != nil {
+		return nil, fmt.Errorf("load questions for session %d topic %d: %w", sessionID, session.TopicID, err)
+	}
+	questionByID := make(map[int64]domain.Question, len(questions))
+	for i := range questions {
+		questionByID[questions[i].ID] = questions[i]
+	}
+
+	queue := make([]SessionQuestion, 0, len(persisted.Queue))
+	for i := range persisted.Queue {
+		snap := persisted.Queue[i]
+		q, ok := questionByID[snap.QuestionID]
+		if !ok {
+			continue
+		}
+		choiceByID := make(map[string]domain.Choice, len(q.Choices))
+		for j := range q.Choices {
+			choiceByID[q.Choices[j].ID] = q.Choices[j]
+		}
+
+		shuffled := make([]domain.Choice, 0, len(q.Choices))
+		for j := range snap.ChoiceIDs {
+			if c, found := choiceByID[snap.ChoiceIDs[j]]; found {
+				shuffled = append(shuffled, c)
+			}
+		}
+		if len(shuffled) != len(q.Choices) {
+			shuffled = make([]domain.Choice, len(q.Choices))
+			copy(shuffled, q.Choices)
+		}
+
+		qq := q
+		queue = append(queue, SessionQuestion{
+			Question:        &qq,
+			ShuffledChoices: shuffled,
+		})
+	}
+
+	if len(queue) == 0 {
+		return nil, fmt.Errorf("session %d has an empty restored queue", sessionID)
+	}
+
+	attemptsCount, err := e.attempts.CountBySession(sessionID)
+	if err != nil {
+		return nil, fmt.Errorf("count attempts for session %d: %w", sessionID, err)
+	}
+	if attemptsCount > len(queue) {
+		attemptsCount = len(queue)
+	}
+
+	mode := SelectionMode(session.Mode)
+	if !ValidModes[mode] {
+		mode = ModeBalanced
+	}
+
+	return &sessionRuntime{
+		queue:      queue,
+		cursor:     attemptsCount,
+		activeMode: mode,
+		modeParams: persisted.ModeParams,
+		modeNote:   persisted.ModeNote,
+	}, nil
 }

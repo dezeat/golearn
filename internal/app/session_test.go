@@ -467,3 +467,105 @@ func TestSessionQuestion_ShuffleAndCorrectness_MultiSelect(t *testing.T) {
 		t.Fatalf("EndSession: %v", err)
 	}
 }
+
+func TestSessionEngine_LoadSession_RestoresQueueAndCursor(t *testing.T) {
+	_, topicRepo, questionRepo, sessionRepo, attemptRepo, _, userID := setupTestDB(t)
+
+	engine1 := app.NewSessionEngine(
+		topicRepo,
+		questionRepo,
+		sessionRepo,
+		attemptRepo,
+		app.NewUserContext(userID),
+		rand.New(rand.NewSource(7)),
+	)
+
+	sessionID, err := engine1.StartSession("test-topic", 3, "practice")
+	if err != nil {
+		t.Fatalf("StartSession: %v", err)
+	}
+
+	first := engine1.GetNextSessionQuestion()
+	if first == nil || first.Question == nil {
+		t.Fatal("expected first question")
+	}
+	if _, err := engine1.RecordAttempt(first.Question.ID, first.Question.CorrectChoiceIDs, false, 10); err != nil {
+		t.Fatalf("RecordAttempt: %v", err)
+	}
+
+	engine2 := app.NewSessionEngine(
+		topicRepo,
+		questionRepo,
+		sessionRepo,
+		attemptRepo,
+		app.NewUserContext(userID),
+		rand.New(rand.NewSource(999)),
+	)
+	if err := engine2.LoadSession(sessionID); err != nil {
+		t.Fatalf("LoadSession: %v", err)
+	}
+
+	if got := engine2.QueueLength(); got != 3 {
+		t.Fatalf("QueueLength = %d, want 3", got)
+	}
+
+	next := engine2.GetNextSessionQuestion()
+	if next == nil || next.Question == nil {
+		t.Fatal("expected resumed next question")
+	}
+	if next.Question.ID == first.Question.ID {
+		t.Fatalf("expected resumed cursor to advance past first question %d", first.Question.ID)
+	}
+}
+
+func TestSessionEngine_MultipleSessionsByID(t *testing.T) {
+	_, topicRepo, questionRepo, sessionRepo, attemptRepo, _, userID := setupTestDB(t)
+
+	engine := app.NewSessionEngine(
+		topicRepo,
+		questionRepo,
+		sessionRepo,
+		attemptRepo,
+		app.NewUserContext(userID),
+		rand.New(rand.NewSource(17)),
+	)
+
+	s1, err := engine.StartSession("test-topic", 2, "practice")
+	if err != nil {
+		t.Fatalf("StartSession s1: %v", err)
+	}
+	s2, err := engine.StartSession("test-topic", 2, "practice")
+	if err != nil {
+		t.Fatalf("StartSession s2: %v", err)
+	}
+
+	q1, err := engine.GetNextSessionQuestionForSession(s1)
+	if err != nil {
+		t.Fatalf("GetNextSessionQuestionForSession s1: %v", err)
+	}
+	q2, err := engine.GetNextSessionQuestionForSession(s2)
+	if err != nil {
+		t.Fatalf("GetNextSessionQuestionForSession s2: %v", err)
+	}
+	if q1 == nil || q1.Question == nil || q2 == nil || q2.Question == nil {
+		t.Fatal("expected both sessions to return questions")
+	}
+
+	if _, err := engine.RecordAttemptForSession(s1, q1.Question.ID, q1.Question.CorrectChoiceIDs, false, 5); err != nil {
+		t.Fatalf("RecordAttemptForSession s1: %v", err)
+	}
+	if _, err := engine.RecordAttemptForSession(s2, q2.Question.ID, q2.Question.CorrectChoiceIDs, false, 5); err != nil {
+		t.Fatalf("RecordAttemptForSession s2: %v", err)
+	}
+
+	if err := engine.EndSessionByID(s1); err != nil {
+		t.Fatalf("EndSessionByID s1: %v", err)
+	}
+	nextS2, err := engine.GetNextSessionQuestionForSession(s2)
+	if err != nil {
+		t.Fatalf("GetNextSessionQuestionForSession s2 after ending s1: %v", err)
+	}
+	if nextS2 == nil {
+		t.Fatal("expected s2 to remain active after ending s1")
+	}
+}

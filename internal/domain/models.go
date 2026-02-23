@@ -127,6 +127,16 @@ type Pack struct {
 	Questions   []PackQuestion `json:"questions" yaml:"questions"`
 }
 
+const (
+	// CurrentPackVersion is the pack schema version emitted by export.
+	CurrentPackVersion = "0.1.0"
+
+	// SupportedPackMajor is the accepted pack schema major version for import.
+	SupportedPackMajor = 0
+	// SupportedPackMinor is the accepted pack schema minor version for import.
+	SupportedPackMinor = 1
+)
+
 // PackTopic identifies the topic inside a pack file.
 type PackTopic struct {
 	Slug string `json:"slug" yaml:"slug"`

@@ -60,6 +60,39 @@ func (r *SessionRepo) Create(s *domain.Session) (int64, error) {
 	return id, nil
 }
 
+// GetByID returns a session by ID, or nil if not found.
+func (r *SessionRepo) GetByID(id int64) (*domain.Session, error) {
+	row := r.db.QueryRow(
+		`SELECT id, user_id, topic_id, mode, mode_params_json, requested_n, started_at, ended_at
+		 FROM sessions WHERE id = ?`,
+		id,
+	)
+
+	var s domain.Session
+	var endedAt sql.NullTime
+	if err := row.Scan(
+		&s.ID,
+		&s.UserID,
+		&s.TopicID,
+		&s.Mode,
+		&s.ModeParamsJSON,
+		&s.RequestedN,
+		&s.StartedAt,
+		&endedAt,
+	); err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("get session %d: %w", id, err)
+	}
+	if endedAt.Valid {
+		t := endedAt.Time
+		s.EndedAt = &t
+	}
+
+	return &s, nil
+}
+
 // Finish sets ended_at to now for the given session.
 func (r *SessionRepo) Finish(id int64) error {
 	_, err := r.db.Exec(

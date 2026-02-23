@@ -150,3 +150,43 @@ func TestImportService_MissingPath(t *testing.T) {
 		t.Fatal("expected error for missing path")
 	}
 }
+
+func TestImportService_RejectsUnsupportedPackVersion(t *testing.T) {
+	dir := t.TempDir()
+	content := `pack_version: "1.0.0"
+topic:
+  slug: "version-test"
+  name: "Version Test"
+questions:
+  - type: "single_select"
+    prompt: "What is 2+2?"
+    choices:
+      - { id: "A", text: "3" }
+      - { id: "B", text: "4" }
+    correct_choice_ids: ["B"]
+`
+	packPath := filepath.Join(dir, "unsupported.yaml")
+	if err := os.WriteFile(packPath, []byte(content), 0o644); err != nil {
+		t.Fatalf("write pack: %v", err)
+	}
+
+	dbPath := filepath.Join(t.TempDir(), "version.db")
+	db, err := sqlite.Open(dbPath)
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	defer func() { _ = db.Close() }()
+
+	topicRepo := sqlite.NewTopicRepo(db)
+	questionRepo := sqlite.NewQuestionRepo(db)
+	reader := pack.NewReader()
+	svc := app.NewImportService(reader, topicRepo, questionRepo)
+
+	result, err := svc.Import(packPath)
+	if err == nil {
+		t.Fatal("expected import error for unsupported pack version")
+	}
+	if result == nil || result.Invalid == 0 {
+		t.Fatalf("expected invalid count > 0, got %+v", result)
+	}
+}

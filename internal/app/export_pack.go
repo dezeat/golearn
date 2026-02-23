@@ -104,7 +104,7 @@ func (s *ExportService) ExportToBytes(topicSlug, format string) ([]byte, error) 
 	})
 
 	pack := domain.Pack{
-		PackVersion: "0.1.0",
+		PackVersion: domain.CurrentPackVersion,
 		Topic: domain.PackTopic{
 			Slug: topic.Slug,
 			Name: topic.Name,

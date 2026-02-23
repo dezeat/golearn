@@ -66,6 +66,15 @@ func (r *AttemptRepo) Record(a *domain.Attempt) error {
 	return nil
 }
 
+// CountBySession returns number of attempts recorded for a session.
+func (r *AttemptRepo) CountBySession(sessionID int64) (int, error) {
+	var count int
+	if err := r.db.QueryRow(`SELECT COUNT(*) FROM attempts WHERE session_id = ?`, sessionID).Scan(&count); err != nil {
+		return 0, fmt.Errorf("count attempts for session %d: %w", sessionID, err)
+	}
+	return count, nil
+}
+
 // StatsByTopic returns per-question attempt statistics for all questions
 // belonging to a topic. The map is keyed by question ID.
 // Wrong count = total attempts - correct attempts (skips count as wrong).
