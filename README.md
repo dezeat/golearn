@@ -1,6 +1,6 @@
 # golearn
 
-**Local-first TUI for practising multiple-choice questions — certification prep, team knowledge, and self-directed learning.**
+**Terminal-based learning engine for practicing multiple-choice questions offline.**
 
 [![CI](https://github.com/dezeat/golearn/actions/workflows/ci.yml/badge.svg)](https://github.com/dezeat/golearn/actions/workflows/ci.yml)
 [![Go](https://img.shields.io/badge/Go-1.22+-00ADD8?logo=go&logoColor=white)](https://go.dev)
@@ -8,12 +8,35 @@
 
 ---
 
+## Motivation
+
+`golearn` was built to help the author learn any topic imaginable with a repeatable,
+local workflow. Professional engineering certifications were the MVP driver, but the
+core design is intentionally generic: any domain that fits MCQs can be practiced.
+
+The project follows a simple maintenance principle: tools with personal surplus value
+are far more likely to be improved long-term.
+
+## What it is
+
+For users, `golearn` is a local-first terminal app that lets you:
+
+- practice curated question packs
+- track performance over time
+- focus on weak areas automatically
+- own and version your content
+- run fully offline
+
+For developers, `golearn` is a deterministic Go codebase using a hexagonal architecture
+with SQLite persistence, YAML/JSON pack import/export, and a Bubble Tea TUI.
+
 ## Why golearn?
 
-- **Zero dependencies, zero accounts** — runs entirely offline with a single SQLite file. No cloud, no subscriptions, no sign-up.
-- **Adaptive practice** — automatically surfaces unseen and weak questions so you study what matters most.
-- **Author-friendly packs** — write questions in YAML with full rationale, version-control them with Git, share via any channel.
-- **Terminal-native** — a polished Bubble Tea TUI that fits into your existing dev workflow. No browser tabs required.
+- **Deterministic question engine** — reproducible selection and stable export behavior.
+- **Performance-aware selection** — unseen-first and weakest-area prioritization.
+- **Multi-user local profiles** — user-scoped sessions and stats on shared local data.
+- **Human-readable packs** — simple YAML/JSON schema designed for version control.
+- **Zero lock-in** — import/export keeps data portable and durable.
 
 ---
 
@@ -73,6 +96,18 @@ make db-reset   # delete default database
 make clean      # remove build artifacts
 ```
 
+## Public roadmap
+
+### Mid-term
+
+- LLM/RAG-assisted draft question generation
+- Assisted pack validation and quality checks
+- Minimal but scalable Webserver with HTMX web UI
+
+### Long-term
+
+- Collaborative web repository for shared pack publishing and discovery
+
 ## Configuration
 
 | Flag       | Default                 | Description            |
@@ -116,8 +151,6 @@ questions:
 | `packs/go-basics.yaml`   | 15        | Go language fundamentals with full rationale       |
 | `packs/llm-agents.yaml`  | 15        | LLM agents & agentic AI for curious non-engineers  |
 
-Additional packs (certification prep, technology deep-dives) live in the
-separate [golearn-packs](https://github.com/dezeat/golearn-packs) repository.
 
 ```bash
 # Import from the packs repo

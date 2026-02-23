@@ -59,8 +59,7 @@ representative at an online or offline event.
 ## Enforcement
 
 Instances of abusive, harassing, or otherwise unacceptable behavior may be
-reported to the project maintainers by opening a private report through GitHub
-or by contacting: maintainers@dezeat.dev.
+reported to the project maintainers by opening a private report through GitHub.
 
 All complaints will be reviewed and investigated promptly and fairly.
 

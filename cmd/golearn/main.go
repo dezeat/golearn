@@ -18,6 +18,7 @@ import (
 	"bufio"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -190,6 +191,10 @@ func runTUI(dbPath string) error {
 	statsRepo := sqlite.NewStatsRepo(db)
 	configStore := localconfig.NewStore(localconfig.DefaultPath())
 
+	if err := ensureBundledPacks(topicRepo, questionRepo); err != nil {
+		return err
+	}
+
 	profiles, err := app.EnsureDefaultUser(userRepo)
 	if err != nil {
 		return err
@@ -342,6 +347,10 @@ func runSession(dbPath string, args []string) error {
 	attemptRepo := sqlite.NewAttemptRepo(db)
 	userRepo := sqlite.NewUserRepo(db)
 
+	if err := ensureBundledPacks(topicRepo, questionRepo); err != nil {
+		return err
+	}
+
 	if _, err := app.EnsureDefaultUser(userRepo); err != nil {
 		return err
 	}
@@ -487,6 +496,41 @@ func runSession(dbPath string, args []string) error {
 	if answered > 0 {
 		pct := float64(correctCount) / float64(answered) * 100
 		fmt.Printf("  Accuracy:       %.1f%%\n", pct)
+	}
+
+	return nil
+}
+
+func ensureBundledPacks(topicRepo *sqlite.TopicRepo, questionRepo *sqlite.QuestionRepo) error {
+	topics, err := topicRepo.List()
+	if err != nil {
+		return fmt.Errorf("check existing topics: %w", err)
+	}
+	if len(topics) > 0 {
+		return nil
+	}
+
+	reader := pack.NewReader()
+	svc := app.NewImportService(reader, topicRepo, questionRepo)
+
+	candidateDirs := []string{"packs"}
+	if exePath, pathErr := os.Executable(); pathErr == nil {
+		exeDir := filepath.Dir(exePath)
+		candidateDirs = append(candidateDirs, filepath.Join(exeDir, "..", "packs"))
+	}
+
+	for _, dir := range candidateDirs {
+		info, statErr := os.Stat(dir)
+		if statErr != nil || !info.IsDir() {
+			continue
+		}
+		result, importErr := svc.Import(dir)
+		if importErr != nil {
+			return fmt.Errorf("bootstrap bundled packs from %s: %w", dir, importErr)
+		}
+		if result != nil && (result.Inserted > 0 || result.Duplicates > 0) {
+			return nil
+		}
 	}
 
 	return nil

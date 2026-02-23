@@ -5,9 +5,11 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  workflow_dispatch:
 
 permissions:
   contents: read
+  security-events: write
 
 jobs:
   check:
@@ -26,6 +28,9 @@ jobs:
       - name: Vet
         run: go vet ./...
 
+      - name: Vulnerability check (govulncheck)
+        run: go run golang.org/x/vuln/cmd/govulncheck@latest ./...
+
       - name: Lint
         uses: golangci/golangci-lint-action@v9
         with:
@@ -42,3 +47,20 @@ jobs:
           ./bin/golearn import packs/go-basics.yaml
           ./bin/golearn export go-basics --out /tmp/export-test.yaml
           ./bin/golearn import /tmp/export-test.yaml
+
+  codeql:
+    name: CodeQL (SAST)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: go
+
+      - name: Autobuild
+        uses: github/codeql-action/autobuild@v3
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
