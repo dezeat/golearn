@@ -1,0 +1,500 @@
+// Copyright 2026 dezeat
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+package tui
+
+import (
+	"fmt"
+	"strings"
+	"time"
+
+	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
+
+	"github.com/dezeat/golearn/internal/domain"
+)
+
+// viewQuestion renders the question answering screen.
+func (m model) viewQuestion() string {
+	var b strings.Builder
+
+	header := fmt.Sprintf("golearn — Question %d/%d", m.questionNum, m.totalQuestions)
+	m.writeCenteredLine(&b, styleHeader.Render(header))
+	m.writeCenteredLine(&b, strings.Repeat("═", len(header)))
+
+	// Show mode context.
+	if m.sessionModeLabel != "" {
+		b.WriteString(styleDim.Render("  "+truncate(m.sessionModeLabel, m.contentWidth(2))) + "\n")
+	}
+	if m.sessionModeNote != "" {
+		b.WriteString(styleDim.Render("  "+truncate(m.sessionModeNote, m.contentWidth(2))) + "\n")
+	}
+	b.WriteString("\n")
+
+	if m.currentQuestion == nil {
+		b.WriteString("  No question loaded.\n")
+		return b.String()
+	}
+
+	q := m.currentQuestion.Question
+	if q == nil {
+		b.WriteString("  No question loaded.\n")
+		return b.String()
+	}
+	cw := m.contentWidth(2)
+
+	// Show type hint.
+	typeHint := "Select one"
+	if q.Type == "multi_select" {
+		typeHint = "Select all that apply"
+	}
+	fmt.Fprintf(&b, "  [%s]\n\n", typeHint)
+
+	// Show intro if present.
+	if q.Intro != "" {
+		b.WriteString(wrapAndIndent(q.Intro, cw, "  ") + "\n\n")
+	}
+
+	// Show prompt.
+	b.WriteString(styleBold.Render(wrapAndIndent(q.Prompt, cw, "  ")) + "\n\n")
+
+	// Show choices with wrapping.
+	const choicePad = 10 // visual: "  ▸ ● A) "
+	choiceCW := m.contentWidth(choicePad)
+	contIndent := "          " // 10 spaces
+
+	for i, c := range m.currentQuestion.ShuffledChoices {
+		cursor := "  "
+		if i == m.choiceCursor {
+			cursor = "▸ "
+		}
+
+		// Show selection state.
+		marker := "○"
+		if m.selected[c.ID] {
+			marker = "●"
+		}
+
+		choiceText := fmt.Sprintf("%s) %s", m.displayLabelForChoiceID(c.ID), c.Text)
+		wrappedLines := strings.Split(wrapText(choiceText, choiceCW), "\n")
+
+		fmt.Fprintf(&b, "  %s%s %s\n", cursor, marker, wrappedLines[0])
+		for _, l := range wrappedLines[1:] {
+			b.WriteString(contIndent + l + "\n")
+		}
+	}
+
+	m.writeFooter(&b, footerQuiz)
+	return b.String()
+}
+
+// viewReview renders the quiz-show review screen after answer submission.
+// Shows full question + choices with color-coded feedback.
+func (m model) viewReview() string {
+	var b strings.Builder
+
+	header := fmt.Sprintf("golearn — Question %d/%d — Review", m.questionNum, m.totalQuestions)
+	m.writeCenteredLine(&b, styleHeader.Render(header))
+	m.writeCenteredLine(&b, strings.Repeat("═", len(header)))
+
+	// Show mode context.
+	if m.sessionModeLabel != "" {
+		b.WriteString(styleDim.Render("  "+truncate(m.sessionModeLabel, m.contentWidth(2))) + "\n")
+	}
+	b.WriteString("\n")
+
+	if m.currentQuestion == nil {
+		b.WriteString("  No question loaded.\n")
+		return b.String()
+	}
+
+	q := m.currentQuestion.Question
+	if q == nil {
+		b.WriteString("  No question loaded.\n")
+		return b.String()
+	}
+	cw := m.contentWidth(2)
+
+	// Show prompt.
+	if q.Intro != "" {
+		b.WriteString(wrapAndIndent(q.Intro, cw, "  ") + "\n\n")
+	}
+	b.WriteString(styleBold.Render(wrapAndIndent(q.Prompt, cw, "  ")) + "\n\n")
+
+	switch {
+	case m.lastSkipped:
+		b.WriteString("  ⏭  " + styleDim.Render("Skipped") + "\n\n")
+	case m.lastCorrect:
+		b.WriteString("  " + styleCorrect.Render("✔ Correct!") + "\n\n")
+	default:
+		b.WriteString("  " + styleIncorrect.Render("✘ Incorrect") + "\n\n")
+	}
+
+	// Build a set of correct choice IDs for lookup.
+	correctSet := make(map[string]bool, len(q.CorrectChoiceIDs))
+	for _, id := range q.CorrectChoiceIDs {
+		correctSet[id] = true
+	}
+
+	// Show choices with visual feedback and wrapping.
+	const choicePad = 8 // visual: "  ▸ ✔ " prefix
+	choiceCW := m.contentWidth(choicePad)
+	contIndent := "        " // 8 spaces
+
+	for _, c := range m.currentQuestion.ShuffledChoices {
+		isCorrect := correctSet[c.ID]
+		isSelected := m.selected[c.ID]
+
+		var marker string
+		var choiceStyle *lipgloss.Style
+		switch {
+		case isCorrect && isSelected:
+			marker = styleCorrect.Render("✔")
+			s := styleCorrect
+			choiceStyle = &s
+		case isCorrect && !isSelected:
+			marker = styleCorrect.Render("✔")
+			s := styleCorrect
+			choiceStyle = &s
+		case !isCorrect && isSelected:
+			marker = styleIncorrect.Render("✘")
+			s := styleIncorrect
+			choiceStyle = &s
+		default:
+			marker = " "
+			choiceStyle = nil
+		}
+
+		// Add selection indicator.
+		selectIndicator := " "
+		if isSelected {
+			selectIndicator = styleSelected.Render("▸")
+		}
+
+		choiceText := fmt.Sprintf("%s) %s", m.displayLabelForChoiceID(c.ID), c.Text)
+		wrappedLines := strings.Split(wrapText(choiceText, choiceCW), "\n")
+
+		for li, l := range wrappedLines {
+			if choiceStyle != nil {
+				l = choiceStyle.Render(l)
+			}
+			if li == 0 {
+				fmt.Fprintf(&b, "  %s %s %s\n", selectIndicator, marker, l)
+			} else {
+				b.WriteString(contIndent + l + "\n")
+			}
+		}
+
+		// Show per-choice explanation if toggled.
+		if m.showExplanations && q.Rationale.PerChoice != nil {
+			if explanation, ok := q.Rationale.PerChoice[c.ID]; ok {
+				expCW := m.contentWidth(7)
+				formatted := domain.FormatChoiceExplanation(c.ID, explanation, q.CorrectChoiceIDs)
+				b.WriteString(styleExplain.Render(wrapAndIndent(formatted, expCW, "       ")) + "\n")
+			}
+		}
+	}
+
+	// Show correct explanation if available and explanations toggled.
+	if m.showExplanations && q.Rationale.Correct != "" {
+		b.WriteString("\n" + styleBold.Render("  Explanation:") + "\n")
+		b.WriteString(styleExplain.Render(wrapAndIndent(sanitizeExplanation(q.Rationale.Correct), cw, "  ")) + "\n")
+	}
+
+	// Controls.
+	m.writeFooter(&b, footerReview)
+
+	return b.String()
+}
+
+// viewReviewBrowse renders the read-only review of wrong answers.
+// No new attempts are recorded — just browse with explanations.
+func (m model) viewReviewBrowse() string {
+	var b strings.Builder
+
+	if len(m.reviewQueue) == 0 {
+		b.WriteString("  No wrong answers to review.\n")
+		return b.String()
+	}
+
+	wa := m.reviewQueue[m.reviewCursor]
+	q := &wa.Question
+	cw := m.contentWidth(2)
+
+	header := fmt.Sprintf("golearn — Review (%d/%d)", m.reviewCursor+1, len(m.reviewQueue))
+	m.writeCenteredLine(&b, styleHeader.Render(header))
+	m.writeCenteredLine(&b, strings.Repeat("═", len(header)))
+	b.WriteString("\n")
+
+	// Type hint.
+	typeHint := "Single select"
+	if q.Type == "multi_select" {
+		typeHint = "Multi select"
+	}
+	fmt.Fprintf(&b, "  [%s]\n\n", typeHint)
+
+	// Intro.
+	if q.Intro != "" {
+		b.WriteString(wrapAndIndent(q.Intro, cw, "  ") + "\n\n")
+	}
+
+	// Prompt.
+	b.WriteString(styleBold.Render(wrapAndIndent(q.Prompt, cw, "  ")) + "\n\n")
+
+	// Build lookup sets.
+	correctSet := make(map[string]bool, len(q.CorrectChoiceIDs))
+	for _, id := range q.CorrectChoiceIDs {
+		correctSet[id] = true
+	}
+	selectedSet := make(map[string]bool, len(wa.SelectedIDs))
+	for _, id := range wa.SelectedIDs {
+		selectedSet[id] = true
+	}
+
+	// Show choices with feedback.
+	const choicePad = 8
+	choiceCW := m.contentWidth(choicePad)
+	contIndent := "        "
+
+	for _, c := range q.Choices {
+		isCorrect := correctSet[c.ID]
+		wasSelected := selectedSet[c.ID]
+
+		var marker string
+		var choiceStyle *lipgloss.Style
+		switch {
+		case isCorrect:
+			marker = styleCorrect.Render("✔")
+			s := styleCorrect
+			choiceStyle = &s
+		case wasSelected:
+			marker = styleIncorrect.Render("✘")
+			s := styleIncorrect
+			choiceStyle = &s
+		default:
+			marker = " "
+			choiceStyle = nil
+		}
+
+		indicator := " "
+		if wasSelected {
+			indicator = styleSelected.Render("▸")
+		}
+
+		choiceText := fmt.Sprintf("%s) %s", m.displayLabelForChoiceID(c.ID), c.Text)
+		wrappedLines := strings.Split(wrapText(choiceText, choiceCW), "\n")
+
+		for li, l := range wrappedLines {
+			if choiceStyle != nil {
+				l = choiceStyle.Render(l)
+			}
+			if li == 0 {
+				fmt.Fprintf(&b, "  %s %s %s\n", indicator, marker, l)
+			} else {
+				b.WriteString(contIndent + l + "\n")
+			}
+		}
+
+		// Per-choice explanation.
+		if m.showExplanations && q.Rationale.PerChoice != nil {
+			if explanation, ok := q.Rationale.PerChoice[c.ID]; ok {
+				expCW := m.contentWidth(7)
+				formatted := domain.FormatChoiceExplanation(c.ID, explanation, q.CorrectChoiceIDs)
+				b.WriteString(styleExplain.Render(wrapAndIndent(formatted, expCW, "       ")) + "\n")
+			}
+		}
+	}
+
+	// Correct explanation.
+	if m.showExplanations && q.Rationale.Correct != "" {
+		b.WriteString("\n" + styleBold.Render("  Explanation:") + "\n")
+		b.WriteString(styleExplain.Render(wrapAndIndent(sanitizeExplanation(q.Rationale.Correct), cw, "  ")) + "\n")
+	}
+
+	// Controls.
+	m.writeFooter(&b, footerReview)
+
+	return b.String()
+}
+
+// --- Question Update Handler ---
+
+func (m model) updateQuestion(msg tea.Msg) (tea.Model, tea.Cmd) {
+	keyMsg, ok := msg.(tea.KeyMsg)
+	if !ok {
+		return m, nil
+	}
+
+	key := keyMsg.String()
+	switch {
+	case isBackKey(key):
+		// Cancel session and return to previous config screen.
+		if err := m.engine.EndSession(); err != nil {
+			m.lastError = fmt.Sprintf("end session: %v", err)
+		}
+		m.screen = screenSessionConfig
+	case isUpNav(key):
+		if m.choiceCursor > 0 {
+			m.choiceCursor--
+		}
+	case isDownNav(key):
+		if m.currentQuestion != nil && m.choiceCursor < len(m.currentQuestion.ShuffledChoices)-1 {
+			m.choiceCursor++
+		}
+	case isToggleKey(key):
+		// Toggle selection (for multi_select, or single_select).
+		if m.currentQuestion != nil && m.currentQuestion.Question != nil {
+			choiceID := m.currentQuestion.ShuffledChoices[m.choiceCursor].ID
+			if m.currentQuestion.Question.Type == "single_select" {
+				// Single select: clear others, select this one.
+				m.selected = map[string]bool{choiceID: true}
+			} else {
+				// Multi select: toggle.
+				if m.selected[choiceID] {
+					delete(m.selected, choiceID)
+				} else {
+					m.selected[choiceID] = true
+				}
+			}
+		}
+	case isSkipKey(key):
+		// Skip this question.
+		if m.currentQuestion != nil && m.currentQuestion.Question != nil {
+			if _, err := m.engine.RecordAttempt(m.currentQuestion.Question.ID, nil, true, 0); err != nil {
+				m.lastError = fmt.Sprintf("record skip: %v", err)
+			}
+			m.answered++
+			m.lastSkipped = true
+			m.lastCorrect = false
+			m.submitted = true
+			m.showExplanations = false
+			m.screen = screenReview
+		}
+	case isEnterKey(key):
+		if m.currentQuestion != nil && m.currentQuestion.Question != nil && len(m.selected) > 0 {
+			// Submit answer.
+			selectedIDs := make([]string, 0, len(m.selected))
+			for id := range m.selected {
+				selectedIDs = append(selectedIDs, id)
+			}
+
+			latencyMs := int(time.Since(m.questionStarted()).Milliseconds())
+			correct, err := m.engine.RecordAttempt(
+				m.currentQuestion.Question.ID, selectedIDs, false, latencyMs,
+			)
+			if err != nil {
+				m.lastError = fmt.Sprintf("record attempt: %v", err)
+			}
+			m.lastCorrect = correct
+
+			m.answered++
+			m.totalLatency += latencyMs
+			m.lastSkipped = false
+			m.submitted = true
+			if m.lastCorrect {
+				m.correctCount++
+			} else {
+				q := *m.currentQuestion.Question
+				q.Choices = make([]domain.Choice, len(m.currentQuestion.ShuffledChoices))
+				copy(q.Choices, m.currentQuestion.ShuffledChoices)
+				// Track wrong answers for review browse.
+				m.wrongAnswers = append(m.wrongAnswers, wrongAnswer{
+					Question:    q,
+					SelectedIDs: selectedIDs,
+				})
+			}
+			m.showExplanations = false
+			m.screen = screenReview
+		}
+	}
+	return m, nil
+}
+
+// questionStartedAt is used for latency tracking; we use a simple approach.
+var questionStartedAt time.Time
+
+func (m *model) advanceQuestion() {
+	q := m.engine.GetNextSessionQuestion()
+	if q == nil {
+		if err := m.engine.EndSession(); err != nil {
+			m.lastError = fmt.Sprintf("end session: %v", err)
+		}
+		m.screen = screenSummary
+		return
+	}
+	m.currentQuestion = q
+	m.setDisplayLabelMapping(q.ShuffledChoices)
+	m.questionNum++
+	m.choiceCursor = 0
+	m.selected = make(map[string]bool)
+	m.submitted = false
+	m.showExplanations = false
+	m.screen = screenQuestion
+	questionStartedAt = time.Now()
+}
+
+func (m model) questionStarted() time.Time {
+	return questionStartedAt
+}
+
+// --- Review Update Handler ---
+
+func (m model) updateReview(msg tea.Msg) (tea.Model, tea.Cmd) {
+	keyMsg, ok := msg.(tea.KeyMsg)
+	if !ok {
+		return m, nil
+	}
+
+	key := keyMsg.String()
+	switch {
+	case isExplainKey(key):
+		// Toggle explanations.
+		m.showExplanations = !m.showExplanations
+	case isEnterKey(key):
+		// Advance to next question.
+		m.advanceQuestion()
+	case isBackKey(key):
+		if err := m.engine.EndSession(); err != nil {
+			m.lastError = fmt.Sprintf("end session: %v", err)
+		}
+		m.screen = screenSessionConfig
+	}
+	return m, nil
+}
+
+// --- Review Browse Update Handler ---
+
+func (m model) updateReviewBrowse(msg tea.Msg) (tea.Model, tea.Cmd) {
+	keyMsg, ok := msg.(tea.KeyMsg)
+	if !ok {
+		return m, nil
+	}
+
+	key := keyMsg.String()
+	switch {
+	case isEnterKey(key):
+		if m.reviewCursor < len(m.reviewQueue)-1 {
+			m.reviewCursor++
+			m.showExplanations = false
+			m.setDisplayLabelMapping(m.reviewQueue[m.reviewCursor].Question.Choices)
+		} else {
+			m.screen = m.reviewReturnScreen
+		}
+	case isExplainKey(key):
+		m.showExplanations = !m.showExplanations
+	case isBackKey(key):
+		m.screen = m.reviewReturnScreen
+	}
+	return m, nil
+}
