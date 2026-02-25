@@ -40,10 +40,18 @@ with SQLite persistence, YAML/JSON pack import/export, and a Bubble Tea TUI.
 
 ---
 
+## Install
+
+```bash
+go install github.com/dezeat/golearn/cmd/golearn@latest
+```
+
+Requires Go 1.22+. The binary will be placed in your `$GOPATH/bin` (or `$GOBIN`).
+
 ## Quickstart
 
 ```bash
-# Build
+# Build from source (alternative to go install)
 make build
 
 # Import a question pack
@@ -64,7 +72,7 @@ make build
 
 ## Requirements
 
-- Go 1.22+
+- Go 1.22+ (for `go install` or building from source)
 - (Optional) `golangci-lint` for `make lint`
 
 ## Project Structure
