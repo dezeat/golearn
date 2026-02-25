@@ -1,0 +1,306 @@
+pack_version: "0.1.0"
+topic:
+  slug: "llm-agents"
+  name: "LLM Agents & Agentic AI"
+questions:
+  # ── 1. What Is an AI Agent ──────────────────────────────────
+  - type: "single_select"
+    intro: "An AI agent is a system that uses a large language model (LLM) as its core reasoning engine to take actions, use tools, and accomplish goals autonomously or semi-autonomously."
+    prompt: "What distinguishes an AI agent from a standard chatbot?"
+    choices:
+      - { id: "1", text: "An agent uses a larger language model" }
+      - { id: "2", text: "An agent can take actions, use tools, and pursue multi-step goals" }
+      - { id: "3", text: "An agent does not require any user input" }
+      - { id: "4", text: "An agent always operates without human oversight" }
+    correct_choice_ids: ["2"]
+    tags: ["agents", "fundamentals"]
+    difficulty: easy
+    rationale:
+      correct: "The defining characteristic of an AI agent is its ability to go beyond conversation — it can reason about goals, break them into steps, call external tools (search, code execution, APIs), observe results, and iterate. A chatbot typically only generates text responses."
+      per_choice:
+        1: "Model size does not determine whether a system is an agent. A small model with tool access and planning can be an agent, while a very large model used only for chat is still a chatbot."
+        2: "Agents are distinguished by their ability to take actions in the world — executing code, calling APIs, reading files, browsing the web — and to pursue multi-step goals with planning and feedback loops."
+        3: "Most agents are designed to work with user input — they augment human capabilities rather than replace them. Fully autonomous operation is one mode, not a requirement."
+        4: "Many agents operate with human-in-the-loop oversight, where a person reviews or approves key actions. Full autonomy is a design choice, not a defining characteristic."
+
+  # ── 2. Human Augmentation ───────────────────────────────────
+  - type: "single_select"
+    intro: "Human augmentation is the principle that AI agents should amplify human capabilities rather than replace humans entirely. The goal is to make people more effective at their work."
+    prompt: "What is the primary benefit of using AI agents for human augmentation rather than full automation?"
+    choices:
+      - { id: "1", text: "It is always cheaper to keep humans in the loop" }
+      - { id: "2", text: "Humans retain judgment, accountability, and the ability to course-correct" }
+      - { id: "3", text: "AI agents are not capable of independent action" }
+      - { id: "4", text: "Full automation is illegal in most industries" }
+    correct_choice_ids: ["2"]
+    tags: ["human-augmentation", "human-in-the-loop"]
+    difficulty: easy
+    rationale:
+      correct: "Human augmentation keeps people in the loop for judgment calls, ethical decisions, and quality assurance. The agent handles repetitive or time-consuming tasks, while the human provides oversight, domain expertise, and accountability — a combination that often outperforms either alone."
+      per_choice:
+        1: "Cost is not the primary factor. In some cases, human-in-the-loop is more expensive but produces better outcomes because of the human's judgment and accountability."
+        2: "Humans provide critical thinking, ethical judgment, context awareness, and accountability that current AI systems cannot reliably replicate. Augmentation leverages the strengths of both."
+        3: "Modern AI agents are capable of significant independent action. The choice to keep humans in the loop is about quality and accountability, not capability limitations."
+        4: "While some industries have regulations about AI decision-making, the value of human augmentation is a design principle, not primarily a legal requirement."
+
+  # ── 3. ReAct Pattern ────────────────────────────────────────
+  - type: "single_select"
+    intro: "ReAct (Reasoning + Acting) is a foundational pattern in agentic AI where the model alternates between reasoning about what to do and taking actions in the environment."
+    prompt: "In the ReAct pattern, what is the typical cycle an agent follows?"
+    choices:
+      - { id: "1", text: "Plan → Execute → Terminate" }
+      - { id: "2", text: "Think → Act → Observe → Repeat" }
+      - { id: "3", text: "Input → Output → Feedback" }
+      - { id: "4", text: "Retrieve → Generate → Validate" }
+    correct_choice_ids: ["2"]
+    tags: ["react", "patterns", "reasoning"]
+    difficulty: medium
+    source_ref: "https://arxiv.org/abs/2210.03629"
+    rationale:
+      correct: "The ReAct pattern follows a Think → Act → Observe loop. The agent reasons about the current situation (Think), takes an action like calling a tool (Act), observes the result (Observe), and then repeats the cycle until the task is complete."
+      per_choice:
+        1: "A simple Plan → Execute → Terminate sequence lacks the iterative observation and adjustment that makes agents adaptive. Real agents continuously reason about intermediate results."
+        2: "The Think → Act → Observe → Repeat cycle allows the agent to adapt its plan based on real-world feedback, making it robust to unexpected situations and intermediate failures."
+        3: "Input → Output → Feedback describes a basic feedback loop but misses the key elements of reasoning (thinking about what to do) and tool use (acting on the environment)."
+        4: "Retrieve → Generate → Validate describes Retrieval-Augmented Generation (RAG), which is a different pattern. RAG focuses on grounding generation in retrieved documents, while ReAct focuses on interleaving reasoning with actions."
+
+  # ── 4. Tool Use ─────────────────────────────────────────────
+  - type: "multi_select"
+    intro: "A key capability of AI agents is using external tools — programs, APIs, or services that extend the agent's abilities beyond text generation."
+    prompt: "Which of the following are examples of tools an AI agent might use?"
+    choices:
+      - { id: "1", text: "A web search API to find current information" }
+      - { id: "2", text: "A code interpreter to execute and test programs" }
+      - { id: "3", text: "A calculator for precise mathematical operations" }
+      - { id: "4", text: "A larger language model to replace itself" }
+    correct_choice_ids: ["1", "2", "3"]
+    tags: ["tools", "function-calling"]
+    difficulty: easy
+    rationale:
+      correct: "Agents commonly use web search, code execution, calculators, file systems, databases, and external APIs as tools. These compensate for the LLM's limitations — search provides current information, code execution gives precise computation, and APIs enable real-world actions."
+      per_choice:
+        1: "Web search is one of the most common agent tools. It provides access to current information beyond the model's training cutoff date."
+        2: "Code interpreters allow agents to write and run code, test hypotheses, process data, and verify computations — a major advantage over pure text reasoning."
+        3: "Calculators and math tools compensate for LLMs' well-known weaknesses in precise arithmetic and symbolic mathematics."
+        4: "An agent does not use another LLM as a 'tool' to replace itself. While multi-agent architectures exist where models collaborate, this is not the same as a tool — tools are deterministic programs or APIs, not replacement reasoning engines."
+
+  # ── 5. Hallucination and Grounding ──────────────────────────
+  - type: "single_select"
+    intro: "Hallucination occurs when an LLM generates information that sounds plausible but is factually incorrect or fabricated. Grounding techniques help reduce this risk."
+    prompt: "What is the most effective strategy agents use to reduce hallucination in their outputs?"
+    choices:
+      - { id: "1", text: "Using a more confident tone in responses" }
+      - { id: "2", text: "Grounding responses in retrieved documents or verified tool outputs" }
+      - { id: "3", text: "Generating longer, more detailed responses" }
+      - { id: "4", text: "Avoiding all topics the model was not trained on" }
+    correct_choice_ids: ["2"]
+    tags: ["hallucination", "grounding", "rag"]
+    difficulty: medium
+    rationale:
+      correct: "Grounding means anchoring the agent's responses in verifiable sources — retrieved documents (RAG), tool outputs (calculations, API results), or structured data. This gives the agent factual material to reference rather than relying solely on its parametric knowledge."
+      per_choice:
+        1: "A confident tone increases the risk of convincing hallucinations. Confidence without factual grounding is counterproductive."
+        2: "Retrieval-Augmented Generation (RAG) and tool-use grounding provide the agent with factual reference material, dramatically reducing fabrication by giving it real data to cite."
+        3: "Longer responses do not reduce hallucination — they can actually increase it, as the model has more opportunities to generate incorrect information in longer outputs."
+        4: "Avoiding unstudied topics is impractical. Grounding and retrieval allow agents to handle topics beyond their training data by accessing current, relevant information at runtime."
+
+  # ── 6. Agentic Loops ────────────────────────────────────────
+  - type: "single_select"
+    intro: "An agentic loop is the runtime cycle where an AI agent repeatedly reasons, acts, and refines its approach until a task is complete or a stopping condition is met."
+    prompt: "Why do agentic loops include explicit stopping conditions or iteration limits?"
+    choices:
+      - { id: "1", text: "To reduce the cost of API calls" }
+      - { id: "2", text: "To prevent infinite loops where the agent never converges on a solution" }
+      - { id: "3", text: "To comply with open-source licensing requirements" }
+      - { id: "4", text: "To ensure the agent always returns the first result it finds" }
+    correct_choice_ids: ["2"]
+    tags: ["agentic-loops", "safety"]
+    difficulty: medium
+    rationale:
+      correct: "Without stopping conditions, an agent could loop indefinitely — retrying failed actions, exploring irrelevant paths, or cycling between contradictory reasoning steps. Iteration limits, success criteria, and timeout mechanisms ensure the agent terminates gracefully."
+      per_choice:
+        1: "While cost control is a practical concern, stopping conditions exist primarily for correctness and safety, not cost reduction. An agent stuck in an infinite loop is a functional failure regardless of cost."
+        2: "Agents can get stuck in reasoning loops, repeatedly try failing approaches, or oscillate between contradictory plans. Explicit limits ensure the system always terminates and surfaces meaningful output or a clear failure."
+        3: "Stopping conditions have nothing to do with licensing. They are an engineering pattern for building reliable autonomous systems."
+        4: "Stopping conditions are about preventing infinite execution, not about returning early. A well-designed agent should iterate enough to find a good answer while having guardrails against runaway execution."
+
+  # ── 7. Context Windows ──────────────────────────────────────
+  - type: "single_select"
+    intro: "Every LLM has a context window — the maximum number of tokens (words and word-pieces) it can process in a single interaction. This affects how much information an agent can work with at once."
+    prompt: "What is a practical consequence of context window limits for AI agents?"
+    choices:
+      - { id: "1", text: "The agent cannot be trained on more than one language" }
+      - { id: "2", text: "The agent must summarise, chunk, or selectively retrieve information for long tasks" }
+      - { id: "3", text: "The agent loses all memory after each response" }
+      - { id: "4", text: "The agent cannot use any external tools" }
+    correct_choice_ids: ["2"]
+    tags: ["context-window", "memory"]
+    difficulty: medium
+    rationale:
+      correct: "When tasks involve more information than fits in the context window, agents must use strategies like summarisation, chunking large documents, selective retrieval (RAG), or maintaining condensed conversation history to work within the limit."
+      per_choice:
+        1: "Context window size has no relation to multilingual capability. Modern LLMs support many languages regardless of window size."
+        2: "Long documents, extensive codebases, or multi-step tasks can easily exceed context limits. Agents use summarisation, chunking, and retrieval to manage information that does not fit in a single prompt."
+        3: "Within a conversation turn, the agent has access to the full context. Memory loss between turns is a separate concern addressed by conversation history management and external memory stores."
+        4: "Tool use is independent of context window size. Tools actually help work around context limits by letting the agent access information on demand rather than loading everything upfront."
+
+  # ── 8. Multi-Agent Systems ──────────────────────────────────
+  - type: "single_select"
+    intro: "Multi-agent systems use multiple specialised AI agents that collaborate to solve complex problems, each handling a different aspect of the task."
+    prompt: "What is a key advantage of using multiple specialised agents instead of a single general-purpose agent?"
+    choices:
+      - { id: "1", text: "Specialised agents are always faster than general agents" }
+      - { id: "2", text: "Each agent can focus on a specific skill, reducing complexity and improving reliability" }
+      - { id: "3", text: "Multiple agents eliminate the need for human oversight" }
+      - { id: "4", text: "Specialised agents do not require language models" }
+    correct_choice_ids: ["2"]
+    tags: ["multi-agent", "architecture"]
+    difficulty: medium
+    rationale:
+      correct: "Specialisation reduces the cognitive load on any single agent. A coding agent, a research agent, and a review agent can each be optimised for their role with focused prompts, tools, and evaluation criteria — leading to more reliable outputs than a single agent trying to do everything."
+      per_choice:
+        1: "Speed depends on the architecture, task, and coordination overhead. Multi-agent systems can actually be slower due to inter-agent communication. The advantage is reliability and depth, not speed."
+        2: "Specialisation allows each agent to have focused instructions, domain-specific tools, and narrower scope — reducing errors and making the system easier to debug and improve incrementally."
+        3: "Multi-agent systems typically require more human oversight, not less, because coordination between agents introduces new failure modes that need monitoring."
+        4: "Specialised agents in current agentic systems are usually powered by LLMs. Specialisation refers to their prompt, tools, and role — not to the absence of a language model."
+
+  # ── 9. Prompt Engineering for Agents ────────────────────────
+  - type: "single_select"
+    intro: "The system prompt defines an agent's persona, capabilities, constraints, and instructions. It is the primary way developers control agent behaviour."
+    prompt: "Why is it important to include explicit constraints and boundaries in an agent's system prompt?"
+    choices:
+      - { id: "1", text: "To make the agent respond faster" }
+      - { id: "2", text: "To prevent the agent from taking harmful or unintended actions" }
+      - { id: "3", text: "To reduce the cost of running the model" }
+      - { id: "4", text: "To ensure the agent ignores user input" }
+    correct_choice_ids: ["2"]
+    tags: ["prompt-engineering", "safety", "guardrails"]
+    difficulty: easy
+    rationale:
+      correct: "Explicit constraints (e.g., 'never delete production data', 'always ask before sending emails', 'do not access files outside the workspace') are essential safety guardrails. Without them, an agent with tool access could take actions that are technically possible but harmful or unintended."
+      per_choice:
+        1: "Constraints do not affect response speed. They guide the agent's decision-making about which actions to take, not how fast it processes."
+        2: "Agents with tool access can take real-world actions. Clear constraints prevent dangerous operations like deleting data, sending unauthorised communications, or accessing restricted resources."
+        3: "Prompt constraints have minimal impact on cost. Their purpose is safety and alignment, not efficiency."
+        4: "Good agents should be responsive to user input within their defined boundaries. Constraints define what the agent should and should not do — they do not make it ignore the user."
+
+  # ── 10. Retrieval-Augmented Generation (RAG) ────────────────
+  - type: "single_select"
+    intro: "Retrieval-Augmented Generation (RAG) combines information retrieval with LLM generation. Instead of relying solely on training data, the agent retrieves relevant documents at query time."
+    prompt: "What problem does RAG primarily solve for AI agents?"
+    choices:
+      - { id: "1", text: "It makes the language model train faster" }
+      - { id: "2", text: "It gives the agent access to current, domain-specific information beyond its training data" }
+      - { id: "3", text: "It replaces the need for a language model entirely" }
+      - { id: "4", text: "It automatically corrects grammar in the agent's responses" }
+    correct_choice_ids: ["2"]
+    tags: ["rag", "retrieval", "knowledge"]
+    difficulty: easy
+    source_ref: "https://arxiv.org/abs/2005.11401"
+    rationale:
+      correct: "RAG addresses the knowledge cutoff problem — LLMs only know what was in their training data. By retrieving relevant documents from a knowledge base at query time, the agent can provide accurate, current, and domain-specific answers grounded in real sources."
+      per_choice:
+        1: "RAG operates at inference time (when the agent is answering questions), not during training. It does not affect training speed."
+        2: "RAG extends the agent's knowledge beyond its training cutoff by retrieving current documents, internal knowledge bases, or domain-specific data at query time."
+        3: "RAG requires a language model for the generation step. It augments the model's capabilities — it does not replace the model."
+        4: "RAG is about knowledge and accuracy, not grammar. Grammar correction is a basic capability of the underlying language model."
+
+  # ── 11. Evaluation and Testing ──────────────────────────────
+  - type: "multi_select"
+    intro: "Evaluating AI agents is challenging because their behaviour is non-deterministic and context-dependent. Multiple evaluation approaches are typically needed."
+    prompt: "Which of the following are established approaches for evaluating AI agent quality?"
+    choices:
+      - { id: "1", text: "Running the agent against benchmark tasks with known correct answers" }
+      - { id: "2", text: "Having humans review a sample of the agent's outputs for accuracy and helpfulness" }
+      - { id: "3", text: "Counting the total number of tokens the agent generates" }
+      - { id: "4", text: "Using another LLM to judge the quality of the agent's responses" }
+    correct_choice_ids: ["1", "2", "4"]
+    tags: ["evaluation", "testing", "quality"]
+    difficulty: medium
+    rationale:
+      correct: "Agent evaluation typically combines automated benchmarks (for measurable correctness), human evaluation (for nuanced quality assessment), and LLM-as-judge approaches (for scalable quality scoring). No single method is sufficient alone."
+      per_choice:
+        1: "Benchmark evaluation uses tasks with known answers (e.g., coding problems, fact-based questions) to measure objective correctness and track improvements over time."
+        2: "Human evaluation remains the gold standard for assessing helpfulness, appropriateness, and real-world utility. It captures nuances that automated metrics miss."
+        3: "Token count measures verbosity, not quality. More tokens do not indicate better responses — concise, accurate answers are often preferable."
+        4: "LLM-as-judge uses a separate (often stronger) model to rate the agent's outputs on criteria like accuracy, completeness, and relevance. It scales better than human evaluation while correlating well with human preferences."
+
+  # ── 12. Safety and Alignment ────────────────────────────────
+  - type: "single_select"
+    intro: "As AI agents gain more autonomy and tool access, ensuring they behave safely and align with human values becomes critical."
+    prompt: "What does 'alignment' mean in the context of AI agents?"
+    choices:
+      - { id: "1", text: "Ensuring the agent's responses are grammatically correct" }
+      - { id: "2", text: "Ensuring the agent's goals and actions match the intentions and values of its users" }
+      - { id: "3", text: "Aligning the agent's training data with its deployment environment" }
+      - { id: "4", text: "Making sure multiple agents use the same language model" }
+    correct_choice_ids: ["2"]
+    tags: ["alignment", "safety", "ethics"]
+    difficulty: easy
+    rationale:
+      correct: "Alignment means ensuring the agent does what the user actually wants, respects boundaries, avoids harmful actions, and operates according to specified values and constraints. It is a core challenge in agentic AI because agents with tool access can take consequential actions."
+      per_choice:
+        1: "Grammar correctness is a basic language capability, not alignment. Alignment concerns the agent's goals, decisions, and real-world actions."
+        2: "An aligned agent pursues the user's actual goals (not a misinterpretation), respects safety constraints, and avoids actions the user would disapprove of — even when those actions might technically accomplish the stated objective."
+        3: "Data alignment refers to data engineering, not AI alignment. AI alignment is about values, goals, and behaviour matching human intent."
+        4: "Using the same model across agents is a deployment choice, not an alignment concern. Alignment is about behaviour and values, not technical uniformity."
+
+  # ── 13. Memory and State ────────────────────────────────────
+  - type: "single_select"
+    intro: "AI agents need to maintain state and memory across interactions to be useful for extended tasks. Different memory strategies serve different purposes."
+    prompt: "What is the difference between short-term and long-term memory in AI agent architectures?"
+    choices:
+      - { id: "1", text: "Short-term memory uses cheaper models, long-term uses expensive ones" }
+      - { id: "2", text: "Short-term memory holds the current conversation context, long-term memory persists information across sessions" }
+      - { id: "3", text: "Short-term memory is for text, long-term memory is for images" }
+      - { id: "4", text: "There is no meaningful difference — they are marketing terms" }
+    correct_choice_ids: ["2"]
+    tags: ["memory", "state", "architecture"]
+    difficulty: easy
+    rationale:
+      correct: "Short-term memory is the conversation context within a session — the prompt, tool outputs, and reasoning steps the agent is currently working with. Long-term memory persists across sessions using databases, vector stores, or files, allowing the agent to recall past interactions, user preferences, and learned information."
+      per_choice:
+        1: "Memory type has no relation to model cost. Both types of memory are managed by the same agent system and can use the same underlying model."
+        2: "Short-term memory is ephemeral (current session context), while long-term memory is persistent (stored externally in databases or vector stores). Together they give agents both working memory and accumulated knowledge."
+        3: "Both memory types can store any kind of information. The distinction is about persistence and scope, not data modality."
+        4: "The distinction is architecturally meaningful. Short-term memory operates within the context window, while long-term memory requires external storage systems and retrieval mechanisms."
+
+  # ── 14. Orchestration Frameworks ────────────────────────────
+  - type: "multi_select"
+    intro: "Orchestration frameworks provide structure for building AI agents by handling common patterns like tool routing, conversation management, and multi-step planning."
+    prompt: "Which of the following are real challenges that agent orchestration frameworks help address?"
+    choices:
+      - { id: "1", text: "Managing the flow of information between reasoning steps and tool calls" }
+      - { id: "2", text: "Handling errors and retries when tool calls fail" }
+      - { id: "3", text: "Eliminating all possible errors in agent outputs" }
+      - { id: "4", text: "Providing structured ways to define agent roles, tools, and constraints" }
+    correct_choice_ids: ["1", "2", "4"]
+    tags: ["orchestration", "frameworks", "architecture"]
+    difficulty: medium
+    rationale:
+      correct: "Orchestration frameworks (like LangGraph, CrewAI, or custom implementations) manage the complexity of agent systems: routing between reasoning and tool use, handling failures gracefully, and providing declarative ways to configure agent behaviour."
+      per_choice:
+        1: "Information flow management — passing context between steps, truncating history, injecting tool results — is a core responsibility of orchestration frameworks."
+        2: "Tool calls can fail (API timeouts, rate limits, invalid inputs). Frameworks provide retry logic, fallback strategies, and error handling patterns."
+        3: "No framework can eliminate all errors. Agents are probabilistic systems. Frameworks reduce errors through structure and guardrails, but do not guarantee perfect outputs."
+        4: "Frameworks provide configuration systems for defining agent personas, available tools, constraints, and interaction patterns in a structured, maintainable way."
+
+  # ── 15. The Future: Human-Agent Collaboration ───────────────
+  - type: "single_select"
+    intro: "The trajectory of agentic AI is moving toward deeper collaboration between humans and AI agents, where agents handle increasingly complex tasks while humans provide direction and oversight."
+    prompt: "What is the 'human-in-the-loop' pattern in agentic AI?"
+    choices:
+      - { id: "1", text: "A human physically types out every action the agent should take" }
+      - { id: "2", text: "A human reviews, approves, or corrects the agent's proposed actions at key decision points" }
+      - { id: "3", text: "A human monitors the agent's energy consumption" }
+      - { id: "4", text: "A human replaces the agent when it encounters any error" }
+    correct_choice_ids: ["2"]
+    tags: ["human-in-the-loop", "human-augmentation", "collaboration"]
+    difficulty: easy
+    rationale:
+      correct: "Human-in-the-loop means the agent operates autonomously for routine steps but pauses at critical decision points for human review and approval. This balances efficiency (the agent handles routine work) with safety (humans verify consequential actions)."
+      per_choice:
+        1: "Dictating every action defeats the purpose of having an agent. The value of agents is their ability to handle routine steps autonomously while humans focus on judgment calls."
+        2: "The human reviews key decisions — like approving a code deployment, confirming a data deletion, or validating a recommendation — while the agent handles the preparatory and routine steps independently."
+        3: "Energy monitoring is an infrastructure concern, not part of the human-in-the-loop pattern. The pattern is about decision-making authority, not resource monitoring."
+        4: "Replacing the agent on every error is impractical. Agents are designed to handle many errors autonomously (retry, alternative approach). Human intervention is reserved for critical decisions and edge cases."

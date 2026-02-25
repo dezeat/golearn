@@ -1,0 +1,49 @@
+# .golangci.yml - Production-ready configuration for golearn
+# This file governs code quality, style, and idiomatic correctness.
+# Run 'golangci-lint config verify' locally to validate this file's schema.
+
+version: "2"
+
+run:
+  # How long the analysis can run before it times out. 
+  # 3m is generous for a CLI tool of this size.
+  timeout: 3m
+
+linters:
+  enable:
+    - errcheck      # Checks for unchecked errors (vital for stability).
+    - govet         # Standard Go vet tool for finding suspicious code.
+    - staticcheck   # The industry standard for finding bugs/inefficiencies.
+    - unused        # Detects dead code/unused variables.
+    - ineffassign   # Detects ineffectual assignments.
+    - gocritic      # Provides deep insights into code idioms and performance.
+    - misspell      # Corrects common spelling errors in comments/strings.
+  disable:
+    - depguard      # We don't have strict package gating requirements yet.
+
+  settings:
+    gocritic:
+      enabled-checks:
+        # Readability & Maintainability
+        - dupImport      # Avoid duplicate imports.
+        - nestingReduce  # Encourages breaking down deeply nested functions.
+        - unnamedResult  # Suggests naming return values for clarity.
+    misspell:
+      locale: US
+    errcheck:
+      check-type-assertions: true # Ensure we don't ignore errors in type switches.
+  exclusions:
+    rules:
+      # 1. Allow unchecked errors in test files (e.g., defer db.Close()).
+      - path: _test\.go
+        linters:
+          - errcheck
+      # 2. Allow unchecked Rollback/Close in deferred calls.
+      - text: "Error return value of .*(Rollback|Close).*is not checked"
+        linters:
+          - errcheck
+
+issues:
+  # Prevent being overwhelmed by a flood of errors in a new project.
+  max-issues-per-linter: 50
+  max-same-issues: 5

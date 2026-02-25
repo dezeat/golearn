@@ -1,0 +1,319 @@
+pack_version: "0.1.0"
+topic:
+  slug: "go-basics"
+  name: "Go Basics"
+questions:
+  # ── 1. Defer Semantics ──────────────────────────────────────
+  - type: "single_select"
+    intro: "Go's `defer` statement is used to schedule function calls that run after the surrounding function returns."
+    prompt: "When does a deferred function call execute in Go?"
+    choices:
+      - { id: "1", text: "Immediately when the defer statement is reached" }
+      - { id: "2", text: "When the surrounding function returns" }
+      - { id: "3", text: "When the program exits" }
+      - { id: "4", text: "At the end of the current block scope" }
+    correct_choice_ids: ["2"]
+    tags: ["defer", "control-flow"]
+    difficulty: easy
+    source_ref: "https://go.dev/ref/spec#Defer_statements"
+    rationale:
+      correct: "A deferred function call is executed when the surrounding function returns, not when the enclosing block ends. Multiple defers execute in LIFO (last-in, first-out) order."
+      per_choice:
+        1: "The defer statement schedules the call for later — arguments are evaluated immediately, but the call itself is deferred until the function returns."
+        2: "Deferred calls execute when the surrounding function returns, in reverse order of their defer statements (LIFO)."
+        3: "Deferred calls are scoped to the enclosing function, not the entire program. They run on function return, not program exit."
+        4: "Unlike some languages where cleanup is block-scoped, Go's defer is function-scoped. A defer inside an `if` block still runs when the function returns, not when the block ends."
+
+  # ── 2. Zero Values ─────────────────────────────────────────
+  - type: "single_select"
+    intro: "In Go, variables declared without an explicit initial value are given their zero value."
+    prompt: "What is the zero value of a `bool` in Go?"
+    choices:
+      - { id: "1", text: "true" }
+      - { id: "2", text: "false" }
+      - { id: "3", text: "nil" }
+      - { id: "4", text: "0" }
+    correct_choice_ids: ["2"]
+    tags: ["types", "zero-values"]
+    difficulty: easy
+    source_ref: "https://go.dev/ref/spec#The_zero_value"
+    rationale:
+      correct: "The zero value for a bool in Go is `false`. Every type in Go has a well-defined zero value: `0` for numeric types, `false` for booleans, `\"\"` for strings, and `nil` for pointers, slices, maps, channels, interfaces, and functions."
+      per_choice:
+        1: "`true` is not the zero value. Go initialises booleans to `false` by default."
+        2: "`false` is the zero value for `bool` in Go."
+        3: "`nil` is the zero value for pointers, slices, maps, channels, interfaces, and functions — not for `bool`."
+        4: "`0` is the zero value for numeric types (`int`, `float64`, etc.), not for `bool`."
+
+  # ── 3. Go Data Types ───────────────────────────────────────
+  - type: "multi_select"
+    intro: "Go has a specific set of built-in types. Some types common in other languages do not exist in Go."
+    prompt: "Which of the following are valid built-in types in Go?"
+    choices:
+      - { id: "1", text: "int" }
+      - { id: "2", text: "float64" }
+      - { id: "3", text: "char" }
+      - { id: "4", text: "string" }
+    correct_choice_ids: ["1", "2", "4"]
+    tags: ["types"]
+    difficulty: easy
+    source_ref: "https://go.dev/ref/spec#Types"
+    rationale:
+      correct: "`int`, `float64`, and `string` are built-in Go types. Go does not have a `char` type — it uses `byte` (alias for `uint8`) and `rune` (alias for `int32`) for character data."
+      per_choice:
+        1: "`int` is a built-in integer type in Go whose size is platform-dependent (32 or 64 bits)."
+        2: "`float64` is a built-in 64-bit IEEE 754 floating-point type in Go."
+        3: "`char` does not exist in Go. Go uses `byte` (alias for `uint8`) for ASCII characters and `rune` (alias for `int32`) for Unicode code points."
+        4: "`string` is a built-in type in Go representing an immutable sequence of bytes, conventionally holding UTF-8 encoded text."
+
+  # ── 4. Goroutines and Channels ──────────────────────────────
+  - type: "single_select"
+    intro: "Go provides built-in concurrency primitives based on Communicating Sequential Processes (CSP)."
+    prompt: "What is the primary mechanism for safe communication between goroutines in Go?"
+    choices:
+      - { id: "1", text: "Shared memory with mutex locks" }
+      - { id: "2", text: "Channels" }
+      - { id: "3", text: "Callback functions" }
+      - { id: "4", text: "Thread-local storage" }
+    correct_choice_ids: ["2"]
+    tags: ["concurrency", "channels"]
+    difficulty: medium
+    source_ref: "https://go.dev/ref/spec#Channel_types"
+    rationale:
+      correct: "Channels are Go's primary mechanism for communication between goroutines. Go's design philosophy is 'Don't communicate by sharing memory; share memory by communicating.' While mutexes exist in the `sync` package, channels are the idiomatic choice for goroutine coordination."
+      per_choice:
+        1: "While `sync.Mutex` exists in Go's standard library and is used in certain patterns, it is not the primary mechanism. Go favours channel-based communication over shared memory."
+        2: "Channels are first-class types in Go, enabling typed, synchronised message passing between goroutines. They can be buffered or unbuffered."
+        3: "Callbacks are not a concurrency primitive in Go. Go uses goroutines and channels instead of callback-based asynchronous patterns."
+        4: "Go does not have thread-local storage. Goroutines are multiplexed onto OS threads by the Go runtime, and the mapping is not fixed."
+
+  # ── 5. Error Handling ───────────────────────────────────────
+  - type: "single_select"
+    intro: "Go uses a distinctive approach to error handling compared to languages with exception mechanisms."
+    prompt: "What is the idiomatic way to signal an error from a Go function?"
+    choices:
+      - { id: "1", text: "Throw an exception" }
+      - { id: "2", text: "Return an error as the last return value" }
+      - { id: "3", text: "Set a global error variable" }
+      - { id: "4", text: "Use panic for all errors" }
+    correct_choice_ids: ["2"]
+    tags: ["error-handling"]
+    difficulty: easy
+    source_ref: "https://go.dev/blog/error-handling-and-go"
+    rationale:
+      correct: "Go functions idiomatically return an `error` as the last return value. Callers check `if err != nil` to handle the error. This explicit approach is a core design choice in Go — errors are values, not exceptions."
+      per_choice:
+        1: "Go does not have exceptions. It uses explicit error return values instead of try/catch mechanisms."
+        2: "Returning `error` as the last return value is Go's standard pattern. The `error` interface has a single `Error() string` method."
+        3: "Global error variables violate Go's design principles and are not idiomatic. Each function returns its own error value."
+        4: "`panic` is reserved for truly unrecoverable situations (programmer bugs, impossible states). Normal error conditions should use error return values."
+
+  # ── 6. Slices vs Arrays ────────────────────────────────────
+  - type: "single_select"
+    intro: "Go distinguishes between arrays (fixed size) and slices (dynamically sized views into arrays)."
+    prompt: "What happens when you append to a slice that has reached its underlying array's capacity?"
+    choices:
+      - { id: "1", text: "The program panics with an out-of-bounds error" }
+      - { id: "2", text: "Go allocates a new, larger underlying array and copies existing elements" }
+      - { id: "3", text: "The append silently fails and returns the original slice" }
+      - { id: "4", text: "The existing array is resized in place" }
+    correct_choice_ids: ["2"]
+    tags: ["slices", "memory"]
+    difficulty: medium
+    source_ref: "https://go.dev/blog/slices-intro"
+    rationale:
+      correct: "When a slice's length reaches its capacity, `append` allocates a new underlying array (typically doubling the capacity), copies existing elements to it, and returns a new slice header pointing to the new array."
+      per_choice:
+        1: "`append` handles capacity growth automatically. It does not panic — panics only occur with direct out-of-bounds index access."
+        2: "Go allocates a new, larger array, copies existing elements, appends the new element(s), and returns the updated slice header. This is why `append` returns a value that must be assigned back."
+        3: "`append` always succeeds. It returns a new slice that may or may not share the same underlying array."
+        4: "Arrays in Go have a fixed size determined at compile time. They cannot be resized in place. A new array is allocated instead."
+
+  # ── 7. Interfaces ───────────────────────────────────────────
+  - type: "single_select"
+    intro: "Go's interface system differs from most object-oriented languages because it uses implicit (structural) satisfaction."
+    prompt: "How does a type satisfy an interface in Go?"
+    choices:
+      - { id: "1", text: "By explicitly declaring `implements InterfaceName`" }
+      - { id: "2", text: "By implementing all methods defined in the interface" }
+      - { id: "3", text: "By inheriting from the interface type" }
+      - { id: "4", text: "By registering the type with the interface at runtime" }
+    correct_choice_ids: ["2"]
+    tags: ["interfaces", "types"]
+    difficulty: medium
+    source_ref: "https://go.dev/tour/methods/10"
+    rationale:
+      correct: "In Go, interface satisfaction is implicit. A type satisfies an interface by implementing all of its methods — no `implements` keyword or explicit declaration is needed. This enables decoupling between packages."
+      per_choice:
+        1: "Go has no `implements` keyword. Interface satisfaction is checked by the compiler based on the method set, not explicit declarations."
+        2: "A type satisfies an interface by having methods with matching signatures for every method in the interface. This is checked at compile time for static typing and at assignment/assertion for interface values."
+        3: "Go does not support inheritance. Types can embed other types for composition, but interfaces are satisfied through method sets, not inheritance hierarchies."
+        4: "Interface satisfaction is determined at compile time (for assignments) or checked at runtime (for type assertions), but there is no registration mechanism."
+
+  # ── 8. Goroutine Lifecycle ──────────────────────────────────
+  - type: "single_select"
+    intro: "The `go` keyword launches a new goroutine — a lightweight concurrent function execution."
+    prompt: "What happens to goroutines still running when the `main` function returns?"
+    choices:
+      - { id: "1", text: "They are allowed to complete before the program exits" }
+      - { id: "2", text: "They are immediately terminated without cleanup" }
+      - { id: "3", text: "They cause a deadlock error" }
+      - { id: "4", text: "They continue running as background daemon processes" }
+    correct_choice_ids: ["2"]
+    tags: ["concurrency", "goroutines"]
+    difficulty: medium
+    source_ref: "https://go.dev/ref/spec#Program_execution"
+    rationale:
+      correct: "When `main` returns, the Go program exits immediately. Any goroutines still running are terminated without running defers or cleanup. To wait for goroutines, use `sync.WaitGroup`, channels, or other synchronisation mechanisms."
+      per_choice:
+        1: "Go does not automatically wait for spawned goroutines. The program exits when `main` returns, regardless of other goroutines."
+        2: "The program terminates immediately when `main` returns. Running goroutines do not get a chance to finish or clean up."
+        3: "A deadlock is detected only when all goroutines are blocked. If `main` returns, there is no deadlock — the program simply exits."
+        4: "Goroutines exist only within the Go process. When the process exits, all goroutines are terminated. They cannot outlive the program."
+
+  # ── 9. Pointer Semantics ────────────────────────────────────
+  - type: "single_select"
+    intro: "Go supports pointers but does not allow pointer arithmetic, making them safer than in C/C++."
+    prompt: "What does the `&` operator do when applied to a variable in Go?"
+    choices:
+      - { id: "1", text: "Dereferences the pointer to get the value" }
+      - { id: "2", text: "Returns the memory address (pointer) of the variable" }
+      - { id: "3", text: "Performs a bitwise AND operation" }
+      - { id: "4", text: "Creates a copy of the variable" }
+    correct_choice_ids: ["2"]
+    tags: ["pointers"]
+    difficulty: easy
+    source_ref: "https://go.dev/tour/moretypes/1"
+    rationale:
+      correct: "The `&` operator returns a pointer to the operand — i.e., the memory address of the variable. The inverse operator `*` dereferences the pointer to access the value."
+      per_choice:
+        1: "Dereferencing is done with the `*` operator, not `&`. For example, `*ptr` accesses the value that `ptr` points to."
+        2: "`&x` returns a pointer to `x`, giving you the memory address where `x` is stored. The type of `&x` is `*T` where `T` is the type of `x`."
+        3: "While `&` is also the bitwise AND operator when used between two integer operands, when applied as a unary prefix to a variable it is the address-of operator."
+        4: "The `&` operator returns a reference to the existing variable, not a copy. Modifications through the pointer affect the original variable."
+
+  # ── 10. Map Access ──────────────────────────────────────────
+  - type: "single_select"
+    intro: "Maps in Go are hash tables that provide fast key-based lookups."
+    prompt: "What happens when you access a key that does not exist in a Go map?"
+    choices:
+      - { id: "1", text: "The program panics" }
+      - { id: "2", text: "It returns nil" }
+      - { id: "3", text: "It returns the zero value for the value type" }
+      - { id: "4", text: "It returns an error" }
+    correct_choice_ids: ["3"]
+    tags: ["maps", "types"]
+    difficulty: easy
+    source_ref: "https://go.dev/blog/maps"
+    rationale:
+      correct: "Accessing a missing key in a Go map returns the zero value for the map's value type. To distinguish between a missing key and a stored zero value, use the two-value form: `v, ok := m[key]`."
+      per_choice:
+        1: "Map reads never panic for missing keys. Only writing to a nil map causes a panic."
+        2: "`nil` is only the zero value for certain types (pointers, slices, maps, channels, interfaces, functions). For a `map[string]int`, the missing-key return is `0`, not `nil`."
+        3: "The zero value for the value type is returned. Use the comma-ok idiom (`v, ok := m[key]`) to check if the key actually exists."
+        4: "Map access does not return an error. Go uses the zero-value-plus-comma-ok pattern instead of error returns for map lookups."
+
+  # ── 11. Struct Embedding ────────────────────────────────────
+  - type: "single_select"
+    intro: "Go uses composition over inheritance. Struct embedding allows one struct to include another's fields and methods."
+    prompt: "What does struct embedding provide in Go?"
+    choices:
+      - { id: "1", text: "Class inheritance with virtual method dispatch" }
+      - { id: "2", text: "Promotion of the embedded type's fields and methods to the outer struct" }
+      - { id: "3", text: "Automatic interface implementation through parent types" }
+      - { id: "4", text: "Multiple inheritance with diamond resolution" }
+    correct_choice_ids: ["2"]
+    tags: ["structs", "composition"]
+    difficulty: medium
+    source_ref: "https://go.dev/ref/spec#Struct_types"
+    rationale:
+      correct: "Embedding promotes the fields and methods of the embedded type, so they can be accessed directly on the outer struct without qualification. This is composition, not inheritance — there is no polymorphic 'is-a' relationship."
+      per_choice:
+        1: "Go does not have class inheritance or virtual methods. Embedding is composition, where the embedded value is a field — not a parent class."
+        2: "Promoted fields and methods can be accessed directly: if `type Outer struct { Inner }`, then `outer.InnerMethod()` works without `outer.Inner.InnerMethod()`."
+        3: "Embedding an interface type in a struct does not automatically provide an implementation — you still need to assign a concrete value to the embedded field that satisfies the interface."
+        4: "Go does not support multiple inheritance. Ambiguity from multiple embeddings with overlapping method names results in a compile error if accessed without qualification."
+
+  # ── 12. init() Function ─────────────────────────────────────
+  - type: "single_select"
+    intro: "Go packages can contain `init()` functions that run automatically during program initialisation."
+    prompt: "When does the `init()` function execute relative to `main()`?"
+    choices:
+      - { id: "1", text: "After main() starts" }
+      - { id: "2", text: "Before main() starts, after package-level variables are initialised" }
+      - { id: "3", text: "Concurrently with main()" }
+      - { id: "4", text: "Only when explicitly called" }
+    correct_choice_ids: ["2"]
+    tags: ["init", "packages"]
+    difficulty: medium
+    source_ref: "https://go.dev/ref/spec#Package_initialization"
+    rationale:
+      correct: "The `init()` function runs automatically before `main()` starts. The order is: imported package `init` functions (in dependency order), then the main package's package-level variable initialisations, then `init()`, then `main()`."
+      per_choice:
+        1: "`init()` always completes before `main()` is called. It is part of the program initialisation phase."
+        2: "Package-level variables are initialised first, then `init()` functions run, then `main()` is called. A package can have multiple `init()` functions."
+        3: "`init()` runs synchronously during program startup. There is no concurrent execution with `main()`."
+        4: "`init()` cannot be called or referenced from user code. It is invoked automatically by the Go runtime."
+
+  # ── 13. Select Statement ────────────────────────────────────
+  - type: "single_select"
+    intro: "The `select` statement lets a goroutine wait on multiple channel operations simultaneously."
+    prompt: "What happens when multiple cases in a `select` statement are ready at the same time?"
+    choices:
+      - { id: "1", text: "The first case in source order is always chosen" }
+      - { id: "2", text: "All ready cases execute concurrently" }
+      - { id: "3", text: "One is chosen at random by the runtime" }
+      - { id: "4", text: "The select statement returns an error" }
+    correct_choice_ids: ["3"]
+    tags: ["concurrency", "channels", "select"]
+    difficulty: hard
+    source_ref: "https://go.dev/ref/spec#Select_statements"
+    rationale:
+      correct: "When multiple cases in a `select` are ready, Go chooses one uniformly at pseudo-random. This prevents starvation and avoids giving priority to any particular channel operation based on source order."
+      per_choice:
+        1: "Go deliberately does not use source order to break ties. Random selection prevents subtle priority bugs and channel starvation."
+        2: "Only one case executes per `select` evaluation. `select` is not a fan-out mechanism."
+        3: "The Go runtime uses uniform pseudo-random selection among ready cases to ensure fairness."
+        4: "`select` does not produce errors. If no case is ready and there is no `default` case, it blocks until one becomes ready."
+
+  # ── 14. Package Visibility ──────────────────────────────────
+  - type: "single_select"
+    intro: "Go controls visibility of identifiers (functions, types, variables) through naming conventions rather than access modifiers."
+    prompt: "How is an identifier exported (made public) from a Go package?"
+    choices:
+      - { id: "1", text: "Using the `public` keyword" }
+      - { id: "2", text: "By starting its name with an uppercase letter" }
+      - { id: "3", text: "By adding an `export` annotation" }
+      - { id: "4", text: "By placing it in a special `exports.go` file" }
+    correct_choice_ids: ["2"]
+    tags: ["packages", "visibility"]
+    difficulty: easy
+    source_ref: "https://go.dev/ref/spec#Exported_identifiers"
+    rationale:
+      correct: "In Go, an identifier is exported if its name begins with an uppercase letter (`MyFunc`, `Config`). Lowercase identifiers (`myFunc`, `config`) are package-private. This convention replaces access modifier keywords found in other languages."
+      per_choice:
+        1: "Go does not have `public`, `private`, or `protected` keywords. Visibility is determined solely by identifier capitalisation."
+        2: "Uppercase first letter = exported (visible from other packages). Lowercase first letter = unexported (package-private)."
+        3: "Go has no annotation or attribute system for visibility. The naming convention is the only mechanism."
+        4: "There is no special exports file. Any identifier in any `.go` file within the package is exported if it starts with an uppercase letter."
+
+  # ── 15. Multiple Return Values ──────────────────────────────
+  - type: "multi_select"
+    intro: "Go functions can return multiple values, which is a fundamental part of the language's error handling and API design."
+    prompt: "Which of the following are valid use cases for multiple return values in Go?"
+    choices:
+      - { id: "1", text: "Returning a result alongside an error" }
+      - { id: "2", text: "Returning a value and a boolean 'ok' indicator" }
+      - { id: "3", text: "Implementing exception-like stack unwinding" }
+      - { id: "4", text: "Returning the quotient and remainder from integer division" }
+    correct_choice_ids: ["1", "2", "4"]
+    tags: ["functions", "error-handling"]
+    difficulty: easy
+    source_ref: "https://go.dev/doc/effective_go#multiple-returns"
+    rationale:
+      correct: "Multiple return values are idiomatically used for result+error pairs, comma-ok patterns (map lookup, type assertion, channel receive), and functions that naturally produce multiple outputs like `math.Modf` or `divmod`."
+      per_choice:
+        1: "The `(result, error)` pattern is the most common use of multiple returns in Go. Nearly every I/O and fallible function follows this convention."
+        2: "The comma-ok idiom (`v, ok := m[key]`, `v, ok := x.(T)`) uses a boolean second return value to indicate success."
+        3: "Go does not have exceptions or stack unwinding. Error handling uses explicit return values, not exception propagation."
+        4: "Functions like integer division that naturally produce two results (quotient and remainder) use multiple return values cleanly."

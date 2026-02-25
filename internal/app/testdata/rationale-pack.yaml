@@ -1,0 +1,54 @@
+pack_version: "0.1.0"
+topic:
+  slug: "rationale-test"
+  name: "Rationale Test Pack"
+questions:
+  - type: "single_select"
+    prompt: "What is the default retention threshold used by VACUUM?"
+    choices:
+      - { id: "1", text: "24 hours" }
+      - { id: "2", text: "7 days" }
+      - { id: "3", text: "30 days" }
+    correct_choice_ids: ["2"]
+    tags: ["delta-lake"]
+    difficulty: easy
+    rationale:
+      correct: "The default retention is 7 days (168 hours)."
+      per_choice:
+        "1": "24 hours is too short and can break time travel."
+        "2": "7 days is the default, providing a safe window."
+        "3": "30 days is not the default retention period."
+
+  - type: "single_select"
+    prompt: "Which format does Auto Loader use for cloud file discovery?"
+    choices:
+      - { id: "1", text: "cloudFiles" }
+      - { id: "2", text: "autoFiles" }
+      - { id: "3", text: "streamFiles" }
+    correct_choice_ids: ["1"]
+    tags: ["auto-loader"]
+    difficulty: medium
+    rationale:
+      correct: "Auto Loader uses the cloudFiles format."
+      per_choice:
+        "1": "cloudFiles is the correct format for Auto Loader."
+        "2": "autoFiles is not a valid format."
+        "3": "streamFiles is not a valid format."
+
+  - type: "multi_select"
+    prompt: "Which isolation levels does Delta Lake support?"
+    choices:
+      - { id: "1", text: "Serializable" }
+      - { id: "2", text: "WriteSerializable" }
+      - { id: "3", text: "ReadCommitted" }
+      - { id: "4", text: "SnapshotIsolation" }
+    correct_choice_ids: ["1", "2"]
+    tags: ["delta-lake", "isolation"]
+    difficulty: hard
+    rationale:
+      correct: "Delta Lake supports Serializable and WriteSerializable."
+      per_choice:
+        "1": "Serializable is the strictest level supported."
+        "2": "WriteSerializable is the default isolation level."
+        "3": "ReadCommitted is not supported by Delta Lake."
+        "4": "SnapshotIsolation is not a Delta Lake isolation level."
