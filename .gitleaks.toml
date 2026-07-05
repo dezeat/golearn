@@ -1,0 +1,14 @@
+# gitleaks configuration — extends the bundled default ruleset.
+# The bundled packs and test fixtures are synthetic educational content, so
+# their paths are allowlisted to avoid false positives on sample data.
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Synthetic educational packs and test fixtures"
+paths = [
+  '''^packs/''',
+  '''(^|/)testdata/''',
+  '''(^|/)fixtures/''',
+]
