@@ -1,0 +1,40 @@
+#!/bin/sh
+# pre-commit: fast local parity with the CI formatting/vet gate plus a
+# large-file guard. Opt-in via `make hooks` (git config core.hooksPath
+# .githooks). Kept deliberately lightweight — the full `make check` runs on
+# pre-push, not here.
+
+set -e
+
+# Reject any staged blob larger than 1 MiB. Guards against accidentally
+# committing a built binary, a database, or a bulky asset into a repo whose
+# packs are meant to be small synthetic text.
+max_bytes=1048576
+too_big=""
+for file in $(git diff --cached --name-only --diff-filter=ACM); do
+	[ -f "$file" ] || continue
+	size=$(git cat-file -s ":$file" 2>/dev/null) || continue
+	if [ "$size" -gt "$max_bytes" ]; then
+		too_big="$too_big  $file ($size bytes)\n"
+	fi
+done
+if [ -n "$too_big" ]; then
+	printf 'pre-commit: staged file(s) exceed %d bytes:\n' "$max_bytes" >&2
+	printf "$too_big" >&2
+	printf 'Remove or shrink them before committing.\n' >&2
+	exit 1
+fi
+
+# gofmt only the staged Go files, so the check stays fast on large trees.
+staged_go=$(git diff --cached --name-only --diff-filter=ACM -- '*.go')
+if [ -n "$staged_go" ]; then
+	unformatted=$(gofmt -l $staged_go)
+	if [ -n "$unformatted" ]; then
+		printf 'pre-commit: gofmt needed on:\n' >&2
+		printf '%s\n' "$unformatted" >&2
+		printf 'Run: gofmt -w %s\n' "$unformatted" >&2
+		exit 1
+	fi
+fi
+
+go vet ./...
