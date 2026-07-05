@@ -1,6 +1,16 @@
 # golearn
 
-**Practise multiple-choice questions in your terminal — fully offline,
+```text
+   ██████╗  ██████╗ ██╗     ███████╗ █████╗ ██████╗ ███╗   ██╗
+  ██╔════╝ ██╔═══██╗██║     ██╔════╝██╔══██╗██╔══██╗████╗  ██║
+  ██║  ███╗██║   ██║██║     █████╗  ███████║██████╔╝██╔██╗ ██║
+  ██║   ██║██║   ██║██║     ██╔══╝  ██╔══██║██╔══██╗██║╚██╗██║
+  ╚██████╔╝╚██████╔╝███████╗███████╗██║  ██║██║  ██║██║ ╚████║
+   ╚═════╝  ╚═════╝ ╚══════╝╚══════╝╚═╝  ╚═╝╚═╝  ╚═╝╚═╝  ╚═══╝
+                adaptive learning in your terminal
+```
+
+**Practise multiple-choice questions in your terminal. Fully offline,
 deterministic, and yours. No account, no cloud, no lock-in.**
 
 [![CI](https://github.com/dezeat/golearn/actions/workflows/ci.yml/badge.svg)](https://github.com/dezeat/golearn/actions/workflows/ci.yml)
@@ -11,12 +21,12 @@ golearn turns YAML/JSON question packs into a fast, stats-aware practice
 session in a Bubble Tea TUI. Everything lives in a local SQLite file — there is
 no network path by design, so your progress never leaves the machine.
 
-![golearn demo](assets/hero.gif)
+![golearn demo — the ASCII start screen, a practice question with quiz-show review and explanation, the session summary, and the per-pack stats dashboard](assets/hero.gif)
 
-> The animation above is rendered from [`assets/demo.tape`](assets/demo.tape)
-> with [charmbracelet/vhs](https://github.com/charmbracelet/vhs). If it is not
-> yet present, run `vhs assets/demo.tape` to generate it — see
-> [`assets/README.md`](assets/README.md).
+> The animation above is generated from [`assets/demo.tape`](assets/demo.tape)
+> with [charmbracelet/vhs](https://github.com/charmbracelet/vhs) — a
+> deterministic, re-runnable recording over a throwaway demo database. To
+> re-render it, see [`assets/README.md`](assets/README.md).
 
 ---
 
