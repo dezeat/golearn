@@ -1,0 +1,277 @@
+# golearn — Architecture
+
+The committed technical spec: what golearn is, how it is layered, and the data
+and behaviour contracts that layout enforces. This file describes what is true
+**now**. It is project _facts_; _how to operate_ (workflow, PM, branching) lives
+in `CLAUDE.md`, and _why_ a fact is the way it is lives in `docs/DECISIONS.md`
+(cross-referenced inline as `(D-00N)`). When this file and `CLAUDE.md` disagree
+on a project fact, this file wins.
+
+## Purpose
+
+golearn is a local-first terminal application for practising multiple-choice
+questions (MCQs), aimed at certification prep and technology learning.
+Questions are imported from YAML/JSON pack files, stored in SQLite, and
+practised through an interactive Bubble Tea TUI with per-user stats, multiple
+selection modes, and deterministic export. It is fully offline by design —
+there is no network path — and CGo-free, so it cross-compiles to a static
+binary with no C toolchain (D-001).
+
+Runtime dependencies are deliberately few: `bubbletea`, `lipgloss`,
+`gopkg.in/yaml.v3`, and `modernc.org/sqlite`. Adding one is a design change.
+
+## Architecture diagram
+
+The C4 architecture diagram is generated separately and committed as
+`assets/architecture.svg` (golearn issue #38). This section is a stub reference;
+consult the SVG for the rendered view. Do not hand-draw it here.
+
+## Hexagonal layout
+
+golearn is a ports & adapters (hexagonal) Go project under `internal/`, with a
+`cmd/golearn` entrypoint. The layering is law (D-002): dependencies point
+inward, and the arrows below are the only ones allowed.
+
+```
+domain/     Pure types and logic. stdlib only; zero internal imports.
+ports/      Interfaces only (driven + driving). No implementations, no adapters.
+app/        Use cases. Depends on domain + ports. Never on adapters.
+adapters/   Implementations (sqlite, pack, tui, localconfig). Depend on
+            ports + domain — never on each other.
+cmd/        Composition root. Wires adapters to ports; the only package that
+            knows about all the others.
+```
+
+An adapter importing another adapter (e.g. `tui` importing `sqlite`) is an
+architecture violation. All dependency injection happens in the composition
+root, `cmd/golearn/main.go`.
+
+### Package map
+
+- `internal/domain/` — `models.go` (Topic, Question, Choice, Session, Attempt,
+  Pack), `validation.go` (the 8 rules), `hashing.go` (stable SHA-256 +
+  normalisation), `correctness.go` (order-insensitive answer evaluation),
+  `explanation.go` (prefix strip/format helpers), `choice_label.go`
+  (`DisplayLabelForIndex`).
+- `internal/ports/` — `repositories.go` (`TopicRepo`, `QuestionRepo`,
+  `SessionRepo`, `AttemptRepo`, `StatsRepo`, `ConfigStore`, user repo) and
+  `sources.go` (`PackReader`).
+- `internal/app/` — `import_pack.go`, `export_pack.go`, `session.go` (session
+  engine), `selector.go` + `selection_mode.go` + `selector_difficulty.go` +
+  `selector_weakest.go` (selection policy), `resolve_user.go`,
+  `user_context.go`.
+- `internal/adapters/` — `sqlite/` (repos, sequential migrations, WAL, reset),
+  `pack/` (YAML + JSON parsing, directory support), `tui/` (Bubble Tea screens,
+  keymap, layout), `localconfig/` (`~/.golearn/config.json`).
+- `packs/` — embedded example packs via `go:embed` (`go-basics.yaml`,
+  `llm-agents.yaml`) for first-run bootstrap.
+- `cmd/golearn/main.go` — CLI routing and composition root.
+
+## Data model
+
+### Question types
+
+| Type            | Correct answers | Validation rule                |
+|-----------------|-----------------|--------------------------------|
+| `single_select` | Exactly 1       | `len(correct_choice_ids) == 1` |
+| `multi_select`  | 1 or more       | `len(correct_choice_ids) >= 1` |
+
+### Question fields
+
+| Field                  | Type              | Required | Notes                                       |
+|------------------------|-------------------|----------|---------------------------------------------|
+| `type`                 | string            | yes      | `single_select` or `multi_select`           |
+| `intro`                | string            | no       | Optional context block shown before prompt  |
+| `prompt`               | string            | yes      | The question text                           |
+| `choices`              | `[]Choice`        | yes      | Ordered; ≥ 2 items                          |
+| `correct_choice_ids`   | `[]string`        | yes      | References `Choice.id`; validated           |
+| `tags`                 | `[]string`        | no       | Freeform topic tags                         |
+| `difficulty`           | string            | no       | `easy`, `medium`, or `hard`                 |
+| `rationale.correct`    | string            | no       | Shown in TUI review via the `e` toggle      |
+| `rationale.per_choice` | `map[string]string` | no     | Per-choice explanations, keyed by choice ID |
+| `source`               | string            | no       | Provenance, e.g. `manual:file`              |
+| `source_ref`           | string            | no       | File path, URL, etc.                        |
+| `confidence`           | float64           | no       | `0.0–1.0`; defaults to `1.0` for manual     |
+
+### Choice fields
+
+| Field  | Type   | Required | Notes                                  |
+|--------|--------|----------|----------------------------------------|
+| `id`   | string | yes      | Stable, question-local internal ID     |
+| `text` | string | yes      | The answer text                        |
+
+`Choice.id` is an internal identifier only — never a display label. Labels
+(`A`/`B`/`C`) are computed from display order at render time (D-008).
+
+### Persistence
+
+| Setting      | Default                  | Override      |
+|--------------|--------------------------|---------------|
+| DB path      | `~/.golearn/golearn.db`  | `--db <path>` |
+| Config path  | `~/.golearn/config.json` | test-only     |
+| WAL mode     | Enabled on every open    | —             |
+| Foreign keys | Enabled on every open    | —             |
+
+Migrations are sequential and version-tracked in a `schema_migrations` table;
+each migration is an embedded SQL string applied exactly once. WAL is
+(re)enabled on every open, not assumed sticky (D-006).
+
+### Local profiles
+
+The `users` table stores profile metadata (`handle`, optional `display_name`).
+Handles are case-insensitive: normalised to lowercase before both lookup and
+insert, with uniqueness enforced in the repository create path (returning a
+typed duplicate error), not in the UI. `display_name` defaults to the handle
+when omitted. Topics and questions are shared globally; sessions, attempts, and
+stats are per-user, and the current profile is persisted in `config.json` as
+`current_user_id`. During the development phase, an older-than-expected schema
+triggers a drop-recreate-reseed on startup — a known dev-only shortcut to be
+removed before public release.
+
+## Pack format
+
+```yaml
+pack_version: "0.1.0"
+topic:
+  slug: "<kebab-case-identifier>"
+  name: "<Human Readable Name>"
+questions:
+  - type: "single_select"
+    intro: "Optional context."
+    prompt: "The question text?"
+    choices:
+      - { id: "1", text: "First option" }
+      - { id: "2", text: "Second option" }
+      - { id: "3", text: "Third option" }
+    correct_choice_ids: ["2"]
+    tags: ["optional-tag"]
+    difficulty: medium
+    source: "manual:file"
+    source_ref: "https://..."
+    confidence: 1.0
+```
+
+`pack_version` is semver; the current MVP format is `0.1.0`. Import accepts only
+`0.1.x` and rejects incompatible versions with actionable errors. Explanations
+are stored content-only — no correctness prefixes or emoji (D-008).
+
+### Validation rules
+
+1. `type` must be `single_select` or `multi_select`.
+2. `prompt` must be non-empty after trimming.
+3. `choices` must contain ≥ 2 items.
+4. All `Choice.id` values must be unique within the question.
+5. `correct_choice_ids` must be non-empty.
+6. For `single_select`: exactly one correct ID.
+7. Every ID in `correct_choice_ids` must exist in `choices`.
+8. `difficulty`, if set, must be `easy`, `medium`, or `hard`.
+
+Import validates all questions in a file before inserting any; a single failure
+rejects the whole file. Directory imports process files independently (D-004).
+
+### Normalisation
+
+Applied before hashing and storage:
+
+- Trim leading/trailing whitespace from all string fields.
+- Normalise line endings: `\r\n` → `\n`, standalone `\r` → `\n`.
+- Preserve choice order as authored.
+
+### Stable hashing
+
+```
+SHA-256( topic_slug \x00 type \x00 normalise(intro) \x00 normalise(prompt) \x00
+         for each choice in order: choice.id + normalise(choice.text) \x00
+         sort(correct_choice_ids) joined by "," \x00
+         difficulty )
+```
+
+Hex-encoded (64 chars), `\x00` between fields. The hash is a UNIQUE constraint,
+so duplicate content is skipped on import. The recipe is a frozen data contract —
+changing field order, normalisation, or the separator silently invalidates every
+existing hash (D-007).
+
+## Selection policy
+
+| Mode          | Key             | Description                                             |
+|---------------|-----------------|---------------------------------------------------------|
+| Balanced      | `balanced`      | Default. Unseen → weak → random fill                    |
+| Random        | `random`        | Full shuffle of topic questions; ignores stats          |
+| By Difficulty | `by_difficulty` | Filter to a difficulty bucket, then Balanced within it  |
+| Weakest       | `weakest`       | By Tag (lowest-accuracy tag) or By Question (worst rate)|
+
+### Balanced (default)
+
+1. **Unseen** — zero prior attempts, shuffled.
+2. **Weak** — at least one wrong attempt, sorted by wrong rate descending.
+3. **Fill** — remaining questions, shuffled.
+
+The three groups are concatenated and capped at `n` (requested session length).
+Random mode deliberately bypasses the stats-aware selectors — a full shuffle and
+cap — so it stays independent of prior interactions.
+
+## Session engine
+
+Lifecycle: `StartSession` → `GetNextQuestion` → `RecordAttempt` → `EndSession`.
+The queue and per-question choice-order metadata are persisted in
+`sessions.mode_params_json`, which supports multi-session tracking and resume by
+session ID. Answer evaluation is order-insensitive (a set comparison of selected
+vs. correct IDs). All shuffling uses an injected seeded `*rand.Rand`.
+
+## Determinism guarantees
+
+| Property             | Mechanism                                            |
+|----------------------|------------------------------------------------------|
+| Content hashing      | SHA-256 over normalised, null-byte-separated fields  |
+| Export ordering      | `created_at ASC` + content-hash tie-break (D-007)    |
+| Question selection   | Seeded `*rand.Rand` for shuffle reproducibility (D-005) |
+| Deduplication        | Hash UNIQUE constraint in SQLite                     |
+| Test reproducibility | Fixed seeds; no wall-clock or global-PRNG assertions |
+
+Same data in → byte-identical output out. A test depending on wall-clock time or
+the global PRNG is a bug (D-005).
+
+## CLI commands
+
+```
+golearn import <path>                Import packs from a file or directory
+golearn run <topic-slug> [--n N]     Text-mode session runner
+golearn tui                          Launch the interactive TUI
+golearn export <slug> --out <path>   Export a topic to a pack file
+golearn db reset [--yes]             Delete the database and sidecar files
+golearn help                         Show usage information
+```
+
+Commands route through manual `os.Args` parsing (D-003); the global `--db` flag
+is parsed at the root before subcommand dispatch.
+
+## TUI navigation
+
+```
+Home Menu
+├── Start Practice → Topic Select → Session Config → Quiz → Summary
+├── Review Wrong   → Browse incorrect from the last session
+├── Stats          → Stats Menu → {Global Stats, Stats by Pack → Pack Detail}
+├── Switch Profile → Profile Menu
+└── Quit
+```
+
+Session Config is a multi-field picker: Questions (◀ N ▶), Mode (◀ Balanced ▶),
+plus a sub-option row for By Difficulty / Weakest. The config block renders a
+constant row count and a bounded, fixed-column width sized from candidate max
+values (not the current selection), so switching modes causes no vertical or
+horizontal drift. Screen titles and rows use the centered-container helpers, and
+column-alignment assertions measure visible width (`lipgloss.Width`), not byte
+offsets.
+
+## Stats
+
+All stats are user-scoped. Key metrics:
+
+| Metric              | Scope        | Definition                                      |
+|---------------------|--------------|-------------------------------------------------|
+| Accuracy %          | Global/Topic | `correct / answered * 100` (skipped excluded)   |
+| Avg response time   | Global/Topic | `sum(latency_ms) / answered` for non-skipped    |
+| Coverage %          | Topic        | `distinct_attempted / total * 100`              |
+| Most practiced      | Global       | Topic with the most non-skipped attempts        |
+| Weakest / Strongest | Global       | Lowest / highest accuracy (min 5 attempts)      |
