@@ -4,7 +4,7 @@ Thanks for contributing to golearn.
 
 ## Prerequisites
 
-- Go 1.24.0 (or newer compatible stable release)
+- Go 1.25+ (language floor; the pinned build toolchain is in `go.mod`)
 - `make`
 - Optional: `golangci-lint` (required for full `make check`)
 
