@@ -38,5 +38,3 @@ go.work.sum
 bin/
 dist/
 tmp/
-
-.agent/
