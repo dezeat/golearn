@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Ideas & design discussion
+    url: https://github.com/dezeat/golearn/discussions
+    about: Float a design idea or feature direction in the Ideas discussion category before it becomes committed scope.
+  - name: Decision log
+    url: https://github.com/dezeat/golearn/blob/main/docs/DECISIONS.md
+    about: Accepted architectural decisions live in-repo. Read the log before proposing a change; supersede an entry, never edit one.
+  - name: Questions & help
+    url: https://github.com/dezeat/golearn/discussions
+    about: Ask usage or contribution questions in Discussions rather than opening an issue.
