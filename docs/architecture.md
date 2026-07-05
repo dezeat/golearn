@@ -22,9 +22,59 @@ Runtime dependencies are deliberately few: `bubbletea`, `lipgloss`,
 
 ## Architecture diagram
 
-The C4 architecture diagram is generated separately and committed as
-`assets/architecture.svg` (golearn issue #38). This section is a stub reference;
-consult the SVG for the rendered view. Do not hand-draw it here.
+C4-style component view of the four hexagonal layers plus the composition root.
+Every edge is a real import confirmed with `go list` — dependencies point inward
+only, and no adapter imports another adapter. The Mermaid source below renders
+natively on github.com; a rendered `assets/architecture.svg` (Graphviz, offline)
+and its `assets/architecture.dot` source are committed alongside it.
+
+![golearn hexagonal component diagram](../assets/architecture.svg)
+
+```mermaid
+%%{init: {"flowchart": {"curve": "basis"}}}%%
+flowchart TB
+    classDef domain   fill:#dbeafe,stroke:#2563eb,color:#1e3a8a;
+    classDef ports    fill:#dcfce7,stroke:#16a34a,color:#14532d;
+    classDef app      fill:#ffedd5,stroke:#d97706,color:#7c2d12;
+    classDef adapters fill:#ede9fe,stroke:#7c3aed,color:#4c1d95;
+    classDef root     fill:#e5e7eb,stroke:#6b7280,color:#111827;
+    classDef ext      fill:#f9fafb,stroke:#9ca3af,color:#374151;
+
+    CMD["cmd/golearn<br/>CLI routing + wiring"]:::root
+
+    subgraph Adapters["adapters — never import each other"]
+        TUI["tui<br/>Bubble Tea screens"]:::adapters
+        SQL["sqlite<br/>repos, migrations, WAL"]:::adapters
+        PACK["pack<br/>YAML/JSON reader"]:::adapters
+        CFG["localconfig<br/>~/.golearn/config.json"]:::adapters
+    end
+
+    APP["app — use cases<br/>import · export · session · selection"]:::app
+    PORTS["ports — interfaces<br/>repositories · PackReader · ConfigStore"]:::ports
+    DOMAIN["domain — pure core<br/>models · validation · hashing · correctness"]:::domain
+
+    SQLFILE[("SQLite file<br/>~/.golearn/golearn.db")]:::ext
+    PACKFILE["YAML/JSON packs"]:::ext
+    TERM["terminal (stdin/stdout)"]:::ext
+
+    CMD --> TUI & SQL & PACK & CFG & APP & DOMAIN
+    TUI --> APP & DOMAIN & PORTS
+    SQL --> PORTS & DOMAIN
+    PACK --> DOMAIN
+    CFG --> PORTS
+    APP --> PORTS & DOMAIN
+    PORTS --> DOMAIN
+
+    SQL -.-> SQLFILE
+    PACK -.-> PACKFILE
+    TUI -.-> TERM
+```
+
+Regenerate the SVG after editing the diagram (see `assets/README.md`):
+
+```bash
+dot -Tsvg assets/architecture.dot -o assets/architecture.svg
+```
 
 ## Hexagonal layout
 
