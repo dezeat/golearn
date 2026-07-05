@@ -1,28 +1,26 @@
 ## Summary
 
-Describe what changed and why.
+What changed and why, in a sentence or two.
 
-## Type of Change
+## Changes
 
-- [ ] feat
-- [ ] fix
-- [ ] docs
-- [ ] refactor
-- [ ] chore
+- The notable changes, one per line.
 
 ## Verification
 
-- [ ] `make check` passes locally
+- [ ] `make check` green locally
 - [ ] Tests added/updated (if needed)
-- [ ] Manual validation completed (if applicable)
+- [ ] Manual/interactive validation completed (if applicable)
+
+## Decisions
+
+Any non-obvious choice or trade-off made here. If it is hard to reverse,
+surprising without context, and a real trade-off, add a `docs/DECISIONS.md`
+entry and reference it. Write "none" if there were none.
 
 ## Checklist
 
-- [ ] Focused, single-purpose change
-- [ ] No unrelated modifications
-- [ ] Docs updated (README/PROGRESS/etc.) when behavior changed
-- [ ] Risks and follow-ups documented
-
-## Notes for Reviewers
-
-Anything specific you'd like reviewed closely.
+- [ ] Conventional-commit PR title (`feat:`/`fix:`/`refactor:`/`docs:`/…)
+- [ ] Focused, single-purpose change — no unrelated modifications
+- [ ] No AI attribution or tool mentions anywhere
+- [ ] `docs/` updated when behaviour or architecture changed
