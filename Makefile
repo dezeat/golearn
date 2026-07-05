@@ -1,4 +1,4 @@
-.PHONY: build test vet lint fmt check clean run db-reset
+.PHONY: build test vet lint fmt check clean run db-reset hooks
 
 BINARY  := golearn
 BIN_DIR := ./bin
@@ -43,6 +43,11 @@ lint:
 
 ## check: full CI gate (fmt + vet + lint + test)
 check: fmt vet lint test
+
+## hooks: install git hooks (pre-commit + pre-push) via core.hooksPath
+hooks:
+	git config core.hooksPath .githooks
+	@echo "git hooks installed (core.hooksPath -> .githooks)"
 
 ## clean: remove build artifacts
 clean:

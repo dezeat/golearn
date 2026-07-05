@@ -4,7 +4,7 @@ Thanks for contributing to golearn.
 
 ## Prerequisites
 
-- Go 1.24.0 (or newer compatible stable release)
+- Go 1.25+ (language floor; the pinned build toolchain is in `go.mod`)
 - `make`
 - Optional: `golangci-lint` (required for full `make check`)
 
@@ -15,6 +15,18 @@ git clone https://github.com/dezeat/golearn.git
 cd golearn
 make build
 ```
+
+### Git hooks (opt-in)
+
+Install local hooks that mirror the CI gate:
+
+```bash
+make hooks
+```
+
+This points `core.hooksPath` at `.githooks/`. The `pre-commit` hook runs
+`gofmt` on staged Go files, `go vet`, and a large-file guard (rejects any
+staged file over 1 MB); `pre-push` runs the full `make check`.
 
 ## Development Workflow
 
