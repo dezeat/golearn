@@ -70,14 +70,33 @@ make check
 
 ## Commit Format
 
-- Use imperative tense.
-- Keep the first line concise (target: <= 72 chars).
+golearn uses [Conventional Commits](https://www.conventionalcommits.org/).
+Releases and the `CHANGELOG.md` are generated from commit history, so the
+format is load-bearing — not just a style preference.
+
+Shape: `type(scope): subject`
+
+- **type** — one of `feat`, `fix`, `refactor`, `test`, `docs`, `chore`,
+  `perf`, `build`, `ci`.
+- **scope** — optional; the area touched (e.g. `sqlite`, `tui`, `export`).
+- **subject** — imperative mood, no trailing period, target <= 72 chars.
 - One logical change per commit.
 
 Examples:
-- `Add profile validation for empty handles`
-- `Fix stats query for weak questions`
-- `Update README quickstart examples`
+- `feat: add json export flag`
+- `fix: correct stats query for weak questions`
+- `docs: update quickstart`
+
+`feat:` and `fix:` drive minor and patch version bumps respectively; a
+`!` after the type/scope (or a `BREAKING CHANGE:` footer) signals a major
+bump.
+
+### No AI attribution
+
+Commit messages and PR text must contain **no AI attribution or tool
+mentions** — no `Co-Authored-By` trailers for an agent, no "Generated with"
+lines, no reference to the tooling used to author the change. This keeps the
+history about the change, not the authoring method.
 
 ## Pull Request Process
 
