@@ -1,44 +1,41 @@
 # golearn
 
-**Terminal-based learning engine for practicing multiple-choice questions offline.**
+**Practise multiple-choice questions in your terminal — fully offline,
+deterministic, and yours. No account, no cloud, no lock-in.**
 
 [![CI](https://github.com/dezeat/golearn/actions/workflows/ci.yml/badge.svg)](https://github.com/dezeat/golearn/actions/workflows/ci.yml)
-[![Go](https://img.shields.io/badge/Go-1.22+-00ADD8?logo=go&logoColor=white)](https://go.dev)
+[![Go](https://img.shields.io/badge/Go-1.25+-00ADD8?logo=go&logoColor=white)](https://go.dev)
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 
+golearn turns YAML/JSON question packs into a fast, stats-aware practice
+session in a Bubble Tea TUI. Everything lives in a local SQLite file — there is
+no network path by design, so your progress never leaves the machine.
+
+![golearn demo](assets/hero.gif)
+
+> The animation above is rendered from [`assets/demo.tape`](assets/demo.tape)
+> with [charmbracelet/vhs](https://github.com/charmbracelet/vhs). If it is not
+> yet present, run `vhs assets/demo.tape` to generate it — see
+> [`assets/README.md`](assets/README.md).
+
 ---
-
-## Motivation
-
-`golearn` was built to help the author learn any topic imaginable with a repeatable,
-local workflow. Professional engineering certifications were the MVP driver, but the
-core design is intentionally generic: any domain that fits MCQs can be practiced.
-
-The project follows a simple maintenance principle: tools with personal surplus value
-are far more likely to be improved long-term.
-
-## What it is
-
-For users, `golearn` is a local-first terminal app that lets you:
-
-- practice curated question packs
-- track performance over time
-- focus on weak areas automatically
-- own and version your content
-- run fully offline
-
-For developers, `golearn` is a deterministic Go codebase using a hexagonal architecture
-with SQLite persistence, YAML/JSON pack import/export, and a Bubble Tea TUI.
 
 ## Why golearn?
 
-- **Deterministic question engine** — reproducible selection and stable export behavior.
-- **Performance-aware selection** — unseen-first and weakest-area prioritization.
-- **Multi-user local profiles** — user-scoped sessions and stats on shared local data.
-- **Human-readable packs** — simple YAML/JSON schema designed for version control.
-- **Zero lock-in** — import/export keeps data portable and durable.
-
----
+- **Local-first and fully offline.** Questions, sessions, and stats live in one
+  SQLite file under `~/.golearn`. No account, no telemetry, no network calls —
+  the offline guarantee is architectural, not a setting.
+- **Deterministic by design.** Same data in → byte-identical output. Selection
+  shuffles use a seeded PRNG, content hashing is stable, and export ordering is
+  reproducible, so packs round-trip cleanly through version control.
+- **Performance-aware practice.** Selection modes prioritise unseen questions
+  and your weakest areas, so a session spends time where it helps most.
+- **Multi-user local profiles.** Several people share the same local data;
+  sessions and stats are scoped per profile.
+- **Human-readable packs, zero lock-in.** A simple YAML/JSON schema you can
+  diff and review, plus import/export that keeps your content portable.
+- **CGo-free single binary.** Built on `modernc.org/sqlite`, so it
+  cross-compiles to a static binary with no C toolchain.
 
 ## Install
 
@@ -46,85 +43,112 @@ with SQLite persistence, YAML/JSON pack import/export, and a Bubble Tea TUI.
 go install github.com/dezeat/golearn/cmd/golearn@latest
 ```
 
-Requires Go 1.22+. The binary will be placed in your `$GOPATH/bin` (or `$GOBIN`).
+The binary lands in your `$GOPATH/bin` (or `$GOBIN`). Requires **Go 1.25+**.
+
+Prefer a prebuilt binary? Each tagged release ships archives for Linux, macOS,
+and Windows (amd64 + arm64), published by GoReleaser on the
+[releases page](https://github.com/dezeat/golearn/releases).
 
 ## Quickstart
 
 ```bash
-# Build from source (alternative to go install)
-make build
-
-# Import a question pack
-./bin/golearn import packs/go-basics.yaml
+# Import a bundled question pack
+golearn import packs/go-basics.yaml
 
 # Launch the interactive TUI
-./bin/golearn tui
+golearn tui
 
-# Or use the text-mode session runner
-./bin/golearn run go-basics --n 5
+# Or run a quick text-mode session
+golearn run go-basics --n 5
 
-# Export a topic back to a pack file
-./bin/golearn export go-basics --out out.yaml
+# Export a topic back to a portable pack file
+golearn export go-basics --out backup.yaml
 
-# Reset the database (delete all data)
-./bin/golearn db reset --yes
+# Reset the database (deletes all local data)
+golearn db reset --yes
 ```
 
-## Requirements
+Building from source instead of `go install`? `make build` compiles to
+`./bin/golearn`.
 
-- Go 1.22+ (for `go install` or building from source)
-- (Optional) `golangci-lint` for `make lint`
-
-## Project Structure
-
-```
-cmd/golearn/              CLI entrypoint
-internal/
-  domain/                 Pure domain types, validation, hashing
-  ports/                  Interfaces (repositories, pack source)
-  app/                    Use cases (import, export, session)
-  adapters/
-    sqlite/               SQLite persistence + migrations
-    pack/                 YAML/JSON pack reader
-    localconfig/          Local user profile config
-    tui/                  Bubble Tea terminal UI
-packs/                    Bundled question packs
-```
-
-## Development
+## The practice loop (TUI)
 
 ```bash
-make build      # compile to ./bin/golearn
-make test       # run all tests
-make fmt        # check gofmt formatting
-make vet        # go vet
-make lint       # golangci-lint (if installed)
-make check      # fmt + vet + lint + test (CI gate)
-make db-reset   # delete default database
-make clean      # remove build artifacts
+golearn tui
 ```
 
-## Public roadmap
+A single interactive surface takes you from profile to summary:
 
-### Mid-term
+- **Profile select** — pick or create a local profile; stats are per-user.
+- **Topic select** — browse topics with question counts and accuracy.
+- **Session config** — choose how many questions and which selection mode
+  (Balanced, Random, By Difficulty, Weakest).
+- **Question screen** — navigate choices with ↑/↓, toggle with Space, submit
+  with Enter; skip with `S`.
+- **Quiz-show review** — colour-coded ✔/✘ feedback; press `E` to reveal the
+  explanation for each choice.
+- **Summary** — accuracy, average response time, and a jump into the questions
+  you missed with `R`.
+- **Stats dashboard** — global accuracy, per-pack breakdowns, difficulty
+  distribution, weakest questions, and trends.
 
-- LLM/RAG-assisted draft question generation
-- Assisted pack validation and quality checks
-- Minimal but scalable Webserver with HTMX web UI
+## Selection modes
 
-### Long-term
+golearn does not just shuffle. Each session is built by a selection policy:
 
-- Collaborative web repository for shared pack publishing and discovery
+| Mode          | What it does                                                   |
+|---------------|----------------------------------------------------------------|
+| Balanced      | Default. Unseen questions first, then weak, then random fill.  |
+| Random        | Full shuffle of the topic; ignores your stats.                 |
+| By Difficulty | Filter to `easy`/`medium`/`hard`, then Balanced within it.     |
+| Weakest       | Target your lowest-accuracy tag or worst-performing questions. |
 
-## Configuration
+Every shuffle is seeded, so a given set of inputs always produces the same
+session — practice is reproducible, not random-feeling.
 
-| Flag       | Default                 | Description            |
-|------------|-------------------------|------------------------|
-| `--db`     | `~/.golearn/golearn.db` | Path to SQLite database |
+## Import
 
-## Question Pack Format
+```bash
+# Import a single file
+golearn import packs/go-basics.yaml
 
-Packs are YAML or JSON files with this structure:
+# Import every pack in a directory
+golearn import packs/
+
+# Use a custom database path
+golearn --db /tmp/test.db import packs/go-basics.yaml
+```
+
+Import is **all-or-nothing per file**: every question is validated before
+anything is inserted, and a single bad question rejects the whole file with an
+actionable error naming the file, question index, and field:
+
+```
+packs/bad.yaml: question[2].choices: must have >= 2 choices, got 1
+```
+
+Duplicate content is skipped automatically — a stable content hash is the
+dedup key, so re-importing the same pack inserts nothing new.
+
+## Export
+
+```bash
+# Export a topic to YAML
+golearn export go-basics --out pack.yaml
+
+# Export to JSON
+golearn export llm-agents --out pack.json --format json
+
+# Re-import the exported file — zero duplicates
+golearn import pack.yaml
+```
+
+Export ordering is deterministic (stable column plus a content-hash tie-break),
+so exported packs are byte-stable and diff cleanly across runs.
+
+## Question pack format
+
+Packs are YAML or JSON files designed to be readable and version-controlled:
 
 ```yaml
 pack_version: "0.1.0"
@@ -152,66 +176,93 @@ questions:
         4: "Go's defer is function-scoped, not block-scoped."
 ```
 
-## Bundled Packs
+Explanations are stored content-only — no "Correct:" prefixes or emoji.
+Presentation (labels `A`/`B`/`C`, correctness markers) is added at render time.
+See [`docs/architecture.md`](docs/architecture.md) for the full schema,
+validation rules, and hashing recipe.
 
-| Pack                      | Questions | Description                                       |
-|---------------------------|-----------|----------------------------------------------------|
-| `packs/go-basics.yaml`   | 15        | Go language fundamentals with full rationale       |
-| `packs/llm-agents.yaml`  | 15        | LLM agents & agentic AI for curious non-engineers  |
+## Bundled packs
 
+| Pack                     | Questions | Description                                       |
+|--------------------------|-----------|---------------------------------------------------|
+| `packs/go-basics.yaml`   | 15        | Go language fundamentals with full rationale      |
+| `packs/llm-agents.yaml`  | 15        | LLM agents & agentic AI for curious non-engineers |
 
 ```bash
-# Import from the packs repo
+# Or pull a community pack repo and import the whole directory
 git clone https://github.com/dezeat/golearn-packs.git
-./bin/golearn import golearn-packs/packs/
+golearn import golearn-packs/packs/
 ```
 
-## Import
+## Architecture
+
+golearn is a hexagonal (ports & adapters) Go project: a pure `domain` core,
+`ports` interfaces, `app` use cases, swappable `adapters`, and a `cmd`
+composition root that wires them together. Dependencies point inward only.
+
+![golearn hexagonal component diagram](assets/architecture.svg)
+
+```
+cmd/golearn/              CLI entrypoint + composition root
+internal/
+  domain/                 Pure domain types, validation, hashing
+  ports/                  Interfaces (repositories, pack source)
+  app/                    Use cases (import, export, session, selection)
+  adapters/
+    sqlite/               SQLite persistence + migrations (WAL, CGo-free)
+    pack/                 YAML/JSON pack reader
+    localconfig/          Local user profile config
+    tui/                  Bubble Tea terminal UI
+packs/                    Bundled question packs
+```
+
+The full spec — data model, validation, hashing, selection policy, and
+determinism guarantees — lives in [`docs/architecture.md`](docs/architecture.md).
+
+## Configuration
+
+| Flag   | Default                 | Description             |
+|--------|-------------------------|-------------------------|
+| `--db` | `~/.golearn/golearn.db` | Path to SQLite database |
+
+`--db` is a global flag parsed before the subcommand, e.g.
+`golearn --db /tmp/test.db import packs/`.
+
+## Development
 
 ```bash
-# Import a single file
-./bin/golearn import packs/go-basics.yaml
-
-# Import all packs in a directory
-./bin/golearn import packs/
-
-# Use a custom DB path
-./bin/golearn --db /tmp/test.db import packs/go-basics.yaml
+make build      # compile to ./bin/golearn
+make test       # run all tests
+make fmt        # check gofmt formatting
+make vet        # go vet
+make lint       # golangci-lint (if installed)
+make check      # fmt + vet + lint + test (CI gate)
+make db-reset   # delete the default database
+make clean      # remove build artifacts
 ```
 
-Import validates every question and reports errors with file path, question index, and field:
+Requirements: **Go 1.25+** for `go install` or building from source; optionally
+`golangci-lint` for `make lint`.
 
-```
-packs/bad.yaml: question[2].choices: must have >= 2 choices, got 1
-```
+## Roadmap
 
-## Export
+**Mid-term**
 
-```bash
-# Export a topic to YAML
-./bin/golearn export go-basics --out pack.yaml
+- LLM/RAG-assisted draft question generation
+- Assisted pack validation and quality checks
+- Minimal but scalable webserver with an HTMX web UI
 
-# Export to JSON
-./bin/golearn export llm-agents --out pack.json --format json
+**Long-term**
 
-# Re-import the exported file — zero duplicates
-./bin/golearn import pack.yaml
-```
+- Collaborative repository for shared pack publishing and discovery
 
-## TUI
+## Your data never leaves your machine
 
-```bash
-./bin/golearn tui
-```
-
-The TUI provides:
-- **Profile select** — multi-user local profiles with per-user stats
-- **Topic select** — browse topics with question counts and accuracy
-- **Session config** — choose number of questions and selection mode
-- **Question screen** — navigate choices with ↑/↓, toggle with Space, submit with Enter
-- **Quiz-show review** — colour-coded feedback with ✔/✘ markers, press `E` for explanations
-- **Summary** — accuracy %, average response time, review wrong questions with `R`
-- **Stats dashboard** — global accuracy, per-pack breakdowns, difficulty distribution, weak questions, trends
+There is **no network path by design**. golearn reads and writes exactly one
+place — a local SQLite file under `~/.golearn` — and talks to nothing else. No
+account, no sync, no telemetry, no analytics. Import and export keep your
+content in plain, diffable YAML/JSON, so you are never locked in: your
+questions and your stats are files you own, on hardware you control.
 
 ## License
 

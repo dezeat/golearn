@@ -1,0 +1,74 @@
+// golearn C4-style component diagram.
+// Source of truth for assets/architecture.svg — render with:
+//   dot -Tsvg assets/architecture.dot -o assets/architecture.svg
+// The four hexagonal layers are palette-encoded; every edge below is a real
+// import confirmed by `go list` (dependencies point inward only).
+digraph golearn {
+	rankdir=TB;
+	bgcolor="white";
+	fontname="Helvetica,Arial,sans-serif";
+	labelloc="t";
+	label=<<b>golearn — hexagonal component diagram</b>>;
+	node [shape=box style="rounded,filled" fontname="Helvetica,Arial,sans-serif" fontsize=11 penwidth=1.2];
+	edge [color="#4b5563" arrowsize=0.8 penwidth=1.1];
+
+	// ---- cmd: composition root (grey) ----
+	subgraph cluster_cmd {
+		label="cmd — composition root";
+		style="rounded,filled"; color="#9ca3af"; fillcolor="#f3f4f6"; fontname="Helvetica,Arial,sans-serif"; fontsize=12;
+		cmd [label="cmd/golearn\n(CLI routing + wiring)" fillcolor="#e5e7eb" color="#6b7280"];
+	}
+
+	// ---- adapters (purple) ----
+	subgraph cluster_adapters {
+		label="adapters — implementations (never import each other)";
+		style="rounded,filled"; color="#8b5cf6"; fillcolor="#f5f3ff"; fontsize=12;
+		a_tui    [label="tui\nBubble Tea screens" fillcolor="#ede9fe" color="#7c3aed"];
+		a_sqlite [label="sqlite\nrepos, migrations, WAL" fillcolor="#ede9fe" color="#7c3aed"];
+		a_pack   [label="pack\nYAML/JSON reader" fillcolor="#ede9fe" color="#7c3aed"];
+		a_cfg    [label="localconfig\n~/.golearn/config.json" fillcolor="#ede9fe" color="#7c3aed"];
+	}
+
+	// ---- app: use cases (amber) ----
+	subgraph cluster_app {
+		label="app — use cases";
+		style="rounded,filled"; color="#f59e0b"; fillcolor="#fffbeb"; fontsize=12;
+		app [label="import · export · session · selection" fillcolor="#ffedd5" color="#d97706"];
+	}
+
+	// ---- ports: interfaces (green) ----
+	subgraph cluster_ports {
+		label="ports — interfaces only";
+		style="rounded,filled"; color="#22c55e"; fillcolor="#f0fdf4"; fontsize=12;
+		ports [label="repositories · PackReader · ConfigStore" fillcolor="#dcfce7" color="#16a34a"];
+	}
+
+	// ---- domain: pure core (blue) ----
+	subgraph cluster_domain {
+		label="domain — pure types + logic (stdlib only)";
+		style="rounded,filled"; color="#3b82f6"; fillcolor="#eff6ff"; fontsize=12;
+		domain [label="models · validation · hashing\ncorrectness · selection types" fillcolor="#dbeafe" color="#2563eb"];
+	}
+
+	// ---- external systems (dashed, neutral) ----
+	sqlite_file [label="SQLite file\n~/.golearn/golearn.db" shape=cylinder fillcolor="#f9fafb" color="#9ca3af" style="filled"];
+	packs_files [label="YAML/JSON packs" shape=note fillcolor="#f9fafb" color="#9ca3af" style="filled"];
+	terminal    [label="terminal (stdin/stdout)" shape=box fillcolor="#f9fafb" color="#9ca3af" style="filled"];
+
+	// ---- edges: the real import graph (inward only) ----
+	cmd -> a_tui; cmd -> a_sqlite; cmd -> a_pack; cmd -> a_cfg; cmd -> app; cmd -> domain;
+
+	a_tui -> app; a_tui -> domain; a_tui -> ports;
+	a_sqlite -> ports; a_sqlite -> domain;
+	a_pack -> domain;
+	a_cfg -> ports;
+
+	app -> ports; app -> domain;
+	ports -> domain;
+
+	// ---- edges to external systems (dashed) ----
+	edge [style=dashed color="#9ca3af"];
+	a_sqlite -> sqlite_file;
+	a_pack -> packs_files;
+	a_tui -> terminal;
+}
