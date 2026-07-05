@@ -1,18 +1,14 @@
 # golearn animated hero — charmbracelet/vhs script.
 #
-# Renders assets/hero.gif: a short practice session followed by the stats
-# dashboard. Deterministic and re-runnable — it seeds a throwaway demo DB at
+# Renders assets/hero.gif: the ASCII-logo start screen, a short practice
+# session with quiz-show review + explanation, and the stats view.
+# Deterministic and re-runnable — it seeds a throwaway demo DB at
 # /tmp/golearn-demo.db from a bundled pack, so the recording never depends on
 # your real ~/.golearn data or on wall-clock state.
 #
-# Prerequisites: `vhs` (https://github.com/charmbracelet/vhs) and a built
-# binary at ./bin/golearn (run `make build` first).
-#
-# Re-render:
-#   make build
-#   rm -f /tmp/golearn-demo.db*
-#   ./bin/golearn --db /tmp/golearn-demo.db import packs/go-basics.yaml
-#   vhs assets/demo.tape
+# Prerequisites: vhs (github.com/charmbracelet/vhs), plus ttyd and ffmpeg on
+# PATH. Run from the repo root so ./bin/golearn resolves:
+#   make build && rm -f /tmp/golearn-demo.db* && vhs assets/demo.tape
 
 Output assets/hero.gif
 
@@ -22,7 +18,7 @@ Set Width 1200
 Set Height 700
 Set Padding 20
 Set Theme "Catppuccin Mocha"
-Set TypingSpeed 60ms
+Set TypingSpeed 55ms
 Set PlaybackSpeed 1.0
 
 # Seed a deterministic, throwaway demo database from a bundled pack.
@@ -34,53 +30,65 @@ Type "clear" Enter
 Show
 
 # Launch the TUI against the demo DB.
-# Note: on a first-run empty DB the TUI opens on Profile Select / register —
-# if so, type a handle then Enter before the Home menu appears. Verify the
-# exact opening screen when you render and adjust the keystrokes below.
 Type "./bin/golearn --db /tmp/golearn-demo.db tui" Enter
-Sleep 2s
+# Hold on the ASCII-logo start screen — this is the branded opener.
+Sleep 4s
 
-# Home menu → Start Practice.
+# Enter the app → Home menu.
+Enter
+Sleep 1800ms
+
+# Home → Practice.
 Enter
 Sleep 1500ms
 
-# Topic Select → pick the first topic.
+# Topic Select → pick Go Basics.
 Enter
 Sleep 1500ms
 
-# Session Config → accept defaults, start the session.
+# Session Config → shorten to a quick 3-question run, then start.
+Up
+Sleep 500ms
+Left Left Left Left Left Left Left
+Sleep 1200ms
 Enter
-Sleep 2s
+Sleep 1800ms
 
-# Answer a couple of questions: move selection, toggle, submit, review.
+# Question 1 → choose an answer, submit, read the quiz-show review + explanation.
 Down
-Sleep 800ms
+Sleep 700ms
+Space
+Sleep 600ms
+Enter
+Sleep 1600ms
+Type "e"
+Sleep 2600ms
+Enter
+Sleep 1400ms
+
+# Question 2 → answer and submit.
+Down Down
+Sleep 700ms
 Space
 Sleep 600ms
 Enter
 Sleep 1800ms
-Type "e"
-Sleep 2500ms
 Enter
-Sleep 1500ms
+Sleep 1200ms
 
-Down
-Sleep 800ms
+# Question 3 → answer and submit → session summary.
 Space
 Sleep 600ms
 Enter
-Sleep 2200ms
-
-# Back out to the home menu, then open the stats dashboard.
-Escape
-Sleep 1s
-Escape
-Sleep 1s
-Down
-Down
-Sleep 800ms
+Sleep 1800ms
 Enter
-Sleep 3s
+Sleep 1600ms
+
+# Summary → open the per-pack stats view.
+Down
+Sleep 700ms
+Enter
+Sleep 3200ms
 
 # Let the final frame breathe.
-Sleep 2s
+Sleep 1800ms
