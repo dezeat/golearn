@@ -16,6 +16,18 @@ cd golearn
 make build
 ```
 
+### Git hooks (opt-in)
+
+Install local hooks that mirror the CI gate:
+
+```bash
+make hooks
+```
+
+This points `core.hooksPath` at `.githooks/`. The `pre-commit` hook runs
+`gofmt` on staged Go files, `go vet`, and a large-file guard (rejects any
+staged file over 1 MB); `pre-push` runs the full `make check`.
+
 ## Development Workflow
 
 1. Create a branch from `main`.

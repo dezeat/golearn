@@ -1,0 +1,8 @@
+#!/bin/sh
+# pre-push: run the full project gate (fmt + vet + lint + test) before code
+# leaves the machine, matching what CI enforces on the PR. Opt-in via
+# `make hooks`.
+
+set -e
+
+exec make check
