@@ -222,3 +222,97 @@ double as an executable statement of the repo's invariants — which is also the
 cost, since they must track `AGENTS.md` whenever the standards change. Subagents
 are Claude Code-only; an agent without them falls back to self-review, so the
 `pr` skill must keep that path working.
+
+## D-011 — Security posture: trusted-operator, offline threat model
+
+Status: accepted
+Date: 2026-07-22
+
+Context: golearn is a local-first, single-user, fully offline CLI/TUI with no
+network path (CLAUDE.md core principle; `docs/architecture.md` §Purpose,
+§Persistence). A pre-1.0.0 security audit needed an explicit threat model so
+findings triage against a stated boundary rather than a generic web-app
+checklist, which would flag non-issues (no auth, no encryption at rest) as gaps.
+Decision: Adopt a trusted-operator threat model — the machine owner and local
+filesystem are inside the trust boundary; the only untrusted inputs are imported
+pack files (YAML/JSON) and user-supplied paths (`--db`, import/export targets).
+Required hardening is scoped to those inputs (parser resource limits,
+control-character sanitisation of pack text before storage/render, parameterised
+SQL, path validation on destructive operations). Authentication, encryption at
+rest, config-file permissions, and process sandboxing are explicit non-goals.
+Consequences: The audit's security surface is bounded and its findings
+triageable; a future contributor cannot justify adding auth/encryption "for
+security" without superseding this entry. The cost is that a shared-account or
+multi-tenant deployment is out of scope by design — golearn protects against
+hostile *content*, not against a hostile local user.
+
+## D-012 — Performance is an explicit non-goal at expected scale
+
+Status: accepted
+Date: 2026-07-22
+
+Context: A pre-1.0.0 performance sweep found no egregious algorithmic problems at
+the tool's expected scale (single user; hundreds to low-thousands of questions
+per topic; interactive TUI): hot queries are index-served, selection is
+O(n log n), the render loop does no DB work, and import memory is bounded per
+file. The open question was whether 1.0.0 should commit to a performance budget.
+Decision: Treat performance as an explicit non-goal at expected scale. Do not add
+caching layers, denormalised counters, or speculative indexes; optimise only a
+measured regression that is user-visible at realistic data sizes. Any
+optimisation must preserve the laws — determinism (D-005, D-007), CGo-free
+(D-001), WAL (D-006), and the four-runtime-dependency ceiling.
+Consequences: Contributors are spared premature-optimisation work and the review
+bar for a perf change is "prove it bites at realistic scale." The cost is that
+golearn makes no throughput promise; a future large-corpus use case (tens of
+thousands of questions across many topics) would reopen this as a new decision.
+The one known inefficiency (loading all rows to compute a topic count) is a
+deferred tidy-up, not a release gate.
+
+## D-013 — 1.0.0 freezes data-at-rest contracts only; the CLI surface stays fluid
+
+Status: accepted
+Date: 2026-07-22
+
+Context: Cutting 1.0.0 raises what semver's "public API" means for a local CLI.
+Two contracts are expensive to change once users hold data — the DB on-disk
+schema and the pack format (which embeds the D-007 content hash in a UNIQUE
+constraint). The CLI/flag/UX surface is cheaper to evolve. A conservative freeze
+(lock the CLI too) and a minimal freeze (data-at-rest only) were both viable.
+Decision: 1.0.0 freezes the data-at-rest contracts only — the DB schema (evolved
+forward via migrations, D-006/D-014), the pack format, and the content-hash
+recipe (D-007, already frozen because it lives in every DB's dedup constraint).
+The CLI/flag/UX surface stays fluid pre-2.0, changed with a deprecation path
+rather than locked as a stable API. Because the port interfaces live under
+`internal/`, threading `context.Context` through them is internal engineering,
+not an API-freeze concern. The maintainer cuts 1.0.0 manually and retains
+authority to adjust this scope up to release; a change after release is a new
+superseding entry.
+Consequences: Users' existing databases and packs are protected across 1.x,
+while the command surface can still improve toward a better UX before it, too, is
+locked at 2.0. The cost is that the CLI carries no stability promise at 1.0.0 —
+scripts binding golearn's flags may need updating within 1.x, mitigated by
+deprecation notices.
+
+## D-014 — Incompatible-schema handling: fail loud, never destroy user data
+
+Status: accepted
+Date: 2026-07-22
+
+Context: During development, an older-than-expected schema triggers a silent
+drop-recreate-reseed on startup (`docs/architecture.md` §Persistence) — total,
+unannounced loss of every profile, session, and attempt. `architecture.md`
+already marks this a dev-only shortcut to remove before public release; the audit
+confirmed it destroys data with no prompt, backup, or log, and that there is no
+"schema newer than expected" branch at all.
+Decision: Replace the drop-recreate-reseed with a fail-loud policy: golearn never
+silently destroys user data. Compatible older schemas are migrated forward in
+place (data-preserving `ALTER`/backfill, each migration atomic with its version
+bump); a genuinely incompatible or newer schema causes golearn to refuse to open
+and print an actionable error directing the user to `golearn db reset --yes` (the
+one explicit, consented destructive path). The `resetSchema` /
+`ensureCompatibleSchema` startup path is deleted.
+Consequences: A user upgrading or downgrading the binary can never lose data to
+an implicit reset; the worst case is a clear refusal with a documented recovery.
+The cost is real migration work — forward-only, atomic migrations plus an
+incompatibility gate — and that destructive recovery becomes an explicit user
+action rather than an automatic convenience.
