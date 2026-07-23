@@ -176,3 +176,47 @@ Consequences: Labels stay correct when choices are shuffled, and presentation
 styling changes without touching authored content or re-hashing. The cost is
 that authors and importers must resist encoding labels or prefixes into packs;
 doing so corrupts both the display and the content hash (D-007).
+
+## D-009 — `AGENTS.md` is the single agent instruction file; `.agents/` the shared config tree
+
+Status: accepted
+Date: 2026-07-23
+
+Context: The repo's agent harness was Claude-specific — instructions in
+`CLAUDE.md`, skills and hooks under `.claude/`. Running a second agent (Codex)
+meant either duplicating the instructions, which drift, or leaving the second
+agent uninstructed. Meanwhile `AGENTS.md` has become the vendor-neutral
+convention that Codex, Cursor, Copilot, Zed and others read, and Codex
+discovers skills at `$REPO_ROOT/.agents/skills` natively.
+Decision: The instructions live in root `AGENTS.md`; `CLAUDE.md` is reduced to
+a single `@AGENTS.md` import line. Skills, hooks and subagents live under
+`.agents/`, and `make agents` (`scripts/agents-link.sh`) generates the
+gitignored vendor links `.claude/skills` and `.claude/agents`. A bare
+`ln -s AGENTS.md CLAUDE.md` was rejected: the import survives a Windows clone
+without Developer Mode and leaves room for Claude-only additions.
+Consequences: One file to edit, and Codex reads both `AGENTS.md` and
+`.agents/skills` with no link at all. The cost is a setup step — a fresh clone
+or worktree must run `make agents` before Claude Code sees skills or subagents,
+which is why the links are generated rather than committed (a committed symlink
+breaks on clones without symlink support).
+
+## D-010 — Reviewer subagents inlined in-repo until the `crew` plugin ships
+
+Status: accepted
+Date: 2026-07-23
+
+Context: Review quality depended on a single self-review step inside the `pr`
+skill, performed by the same session that wrote the code. Dedicated reviewer
+subagents with their own context window catch what the author's session is
+blind to. These reviewers are slated to lift into the shared `dezeat/crew`
+marketplace plugin, so adding them here duplicates a planned artifact.
+Decision: Inline `pr-reviewer` and `architecture-reviewer` under
+`.agents/agents/` now, adapted to this repo's laws, on the same terms as the
+inlined operating model — provisional, and removed when `crew` ships. The two
+reviewers are split by scope deliberately: architecture judges the binding docs,
+the PR reviewer judges correctness and conventions, and neither does the
+other's job.
+Consequences: Reviews get a second, independent context window immediately,
+and the prompts double as an executable statement of the repo's invariants. The
+cost is a known duplication to unwind at extraction, and two more files that
+must track `AGENTS.md` when the standards change.

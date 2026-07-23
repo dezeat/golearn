@@ -33,12 +33,15 @@ Create the PR for the current work, end to end.
 6. No AI attribution or tool mentions anywhere in the PR (see AGENTS.md
    Commits rules). Refer to the agent-instructions file generically if the
    diff touches it.
-7. Before opening, **self-review the diff against the AGENTS.md standards** —
-   the hexagonal layering (no adapter importing another adapter, `domain`
-   stdlib-only, wiring only in `cmd`), determinism (seeded `*rand.Rand`,
-   stable hashing, hash tie-break in export ordering), CGo-free SQLite, and
-   the anti-patterns list — and fix anything that violates them before it
-   reaches review.
+7. Before opening, **delegate the review to the reviewer subagents** rather
+   than self-reviewing in the session that wrote the code: run
+   `architecture-reviewer` (layering, determinism, CGo-free, decision and docs
+   drift) and `pr-reviewer` (correctness, standards, tests, PR conventions) on
+   `git diff main...HEAD`. Run them in parallel — their scopes don't overlap.
+   Fix every "must fix" before the PR is opened; a nit is a judgement call.
+   If the subagents are unavailable (a fresh clone that has not run
+   `make agents`, or a non-Claude agent), self-review against the AGENTS.md
+   standards instead — the same ground, one context window worse.
 8. Open with `gh pr create` (`--base <integration-branch>` for a per-chunk
    PR; the default base is `main`). **Merging differs by target:** a PR to
    `main` is never merged by the agent — only the maintainer merges to
