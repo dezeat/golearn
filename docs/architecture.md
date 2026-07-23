@@ -3,8 +3,8 @@
 The committed technical spec: what golearn is, how it is layered, and the data
 and behaviour contracts that layout enforces. This file describes what is true
 **now**. It is project _facts_; _how to operate_ (workflow, PM, branching) lives
-in `CLAUDE.md`, and _why_ a fact is the way it is lives in `docs/DECISIONS.md`
-(cross-referenced inline as `(D-00N)`). When this file and `CLAUDE.md` disagree
+in `AGENTS.md`, and _why_ a fact is the way it is lives in `docs/DECISIONS.md`
+(cross-referenced inline as `(D-00N)`). When this file and `AGENTS.md` disagree
 on a project fact, this file wins.
 
 ## Purpose

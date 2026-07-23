@@ -1,4 +1,4 @@
-.PHONY: build test vet lint fmt check clean run db-reset hooks
+.PHONY: build test vet lint fmt check clean run db-reset hooks agents
 
 BINARY  := golearn
 BIN_DIR := ./bin
@@ -43,6 +43,10 @@ lint:
 
 ## check: full CI gate (fmt + vet + lint + test)
 check: fmt vet lint test
+
+## agents: link vendor agent config (.claude/skills) to the shared .agents/ tree
+agents:
+	@./scripts/agents-link.sh
 
 ## hooks: install git hooks (pre-commit + pre-push) via core.hooksPath
 hooks:
