@@ -161,12 +161,22 @@ no secrets by design — treat any that appear as a bug.
 3. Consult `docs/architecture.md` for the area you're touching and
    `docs/DECISIONS.md` when a choice seems unclear — never silently
    contradict an accepted decision; supersede it with a new entry.
-4. Read the relevant skill in `.agents/skills/` before an established
-   workflow: `scout` to scan prior art before charting a big idea,
-   `grill-me-with-docs` before design work, `wayfinder` to chart an epic whose
-   route is foggy (open decisions block the story breakdown), `handover` at
-   session end, `parallel` for worktree-based parallel sessions, `pr` when
-   opening a PR.
+4. Read the relevant skill in `.agents/skills/` before an established workflow.
+   The spine, in order — **chart → stress-test → execute → hand over**:
+
+   | Stage        | Skill                                                        |
+   | ------------ | ------------------------------------------------------------ |
+   | Chart        | `scout` (scan prior art on a big or foggy idea) or `wayfinder` (chart an epic whose route is foggy — open decisions block the story breakdown) |
+   | Stress-test  | `grill-me-with-docs` (interrogate the plan against the binding docs and the board until the decisions crystallise) |
+   | Execute      | `lead` (drive the agreed story or epic from board to merged) |
+   | Hand over    | `handover` (post the session's state to the Handovers Discussion) |
+
+   Supporting skills are called from inside that spine, not instead of it:
+   `parallel` when `lead` needs worktrees for genuinely disjoint file-sets, and
+   `pr` whenever a PR is opened.
+
+   Skipping the chart and stress-test stages is how work gets thrown away —
+   executing a foggy route is the expensive failure, not the slow start.
 5. `grep` the repo for similar patterns before writing new abstractions.
 6. Implement the smallest change that satisfies the item; run `make check`
    and ensure green before reporting completion.
@@ -189,10 +199,9 @@ improvising.
 
 ## Operating model
 
-golearn runs on a **GitHub-native operating model** (the same one drafted in
-the `midnight-marble` repo as `docs/crew/OPERATING-MODEL.md`, pending
-extraction into a shared `crew` marketplace plugin). Until that plugin ships,
-the essentials are inlined here:
+golearn runs on a **GitHub-native operating model**. It is stated here, in the
+repo, and nowhere else — the operating model is documentation an agent reads
+while working, not software to be packaged and installed:
 
 - **GitHub is the single source of truth.** Coordination state lives there —
   not in a local file, a chat scroll, or one agent's context window. Lost
@@ -231,9 +240,10 @@ the essentials are inlined here:
   `/handover`) and the non-binding idea parking lot. These are the only
   Discussion categories: design and decision rationale land in-repo
   (`docs/`) with the code, not in a Discussion.
-- **.agents/skills/** — workflow skills: `scout`, `grill-me-with-docs`,
-  `wayfinder`, `handover`, `parallel`, `pr`. Read by Codex natively; linked to
-  `.claude/skills` by `make agents`.
+- **.agents/skills/** — workflow skills. The spine is `scout`/`wayfinder` →
+  `grill-me-with-docs` → `lead` → `handover` (Workflow §4); `parallel` and `pr`
+  are called from inside it. Read by Codex natively; linked to `.claude/skills`
+  by `make agents`.
 - **.agents/agents/** — reviewer subagents: `pr-reviewer` (correctness,
   standards, tests, PR conventions) and `architecture-reviewer` (layering,
   determinism, CGo-free, decision and docs drift). Claude Code only, linked to

@@ -200,23 +200,25 @@ or worktree must run `make agents` before Claude Code sees skills or subagents,
 which is why the links are generated rather than committed (a committed symlink
 breaks on clones without symlink support).
 
-## D-010 — Reviewer subagents inlined in-repo until the `crew` plugin ships
+## D-010 — Review is delegated to subagents, split by scope
 
 Status: accepted
 Date: 2026-07-23
 
 Context: Review quality depended on a single self-review step inside the `pr`
-skill, performed by the same session that wrote the code. Dedicated reviewer
-subagents with their own context window catch what the author's session is
-blind to. These reviewers are slated to lift into the shared `dezeat/crew`
-marketplace plugin, so adding them here duplicates a planned artifact.
-Decision: Inline `pr-reviewer` and `architecture-reviewer` under
-`.agents/agents/` now, adapted to this repo's laws, on the same terms as the
-inlined operating model — provisional, and removed when `crew` ships. The two
-reviewers are split by scope deliberately: architecture judges the binding docs,
-the PR reviewer judges correctness and conventions, and neither does the
-other's job.
-Consequences: Reviews get a second, independent context window immediately,
-and the prompts double as an executable statement of the repo's invariants. The
-cost is a known duplication to unwind at extraction, and two more files that
-must track `AGENTS.md` when the standards change.
+skill, performed by the same session that wrote the code — the session least
+able to see what it missed. A reviewer with its own context window reads the
+diff cold.
+Decision: Two subagents under `.agents/agents/`, split by scope so neither does
+the other's job: `architecture-reviewer` judges the change against the binding
+docs (layering, determinism, CGo-free, decision and docs drift);
+`pr-reviewer` judges correctness, standards, tests and PR conventions. The `pr`
+skill delegates to both and falls back to self-review only when they are
+unavailable. A single combined reviewer was rejected: one prompt covering both
+scopes dilutes each, and the architecture pass needs to read the binding docs
+in full before judging anything.
+Consequences: Reviews get an independent context window, and the two prompts
+double as an executable statement of the repo's invariants — which is also the
+cost, since they must track `AGENTS.md` whenever the standards change. Subagents
+are Claude Code-only; an agent without them falls back to self-review, so the
+`pr` skill must keep that path working.
