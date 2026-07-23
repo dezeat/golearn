@@ -35,7 +35,20 @@ link() {
 
     mkdir -p "$link_dir"
     # Relative target so the link survives clones at any absolute path.
-    link_rel="$(realpath --relative-to="$link_dir" "$target")"
+    # `realpath --relative-to` is GNU-only; BSD/macOS falls back to walking up
+    # one `..` per path segment, which is exact because both paths are
+    # repo-root-relative.
+    if realpath --relative-to=. . >/dev/null 2>&1; then
+        link_rel="$(realpath --relative-to="$link_dir" "$target")"
+    else
+        local up=""
+        local segment
+        for segment in ${link_dir//\// }; do
+            [ "$segment" = "." ] && continue
+            up="../$up"
+        done
+        link_rel="${up}${target}"
+    fi
     ln -sfn "$link_rel" "$link_path"
     echo "link  $link_path -> $link_rel"
 }
