@@ -10,7 +10,7 @@ Create the PR for the current work, end to end.
 1. Work must be on a feature branch (`feat/<area>-<slug>`, `fix/…`,
    `chore/…`, `ci/…`, `docs/…` — `<area>` is a hexagonal seam:
    `domain`/`app`/`adapters`/`cmd`/`tui`/`docs` when it applies).
-   **Target depends on the branching model (CLAUDE.md Workflow §8):** by
+   **Target depends on the branching model (AGENTS.md Workflow §8):** by
    default the PR targets `main`; when the work is part of an epic/multi-ticket
    story using an **integration branch**, the per-chunk PR targets that
    integration branch instead, and only the final assembled PR targets `main`.
@@ -30,15 +30,18 @@ Create the PR for the current work, end to end.
 5. Body follows `.github/PULL_REQUEST_TEMPLATE.md` exactly (Summary, Changes,
    Verification, Decisions, Checklist). Fill every section; write "none"
    rather than deleting one.
-6. No AI attribution or tool mentions anywhere in the PR (see CLAUDE.md
+6. No AI attribution or tool mentions anywhere in the PR (see AGENTS.md
    Commits rules). Refer to the agent-instructions file generically if the
    diff touches it.
-7. Before opening, **self-review the diff against the CLAUDE.md standards** —
-   the hexagonal layering (no adapter importing another adapter, `domain`
-   stdlib-only, wiring only in `cmd`), determinism (seeded `*rand.Rand`,
-   stable hashing, hash tie-break in export ordering), CGo-free SQLite, and
-   the anti-patterns list — and fix anything that violates them before it
-   reaches review.
+7. Before opening, **delegate the review to the reviewer subagents** rather
+   than self-reviewing in the session that wrote the code: run
+   `architecture-reviewer` (layering, determinism, CGo-free, decision and docs
+   drift) and `pr-reviewer` (correctness, standards, tests, PR conventions) on
+   `git diff main...HEAD`. Run them in parallel — their scopes don't overlap.
+   Fix every "must fix" before the PR is opened; a nit is a judgement call.
+   If the subagents are unavailable (a fresh clone that has not run
+   `make agents`, or a non-Claude agent), self-review against the AGENTS.md
+   standards instead — the same ground, one context window worse.
 8. Open with `gh pr create` (`--base <integration-branch>` for a per-chunk
    PR; the default base is `main`). **Merging differs by target:** a PR to
    `main` is never merged by the agent — only the maintainer merges to
@@ -56,7 +59,7 @@ Create the PR for the current work, end to end.
 
 ## Integration-branch flow (epics / multi-ticket stories)
 
-Use only when the work warrants an integration branch (CLAUDE.md Workflow
+Use only when the work warrants an integration branch (AGENTS.md Workflow
 §8) — most PRs skip this and target `main` directly.
 
 - **Cut once, off `main`, and push it:** `git checkout -b <feat/area-slug>
@@ -66,7 +69,7 @@ Use only when the work warrants an integration branch (CLAUDE.md Workflow
   it; each such PR follows the Mechanics above with the integration branch as
   base.
 - **Lead reviews and merges each per-chunk PR into the integration branch.**
-  Self-review the chunk diff against the CLAUDE.md standards (§7); fix must-fix
+  Self-review the chunk diff against the AGENTS.md standards (§7); fix must-fix
   findings; then the coordinating author/lead merges the per-chunk PR into the
   integration branch and rebases in-flight sibling branches onto the new
   integration tip. These per-chunk merges are _not_ gated on the maintainer —

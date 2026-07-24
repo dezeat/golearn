@@ -1,6 +1,6 @@
 #!/bin/bash
 # PreToolUse hook: refuse Edit/Write/MultiEdit while the target file's repo is
-# on the protected `main` branch. Enforces CLAUDE.md workflow §7 — every change
+# on the protected `main` branch. Enforces AGENTS.md workflow §7 — every change
 # starts on a feature branch or worktree *before* any edits.
 #
 # A detached HEAD (worktree mid-operation, rebase) reports no branch name and is
@@ -18,7 +18,7 @@ cat <<'JSON'
   "hookSpecificOutput": {
     "hookEventName": "PreToolUse",
     "permissionDecision": "deny",
-    "permissionDecisionReason": "On the protected `main` branch. Per CLAUDE.md workflow §7, create a feature branch (git checkout -b feat/...) or a worktree (parallel skill) before editing, then retry."
+    "permissionDecisionReason": "On the protected `main` branch. Per AGENTS.md workflow §7, create a feature branch (git checkout -b feat/...) or a worktree (parallel skill) before editing, then retry."
   }
 }
 JSON

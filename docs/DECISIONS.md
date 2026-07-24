@@ -176,3 +176,49 @@ Consequences: Labels stay correct when choices are shuffled, and presentation
 styling changes without touching authored content or re-hashing. The cost is
 that authors and importers must resist encoding labels or prefixes into packs;
 doing so corrupts both the display and the content hash (D-007).
+
+## D-009 — `AGENTS.md` is the single agent instruction file; `.agents/` the shared config tree
+
+Status: accepted
+Date: 2026-07-23
+
+Context: The repo's agent harness was Claude-specific — instructions in
+`CLAUDE.md`, skills and hooks under `.claude/`. Running a second agent (Codex)
+meant either duplicating the instructions, which drift, or leaving the second
+agent uninstructed. Meanwhile `AGENTS.md` has become the vendor-neutral
+convention that Codex, Cursor, Copilot, Zed and others read, and Codex
+discovers skills at `$REPO_ROOT/.agents/skills` natively.
+Decision: The instructions live in root `AGENTS.md`; `CLAUDE.md` is reduced to
+a single `@AGENTS.md` import line. Skills, hooks and subagents live under
+`.agents/`, and `make agents` (`scripts/agents-link.sh`) generates the
+gitignored vendor links `.claude/skills` and `.claude/agents`. A bare
+`ln -s AGENTS.md CLAUDE.md` was rejected: the import survives a Windows clone
+without Developer Mode and leaves room for Claude-only additions.
+Consequences: One file to edit, and Codex reads both `AGENTS.md` and
+`.agents/skills` with no link at all. The cost is a setup step — a fresh clone
+or worktree must run `make agents` before Claude Code sees skills or subagents,
+which is why the links are generated rather than committed (a committed symlink
+breaks on clones without symlink support).
+
+## D-010 — Review is delegated to subagents, split by scope
+
+Status: accepted
+Date: 2026-07-23
+
+Context: Review quality depended on a single self-review step inside the `pr`
+skill, performed by the same session that wrote the code — the session least
+able to see what it missed. A reviewer with its own context window reads the
+diff cold.
+Decision: Two subagents under `.agents/agents/`, split by scope so neither does
+the other's job: `architecture-reviewer` judges the change against the binding
+docs (layering, determinism, CGo-free, decision and docs drift);
+`pr-reviewer` judges correctness, standards, tests and PR conventions. The `pr`
+skill delegates to both and falls back to self-review only when they are
+unavailable. A single combined reviewer was rejected: one prompt covering both
+scopes dilutes each, and the architecture pass needs to read the binding docs
+in full before judging anything.
+Consequences: Reviews get an independent context window, and the two prompts
+double as an executable statement of the repo's invariants — which is also the
+cost, since they must track `AGENTS.md` whenever the standards change. Subagents
+are Claude Code-only; an agent without them falls back to self-review, so the
+`pr` skill must keep that path working.

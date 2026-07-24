@@ -6,7 +6,7 @@ argument-hint: "What will the next session be used for?"
 
 Write a handover summarising the current conversation so a fresh agent can
 continue the work, and post it as a **GitHub Discussion** in the
-**Handovers** category. Handovers live on GitHub, not in files (CLAUDE.md
+**Handovers** category. Handovers live on GitHub, not in files (AGENTS.md
 Operating model): a gitignored handover file is invisible on a second machine
 and cannot serve the cross-machine continuity it exists for.
 
