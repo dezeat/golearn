@@ -46,7 +46,7 @@ adapter that depends only on ports, but you seem to have it reaching into
 
 ### Challenge against the layering law
 
-The hexagonal layering is law (CLAUDE.md): `domain` imports only stdlib,
+The hexagonal layering is law (AGENTS.md): `domain` imports only stdlib,
 `ports` are interfaces only, `app` never imports adapters, an adapter never
 imports another adapter, and all wiring happens in the `cmd` composition
 root. When a plan smears logic across a boundary — putting a use case in an

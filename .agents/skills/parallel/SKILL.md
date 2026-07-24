@@ -17,15 +17,17 @@ the Project board so the work stays coordinated and observable.
   TUI-only), or `docs`.
 - One Claude Code session per worktree, started in that directory.
 - Bind each worktree to its GitHub issue: the active issue is the session's
-  authoritative scope (CLAUDE.md Workflow §2). Note the issue number in the
+  authoritative scope (AGENTS.md Workflow §2). Note the issue number in the
   branch slug or the opening handover so status stays on the board.
 
 ## Creating a workstream
 
 1. Make sure `main` is clean and up to date; branch worktrees off `main`.
 2. `git worktree add .worktrees/<slug> -b <branch>`
-3. Run `make build` inside the worktree to prime the module cache and confirm
-   the tree compiles before work starts.
+3. Run `make agents && make build` inside the worktree — the first relinks the
+   gitignored vendor agent-config links (a fresh worktree has none, so skills
+   are invisible to Claude Code without it), the second primes the module cache
+   and confirms the tree compiles before work starts.
 4. Tell the user to start the parallel session with `claude` from
    `.worktrees/<slug>/`, and suggest writing a `handover` first if that
    session needs context from this one.
@@ -35,7 +37,7 @@ the Project board so the work stays coordinated and observable.
 - Only parallelize **independent** workstreams. The hexagonal layer
   boundaries (`domain` / `app` / `adapters` / `cmd`) are the natural seams;
   two sessions must never edit the same package. Recall the layering is law
-  (CLAUDE.md): an adapter never imports another adapter, so an adapter-level
+  (AGENTS.md): an adapter never imports another adapter, so an adapter-level
   split (e.g. `sqlite` vs `tui`) is genuinely independent.
 - Changes to a `ports` interface or a `domain` type land on `main` first —
   dependent workstreams rebase onto the new tip, they don't guess.
