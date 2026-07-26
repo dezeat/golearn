@@ -155,7 +155,8 @@ no secrets by design — treat any that appear as a bug.
 1. On a fresh clone: `make agents` (link vendor agent config), `make build`,
    and `make hooks` (git hooks).
 2. **Identify the active unit of work.** Epics / stories / tasks live as
-   **GitHub Issues on the Project board** — the board is the single source of
+   **GitHub Issues on the Project boards** (release board for release-gating
+   work, maintenance & meta for the rest) — the board is the single source of
    status. When an issue is in flight, that issue is the authoritative scope;
    don't silently exceed its acceptance criteria.
 3. Consult `docs/architecture.md` for the area you're touching and
@@ -199,9 +200,12 @@ improvising.
 
 ## Operating model
 
-golearn runs on a **GitHub-native operating model**. It is stated here, in the
-repo, and nowhere else — the operating model is documentation an agent reads
-while working, not software to be packaged and installed:
+golearn runs on a **GitHub-native operating model**. The binding basics are
+stated here; the full workflow convention — state model, authority envelope,
+roles, boards, handoff evidence — lives in **`docs/OPERATING-MODEL.md`**
+(recommended default for the maintainer and agent sessions, deliberately
+optional for anyone else). The operating model is documentation an agent
+reads while working, not software to be packaged and installed:
 
 - **GitHub is the single source of truth.** Coordination state lives there —
   not in a local file, a chat scroll, or one agent's context window. Lost
@@ -209,8 +213,14 @@ while working, not software to be packaged and installed:
   failure mode.
 - **The board is status.** An issue's column _is_ its state. No second source
   of truth — no body-checklist mirror of structure.
-- **Hierarchy is native sub-issues**, never body checklists. Labels carry
-  only **type** (`epic`/`story`/`task`) and area — not structure.
+- **Hierarchy is native sub-issues**, never body checklists — and never
+  labels. Issue/PR labels follow the routing & review taxonomy
+  (`type:*`, `area:*`) in `docs/OPERATING-MODEL.md` §6: labels describe the
+  work's technical shape and review needs, never hierarchy, workflow state,
+  or priority. Workflow state lives in the Project boards' **Status** field
+  (canonical states in `docs/OPERATING-MODEL.md` §2). Legacy
+  `epic`/`story`/`task` and `wayfinder:*` labels remain on historical items
+  only — new work never mints them.
 - **What stays in the repo vs GitHub** is decided by one question: _does an
   agent read it as a file while working the code?_ In-repo (binding, renders
   on github.com, in the agent's context): `AGENTS.md`, `docs/architecture.md`,
@@ -233,9 +243,14 @@ while working, not software to be packaged and installed:
 - **docs/DECISIONS.md** — append-only decision log; entry criteria and format
   are at the top of the file. A changed mind adds a new entry marked
   `superseded by`; it never edits an old one.
-- **GitHub Issues + Project board** — the PM hierarchy (epics / stories /
+- **docs/OPERATING-MODEL.md** — the recommended workflow convention: state
+  model, authority envelope, roles, boards, labels, wayfinder mapping.
+  Convention, not contract — binding rules stay in this file.
+- **GitHub Issues + Project boards** — the PM hierarchy (epics / stories /
   tasks, as native sub-issues) and its live status; the active issue is a
-  session's authoritative scope.
+  session's authoritative scope. Two boards: **golearn — v1.0.0 release**
+  (everything gating the release) and **golearn — maintenance & meta**
+  (standing upkeep + parked post-1.0 epics, `Horizon: Later`).
 - **Handovers / Ideas Discussions** (GitHub) — session handovers (posted by
   `/handover`) and the non-binding idea parking lot. These are the only
   Discussion categories: design and decision rationale land in-repo

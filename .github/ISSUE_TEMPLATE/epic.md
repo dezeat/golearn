@@ -2,7 +2,6 @@
 name: Epic
 about: A large body of work spanning multiple stories
 title: "[Epic] "
-labels: epic
 ---
 
 ## Goal
