@@ -316,3 +316,96 @@ an implicit reset; the worst case is a clear refusal with a documented recovery.
 The cost is real migration work — forward-only, atomic migrations plus an
 incompatibility gate — and that destructive recovery becomes an explicit user
 action rather than an automatic convenience.
+
+## D-015 — Forge ships as a second binary from a nested addon module; the offline law is binary-scoped
+
+Status: accepted
+Date: 2026-07-26
+
+Context: Epic #66 adds provider-backed question generation — the first
+network-capable functionality in a project whose core principle is "no network
+path by design". Provider SDKs in the root module would break the
+four-runtime-dependency ceiling, and a build tag cannot prevent that: tagged
+files still land their imports in the module graph and `go.sum`. Mixing
+generation into the `golearn` binary would put a network path into the offline
+product (#101, #66).
+Decision: Ship two binaries — `golearn` (the existing offline Core + TUI,
+unchanged) and `golearn-forge` (the same application plus the authoring
+extension). Forge is a nested add-on module with its own `go.mod` — expected
+under `addons/forge`, renaming the map's provisional `addons/authoring` — and
+it owns every provider SDK, HTTP client, and retrieval
+dependency, and imports Core/shared-TUI contracts strictly one-way — the Core
+never imports or knows Forge. A single shared module and build-tag isolation
+were rejected for the reasons above. The offline law is rescoped from
+key-scoped to binary-scoped: `golearn` retains no network path at all; Forge's
+network activity is authoring-time only, and import, selection, practice,
+export, and stats stay offline in both binaries. The binary scoping matters
+because a local provider endpoint (Ollama) needs no API key — "no key
+configured ⇒ no network" was never the real boundary.
+Consequences: The core `go.mod` stays at four runtime deps, CGo-free and
+cross-compiling, and a `golearn`-only install behaves exactly as 0.x. The cost
+is two modules kept in step (a local `go.work` for joint development), a second
+release artifact, and the discipline that generated output re-enters the same
+deterministic import pipeline (D-004, D-005, D-007), whose guarantees are
+unchanged.
+`docs/architecture.md` gains its authoring-boundary section — and `AGENTS.md`
+its amended offline principle and network anti-pattern — when the Forge
+module actually lands; those files describe what is true now, so until then
+this entry is the binding statement.
+
+## D-016 — Generated packs are accepted at pack level; trust comes from the generation pipeline
+
+Status: accepted
+Date: 2026-07-26
+
+Context: Epic #66 originally required mandatory human review before generated
+content enters the store, leaving open where the gate sits (#102): per
+question, per pack, or only at publish. A 20-question pack behind a
+per-question gate is 20 judgements — friction that pushes users back to manual
+authoring — while gating only at publish would let unreviewed content into the
+local practice corpus and sit badly with all-or-nothing import (D-004).
+Decision: The gate is pack-level. Generation returns one complete, validated
+pack with exactly the requested number of questions; the user's actions are
+accept ("Add to library", which invokes the standard atomic import path
+internally), regenerate, or discard. Per-question inspection or editing is an
+optional escape hatch, never a required step. Nothing is imported merely
+because generation finished, and nothing is auto-published to the canonical
+pack repository. Mandatory per-question review and the publish-only gate were
+rejected.
+Consequences: Trust moves from human inspection to the pipeline — grounding in
+retrieved evidence, deterministic validation, independent verification,
+critique, near-duplicate gating, bounded repair, and fail-closed behaviour
+when the pipeline cannot deliver. Those stages are therefore V1-mandatory:
+cutting them for scope reopens this decision, because they are what replaced
+the human gate. Unresolved drafts must be explicitly resolved (view / add /
+discard) before new generation starts — the no-junk rule.
+
+## D-017 — Pack schema evolves via 0.2.0, frozen as 1.0.0 at release; generation metadata stays out of the hash
+
+Status: accepted
+Date: 2026-07-26
+
+Context: Forge-generated packs need pack-level metadata — what was requested
+and where content came from — that the current `0.1.0` pack schema does not
+carry. D-013 freezes data-at-rest contracts at product 1.0.0, and the D-007
+hash recipe is already frozen (D-013), so schema evolution needs an explicit
+staging plan rather than ad-hoc field growth.
+Decision: Introduce a backwards-compatible pack schema `0.2.0` during Forge
+implementation: `0.1.x` packs remain importable, Forge exports `0.2.0`, and
+the importer/exporter carry an explicit compatibility policy with migration
+tests. `0.2.0` stays deliberately adjustable through prototype and evaluation
+feedback; at the product V1 release its final shape is promoted and frozen as
+pack schema `1.0.0`. New pack-level fields split into a structured
+`generation_spec` (every user-visible, content-shaping input: topic, optional
+description, requested count, difficulty, style/mode, language) and durable
+provenance (generation time, provider/model identity, source references).
+Excluded from packs categorically: secrets, raw prompts and raw model/tool
+output, retry/repair counters, and provider request mechanics — those live
+only in minimal local run history. The D-007 hash recipe is untouched:
+pack-level metadata never feeds the per-question content hash.
+Consequences: Forge-capable packs exist before the freeze, with room to learn
+from real prototype output; product version and schema major are intentionally
+decoupled until release. The cost is a compatibility matrix to test and an
+intent (style/mode) taxonomy that must be evaluation-gated before it freezes.
+Dedup behaviour is identical across `0.1.x` and `0.2.0` imports because the
+hash inputs do not change.
