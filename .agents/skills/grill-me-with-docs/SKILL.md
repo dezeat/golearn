@@ -31,7 +31,7 @@ golearn's binding context (read it before the first question):
   binding.
 - `docs/DECISIONS.md` — append-only decision log; the `D-NNN` format and the
   entry criteria are defined at the top of that file.
-- **GitHub Issues + Project board** — the roadmap: epics / stories / tickets
+- **GitHub Issues + Project boards** — the roadmap: epics / stories / tickets
   as native sub-issues, with the board column as their live status. The
   active issue is the session's authoritative scope.
 
