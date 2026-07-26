@@ -155,7 +155,8 @@ no secrets by design — treat any that appear as a bug.
 1. On a fresh clone: `make agents` (link vendor agent config), `make build`,
    and `make hooks` (git hooks).
 2. **Identify the active unit of work.** Epics / stories / tasks live as
-   **GitHub Issues on the Project board** — the board is the single source of
+   **GitHub Issues on the Project boards** (release board for release-gating
+   work, maintenance & meta for the rest) — the board is the single source of
    status. When an issue is in flight, that issue is the authoritative scope;
    don't silently exceed its acceptance criteria.
 3. Consult `docs/architecture.md` for the area you're touching and
@@ -209,8 +210,16 @@ while working, not software to be packaged and installed:
   failure mode.
 - **The board is status.** An issue's column _is_ its state. No second source
   of truth — no body-checklist mirror of structure.
-- **Hierarchy is native sub-issues**, never body checklists. Labels carry
-  only **type** (`epic`/`story`/`task`) and area — not structure.
+- **Hierarchy is native sub-issues**, never body checklists — and never
+  labels. Issue/PR labels follow the portfolio routing & review taxonomy
+  (`type:*`, `area:*`) defined in bridge's
+  `docs/standards/ISSUE-ROUTING-AND-REVIEW-LABELS.md`: labels describe the
+  work's technical shape and review needs, never hierarchy, workflow state,
+  or priority. Workflow state lives in the Project board's **Status** field
+  (canonical statuses per bridge's `docs/crew/PROJECT-BOARD.md`). The
+  `wayfinder:*` labels are skill-internal planning markers, exempt from the
+  routing taxonomy; legacy `epic`/`story`/`task` labels remain on historical
+  items only.
 - **What stays in the repo vs GitHub** is decided by one question: _does an
   agent read it as a file while working the code?_ In-repo (binding, renders
   on github.com, in the agent's context): `AGENTS.md`, `docs/architecture.md`,
@@ -233,9 +242,11 @@ while working, not software to be packaged and installed:
 - **docs/DECISIONS.md** — append-only decision log; entry criteria and format
   are at the top of the file. A changed mind adds a new entry marked
   `superseded by`; it never edits an old one.
-- **GitHub Issues + Project board** — the PM hierarchy (epics / stories /
+- **GitHub Issues + Project boards** — the PM hierarchy (epics / stories /
   tasks, as native sub-issues) and its live status; the active issue is a
-  session's authoritative scope.
+  session's authoritative scope. Two boards: **golearn — v1.0.0 release**
+  (everything gating the release) and **golearn — maintenance & meta**
+  (standing upkeep + parked post-1.0 epics, `Horizon: Later`).
 - **Handovers / Ideas Discussions** (GitHub) — session handovers (posted by
   `/handover`) and the non-binding idea parking lot. These are the only
   Discussion categories: design and decision rationale land in-repo

@@ -23,7 +23,7 @@ This repo is **already partly charted**, so don't start from fog that has alread
 - **`docs/DECISIONS.md`** — the binding decision log (D-001…). §"When a decision
   earns an entry" is the bar. A ticket that re-opens an accepted decision must
   supersede it with a new entry, never silently contradict it.
-- **GitHub Issues + the phase Project board** — the epic/story/ticket hierarchy and
+- **GitHub Issues + the release Project board** — the epic/story/ticket hierarchy and
   its live status. The active epic is the map's frame; its body may already carry
   the destination, the central tension, and the open questions (e.g. epic #66).
 
@@ -87,7 +87,7 @@ Each ticket is a **child issue** of the map; the tracker's issue id is its ident
 <the decision or investigation this ticket resolves>
 ```
 
-Each ticket carries a `wayfinder:<type>` label — one of `research`, `prototype`, `grilling`, `task` (see [Ticket Types](#ticket-types)).
+Each ticket carries a `wayfinder:<type>` label — one of `research`, `prototype`, `grilling`, `task` (see [Ticket Types](#ticket-types)). These are skill-internal planning markers; when a ticket graduates into routed delivery work, it additionally gets the portfolio routing labels (`type:*`, `area:*` — see AGENTS.md, Operating model).
 
 A session **claims** a ticket by assigning it to the dev driving the map, **first**, before any work, so concurrent sessions skip it. That assignee _is_ the claim: an open, unassigned ticket is unclaimed.
 
@@ -131,7 +131,8 @@ Used by this skill on `dezeat/golearn`. The **map** is a single issue whose tick
 
 - **Map**: one issue labelled `wayfinder:map`, holding the Destination / Notes /
   Decisions-so-far / Not-yet-specified / Out-of-scope body.
-  `gh issue create --label wayfinder:map`. Add it to the epic's phase board:
+  `gh issue create --label wayfinder:map`. Add it to the repo's release board
+  (**golearn — v1.0.0 release**):
   `gh project item-add <board#> --owner dezeat --url <url>`.
 
 - **Child ticket**: a **native GitHub sub-issue** of the map. The `addSubIssue`

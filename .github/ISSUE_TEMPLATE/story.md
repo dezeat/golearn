@@ -2,7 +2,6 @@
 name: Story
 about: A shippable slice of an epic; groups tickets
 title: "[Story] "
-labels: story
 ---
 
 Parent epic: #
