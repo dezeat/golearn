@@ -74,13 +74,33 @@ type Run struct {
 // then deletes it, "Discard" deletes it, and a crash leaves it recoverable but
 // never visible as library content. No draft is created during an active run,
 // so a cancellation cannot leave a half-built one behind.
+//
+// The generation spec and provenance are read *from the pack*, not stored
+// beside it. A 0.2.0 pack already carries both (D-017), so a second copy on the
+// draft could disagree with the header a user is previewing — and the copy that
+// gets imported is the one inside the pack. One source of truth means a draft
+// is a valid generated pack by construction.
 type Draft struct {
-	ID         int64
-	RunID      int64
-	Pack       coredomain.Pack
-	Spec       GenerationSpec
-	Provenance Provenance
-	CreatedAt  time.Time
+	ID        int64
+	RunID     int64
+	Pack      coredomain.Pack
+	CreatedAt time.Time
+}
+
+// Spec returns the generation spec the pack carries, and whether it has one.
+func (d Draft) Spec() (GenerationSpec, bool) {
+	if d.Pack.GenerationSpec == nil {
+		return GenerationSpec{}, false
+	}
+	return *d.Pack.GenerationSpec, true
+}
+
+// Provenance returns the provenance the pack carries, and whether it has any.
+func (d Draft) Provenance() (Provenance, bool) {
+	if d.Pack.Provenance == nil {
+		return Provenance{}, false
+	}
+	return *d.Pack.Provenance, true
 }
 
 // QuestionCount reports how many questions the draft would import.
@@ -89,6 +109,10 @@ func (d Draft) QuestionCount() int { return len(d.Pack.Questions) }
 // Summary renders a one-line, disclosure-safe description for the draft
 // screen. It names the model but never the endpoint that served it.
 func (d Draft) Summary() string {
+	model := "unknown model"
+	if p, ok := d.Provenance(); ok {
+		model = p.Model.String()
+	}
 	return fmt.Sprintf("%s — %d questions, %s",
-		d.Pack.Topic.Name, len(d.Pack.Questions), d.Provenance.Model)
+		d.Pack.Topic.Name, len(d.Pack.Questions), model)
 }

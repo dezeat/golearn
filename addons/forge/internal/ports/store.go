@@ -48,6 +48,10 @@ type RunStore interface {
 // nothing in the core's practice path can see it.
 type DraftStore interface {
 	// SaveDraft writes a validated draft atomically and returns its id.
+	//
+	// Implementations must reject a draft whose pack is not a valid generated
+	// pack, and must reject one whose run has not succeeded. The no-junk rule
+	// is only checkable if the store refuses to hold junk in the first place.
 	SaveDraft(ctx context.Context, draft domain.Draft) (int64, error)
 
 	// ListDrafts returns all unresolved drafts, oldest first — the order the

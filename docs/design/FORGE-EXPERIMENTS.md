@@ -306,6 +306,51 @@ These settled the shape of #125 before any implementation was committed.
   is only as trustworthy as its ability to tell "the guard held" from "the
   experiment never ran"** — the same failure mode as A-1, one level up.
 
+### A-11 · Mutation test — the run, draft and migration-isolation guards
+
+- **Question.** #121's acceptance rests on claims that are easy to state and
+  easy to lose: Forge never touches core tables, a draft is never library
+  content, only a succeeded run may produce one, and acceptance runs the
+  standard import. Do the guards hold them?
+- **Method.** Ten mutations of `addons/forge`, each reverted, control after.
+- **Result.** **All ten caught.**
+
+  | # | Mutation | Guard that fired |
+  | --- | --- | --- |
+  | 1 | a Forge migration `ALTER`s the core `questions` table | `TestForgeMigrationsNeverTouchCoreTables` |
+  | 2 | Forge writes into the core's migration registry | the whole store suite — see below |
+  | 3 | a draft accepted from a non-succeeded run | `TestOnlyASucceededRunMayProduceADraft` (all three states) |
+  | 4 | draft pack no longer validated | `TestDraftMustBeAValidGeneratedPack` |
+  | 5 | generated-confidence gate neutered | `TestDraftMustBeAValidGeneratedPack/{omits,claims hand-authored}` |
+  | 6 | provenance no longer required | `TestDraftMustBeAValidGeneratedPack/missing_provenance` |
+  | 7 | `DeleteDraft` stops being idempotent | `TestDeletingADraftIsIdempotent`, `TestReacceptingADraftDuplicatesNothing` |
+  | 8 | acceptance deletes the draft *before* importing | all three acceptance tests |
+  | 9 | drafts listed newest-first | `TestDraftsListOldestFirst` |
+  | 10 | `FinishRun` accepts "running" as terminal | `TestFinishingARunRequiresATerminalStatus` |
+
+- **Mutation 2 reproduced A-7's P3 in situ, which is the point of running it.**
+  Pointing Forge at `schema_migrations` did not produce a clash or an error —
+  Forge's version 1 was already recorded by the core, so Forge's migration was
+  treated as applied and **silently skipped**. Its tables were never created,
+  and fifteen tests failed on missing tables rather than on anything resembling
+  the actual cause. In production the same mechanism runs the other way and is
+  worse: it is the *core's* next migration that gets skipped, silently, with
+  every table still present. The scratch probe and the real code agree.
+- **A bug the tests found, not the mutations.** The end-to-end lifecycle test
+  asserted that an accepted draft's questions reach the library carrying
+  generated provenance. It failed: the questions arrived at confidence **1.0**,
+  indistinguishable from hand-authored content, because the importer's default
+  is 1.0 and the draft simply omitted the field. D-017 requires generated
+  questions to sit strictly below the manual default. The rule now lives in
+  `SaveDraft` rather than in the generator: a generator that forgets is a bug
+  that ships, whereas a store that refuses is a bug that cannot. Mutation 5
+  keeps it honest.
+- **A note on invalid mutations, again.** Mutation 5's first form
+  (`if false {`) left a declared-and-unused variable and did not compile — the
+  A-10 failure mode exactly. It was rewritten to an unreachable threshold
+  (`*c > 2.0`) before it counted. Recording it a second time because the
+  temptation each time is to read the build failure as a caught mutation.
+
 ---
 
 ## Part B — Provider & model benchmarks
