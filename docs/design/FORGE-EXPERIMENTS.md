@@ -942,6 +942,7 @@ rather than inferred.
 | forge binary size | the cost of the authoring capability | **15.4 MiB** (16,183,371 B) — **+26%**, the whole of it stdlib `net/http` and the Forge packages; zero third-party dependencies |
 | core direct dependencies | the four-dependency ceiling; guarded by `internal/boundary` | **4** |
 | `net/http` in core graph | the offline law's leak detector | **absent** |
+| forge third-party direct dependencies | the addon owns every provider SDK and HTTP client — so how many did it need? | **0**. Four provider adapters, a research adapter, a similarity backend and the generation pipeline, on stdlib alone. `net/http` is present in the Forge binary and absent from the core, which is D-015's whole claim in two lines of `go list` |
 | `make check` wall time | the gate must stay fast enough to be run | **6.8 s** (6.71 / 6.77 / 6.83 over three runs), 477 assertions across both modules under `GOWORK=off` |
 | similarity scan vs corpus size | **tests the no-vector-index claim** | one scan **79.5 ms** at 10k x 768; one 20-candidate pack pass **1.63 s**. Linear; cold ~ warm. **Knee ~6,000** questions/topic against a 1 s pack budget. Falsifies D-020's "single-digit ms" estimate (A-17, D-021) |
 | embedding bytes per 1000 questions | validates BLOB-in-SQLite | **3.98 MB** (4,177,920 B) at 768 dims — 1.36x the 3.07 MB raw float32 payload, the remainder SQLite page and overflow overhead. Bounded by `TestEmbeddingFootprintPerThousandQuestions` |
