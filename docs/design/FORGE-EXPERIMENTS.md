@@ -160,6 +160,61 @@ These settled the shape of #125 before any implementation was committed.
   provider is added, which is exactly when it is most needed. It is in place
   before #123 introduces real credentials, rather than after.
 
+### A-7 · Where do Forge's migrations live, and what does the core do with them?
+
+- **Question.** Forge extends the *existing* database (FORGE.md §8). The core
+  tracks schema state in `schema_migrations`, keyed by a position-derived
+  version (`version := i + 1` in `internal/adapters/sqlite/db.go`). Does Forge
+  append to that counter, or own a separate one? And what does today's core
+  binary actually do when it opens a database a Forge binary has already
+  extended — #121's first acceptance criterion turns on that answer.
+- **Hypothesis (going in).** A shared counter is the simpler design and the
+  core already fails loud on an unrecognised schema (D-014), so the shared
+  counter is safe.
+- **Method.** Four throwaway probes against the real `Open()` path, each
+  seeding a database, mutating it the way a Forge binary would, reopening it
+  with the unmodified core, and reading back what survived. The probe was
+  deleted after the observation; the regression tests that replace it are
+  named below.
+- **Result.** **Hypothesis falsified twice, in different places.**
+
+  | # | Scenario | Observed |
+  | --- | --- | --- |
+  | P1 | Forge owns `forge_schema_migrations`; adds only new tables | core reopens fine, core rows intact, Forge tables untouched |
+  | P2 | Forge appends version 3 to the shared `schema_migrations` | **core reopens silently** — there is no newer-schema gate at all |
+  | P3 | Forge claimed v3; the core later ships its own v3 | **the core's own migration is silently skipped** — `APPLIED=false`, no error |
+  | P4 | Legacy tables without `users` (the pre-existing branch) | **1 row in → 0 rows out, no error, no prompt** |
+
+- **What it locked in.**
+  1. **Forge gets its own registry, `forge_schema_migrations`.** P3 is the
+     falsifier for the shared counter and it is the worst class of bug
+     available here: the core would *believe* it had migrated. The existence
+     check is per-version (`WHERE version = ?`), so a version number another
+     module already claimed reads as "already applied". A shared counter is
+     not merely untidy, it is silently lossy the first time the two modules
+     ship a migration each.
+  2. **A Forge-extended database is *compatible*, not *newer*, for the core**
+     (P1). Forge adds tables and never touches core tables, so the core opens
+     it and works — which is what D-015's "the offline product is unchanged"
+     requires. This is a deliberate reading of #121's acceptance bullet
+     ("fails clearly under a core-only binary according to D-014"): D-014's
+     behaviour for a compatible schema *is* to open. The bullet binds the
+     genuinely-incompatible case — a Forge release that alters a core table —
+     and that case is now detectable because of (3). Precedence is
+     DECISIONS.md > FORGE.md > issues, so D-014's text governs the issue's
+     phrasing. The Forge store commit carries the guard that holds Forge to
+     it: a test asserting no Forge migration alters a core table.
+  3. **D-014 is not implemented, and the gap is load-bearing for #121.** P2
+     shows no newer-schema gate exists; P4 shows the drop-recreate path D-014
+     ordered deleted is still live and still destroys data silently. #121
+     cannot honour its first acceptance criterion on top of either. Both are
+     fixed in their own commit, ahead of the Forge tables, with P2 and P4 as
+     the regression tests.
+- **Note on method.** Every one of these is an *environment* unknown, not a
+  specification — the answer lives in how `migrate()` and `schemaNeedsReset()`
+  behave, not in what anyone intended. Writing P3 as a test-first assertion
+  would have encoded the going-in hypothesis, which was wrong.
+
 ---
 
 ## Part B — Provider & model benchmarks
