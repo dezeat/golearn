@@ -27,11 +27,17 @@ package config
 import (
 	"fmt"
 	"io"
+	"os"
 	"runtime"
 	"strings"
 
+	forgedomain "github.com/dezeat/golearn/addons/forge/internal/domain"
 	"github.com/dezeat/golearn/internal/adapters/sqlite"
 )
+
+// coredomainProfiles is a seam so the report can be rendered without importing
+// the domain package under a name that reads like the core's.
+func coredomainProfiles() []forgedomain.Profile { return forgedomain.Profiles() }
 
 // Capability is a Forge surface with the issue that delivers it. Reporting a
 // surface as pending is more useful than omitting it: a user who asks what the
@@ -48,11 +54,18 @@ type Capability struct {
 func Capabilities() []Capability {
 	return []Capability{
 		{Name: "module and binary boundary", Ready: true, Tracked: "#125"},
-		{Name: "run records, schema 0.2.0, drafts", Ready: false, Tracked: "#121"},
-		{Name: "provider profiles and secrets", Ready: false, Tracked: "#123"},
+		{Name: "run records, schema 0.2.0, drafts", Ready: true, Tracked: "#121"},
+		{Name: "provider profiles and secrets", Ready: true, Tracked: "#123"},
+		// Not Ready, and the distinction matters: the adapter and the evidence
+		// records exist, but the source-authority policy and the V1 adapter
+		// choice are #120's, and page fetch/extraction is not built. Reporting
+		// this as ready would promise grounding the pipeline does not perform.
 		{Name: "web research and evidence records", Ready: false, Tracked: "#126"},
+		// Likewise: the backend and the gate exist and are tested, but no
+		// embedding model has a committed calibration, so the gate refuses to
+		// score rather than thresholding on a number picked by feel (D-022).
 		{Name: "near-duplicate similarity gate", Ready: false, Tracked: "#124"},
-		{Name: "bounded generation pipeline", Ready: false, Tracked: "#122"},
+		{Name: "bounded generation pipeline", Ready: true, Tracked: "#122"},
 		{Name: "pack preview and accept/discard", Ready: false, Tracked: "#128"},
 	}
 }
@@ -76,8 +89,22 @@ func Report(w io.Writer, version string) error {
 	fmt.Fprintf(&b, "  path              %s\n", sqlite.DefaultDBPath())
 	b.WriteString("  shared with core  yes (Forge extends the same database)\n")
 	b.WriteString("\nProviders\n")
-	b.WriteString("  configured        none\n")
-	b.WriteString("  note              provider profiles land with #123\n")
+	for _, p := range coredomainProfiles() {
+		source := "no credential needed"
+		if p.CredentialEnvVar != "" {
+			source = "set " + p.CredentialEnvVar
+			if _, ok := os.LookupEnv(p.CredentialEnvVar); ok {
+				// Says a credential was found. Never says what it is, and
+				// never a fragment of it.
+				source = p.CredentialEnvVar + " is set"
+			}
+		}
+		embeds := "no embeddings capability"
+		if p.Embeds {
+			embeds = "embeddings available"
+		}
+		fmt.Fprintf(&b, "  %-12s %-24s %s\n", p.ID, source, embeds)
+	}
 	b.WriteString("\nCapabilities\n")
 	for _, c := range Capabilities() {
 		status := "pending"
