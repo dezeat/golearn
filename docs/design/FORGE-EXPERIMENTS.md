@@ -463,6 +463,150 @@ These settled the shape of #125 before any implementation was committed.
   semantically vacuous — and all three look identical to a naive harness.
   Compare A-1, A-10 and A-12: **the apparatus quietly not measuring, and
   reporting green for it.**
+### A-14 · What does a search API actually return, and what do the bounds actually do?
+
+- **Question.** #126 implements the research lane behind the frozen
+  `ports.Research` contract. Two things had to be observed rather than assumed:
+  the **wire format** of the development provider (SearXNG's JSON API), and the
+  **behaviour of the Go bounds** the adapter leans on — whether a context error
+  survives `http.Client.Do`, and whether an oversized body announces itself.
+- **Hypothesis (going in).** The response shape is documented; `io.LimitReader`
+  reports truncation as an error; `errors.Is(err, context.DeadlineExceeded)`
+  holds through whatever `Do` returns.
+- **Method.** Read the upstream serializer and result types
+  (`searx/webutils.py` → `get_json_response`, `searx/result_types/_base.py`)
+  plus the published API reference; then a throwaway Go probe against
+  `net/http/httptest` for the six bound behaviours below. The probe was deleted
+  after the observation; the tests that replace it are named in
+  `addons/forge/internal/adapters/searxng/searxng_test.go`.
+- **Result. Hypothesis falsified in two of three parts.**
+
+  *Wire format.*
+
+  | # | Observation |
+  | --- | --- |
+  | W1 | Top-level keys are `query`, `results`, `answers`, `corrections`, `infoboxes`, `suggestions`, `unresponsive_engines`. **`number_of_results` is absent** from the current serializer, though it appears in older releases and in much third-party documentation. |
+  | W2 | The published API reference documents the *request* parameters and **says nothing about the response shape at all** — only that the format must be enabled. |
+  | W3 | A result carries `url`, `title`, `content`, plus `engine`, `engines`, `score`, `category`, `positions`, `parsed_url`, `publishedDate`, `template`, `thumbnail`, `author` and more. `content` is a **snippet**, never the page body. |
+  | W4 | There is **no result-count parameter** — only `pageno`. A result ceiling has to be applied client-side. |
+  | W5 | `format=json` answers **403** until `json` is listed under `search.formats` in the instance's settings. |
+  | W6 | The same URL found by several engines is already merged upstream — that is what `engines` (a set) and `positions` (a list) record. |
+
+  *Bound behaviour, Go 1.25.*
+
+  | # | Observation |
+  | --- | --- |
+  | B1 | `errors.Is(err, context.DeadlineExceeded)` and `…, context.Canceled` **hold** through the `*url.Error` returned by `Do`. Wrapping `ctx.Err()` by hand is unnecessary. |
+  | B2 | A context failure during the **body read**, after headers, surfaces as the bare context error — also `errors.Is`-visible. |
+  | B3 | A pre-canceled context produces **zero server hits**: `Do` fails before dialing. |
+  | B4 | The handler observes `r.Context().Done()` when the client cancels, so a canceled request is genuinely released rather than merely abandoned. |
+  | B5 | **`io.ReadAll(io.LimitReader(body, n))` returns the truncated bytes with a nil error.** Truncation is silent. |
+
+- **What it locked in.**
+  1. **Decode leniently, and require nothing not used.** W1 and W2 together are
+     the argument: the one response field third-party documentation would have
+     had the adapter depend on is the one the current serializer does not emit,
+     and the authoritative document does not describe the payload at all. The
+     adapter decodes `url`, `title` and `content` and ignores the rest;
+     `TestUnknownResponseFieldsAreIgnoredRatherThanRefused` keeps it that way,
+     because strict decoding would turn every upstream field addition into an
+     outage.
+  2. **B5 is the dangerous one and it shaped the code.** An adapter that
+     trusted the read error would parse half a document as though it were
+     whole — a silent, plausible, wrong answer, which is worse than a failure.
+     The adapter reads `max+1` bytes and compares lengths.
+     `TestAResponseBodyPastTheSizeBoundIsRejected` is the regression, and
+     `TestABodyExactlyAtTheBoundIsAccepted` holds the off-by-one from the other
+     side.
+  3. **The result ceiling is the adapter's own work** (W4), not something the
+     provider can be asked for.
+  4. **The 403 names its cause** (W5) rather than reporting a bare status,
+     because it is the setup mistake nearly every operator makes once.
+  5. **No de-duplication by URL** (W6). SearXNG has already merged across
+     engines; a second pass would be inventing canonicalization policy that
+     belongs to #120.
+  6. **Test-first would have been wrong here, and the log says why.** Writing
+     the wire assertions before reading the serializer would have encoded
+     `number_of_results` — a field that does not exist — as a specification,
+     and would have asserted that an oversized body returns an error, which it
+     does not. The bound *semantics* (what must happen at a limit) were still
+     written test-first; only the observations were not.
+
+### A-15 · Mutation test — the research adapter's bounds and trust boundary
+
+- **Question.** The adapter's whole value is in its guards: bounds that hold,
+  a taxonomy that distinguishes causes, and a trust boundary that does not
+  leak. All tests green. Do they bite?
+- **Method.** Twenty-eight mutations of
+  `addons/forge/internal/adapters/searxng`, each run through three phases —
+  **compile**, **run**, **revert-and-prove-clean** — with a control run after.
+  The compile phase is explicit and mechanical (`go test -run '^$'`, which
+  builds the test binary and runs nothing) because A-10 and A-11 both recorded
+  the same trap: a mutation that fails to build tests nothing, and a harness
+  that greps only for `--- FAIL` cannot tell that from a guard holding.
+- **Result. 27 of 28 caught; the survivor is understood and recorded below.**
+
+  | # | Mutation | Guard that fired |
+  | --- | --- | --- |
+  | 1 | zero `Timeout` becomes an expired deadline | `TestAZeroTimeoutLeavesTheDeadlineToTheContext` |
+  | 2 | response size bound raised out of reach | `TestAResponseBodyPastTheSizeBoundIsRejected` |
+  | 3 | per-source byte budget ignored | `TestContentIsTruncatedOnARuneBoundary` |
+  | 4 | truncation cuts mid-rune | `TestContentIsTruncatedOnARuneBoundary` (UTF-8 validity) |
+  | 5 | result ceiling off by one | `TestResultsAreTruncatedToTheRequestedMaximum` |
+  | 6 | citation key stops depending on the URL | `TestTheCitationKeyIsStableForAUrlAcrossQueries` |
+  | 7 | publisher invented from the record | `TestPublisherIsLeftEmptyRatherThanDerived` |
+  | 8 | adapter declares a source admissible | `TestSourceQualityIsLeftUnclassified` |
+  | 9 | unciteable (URL-less) results kept | `TestAResultWithoutAUrlIsDropped` |
+  | 10 | every status treated as retryable | `TestARefusedRequestIsNotRetried`, `TestAClientErrorStatusIsNotRetried` |
+  | 11 | attempt ceiling off by one | `TestRetryStopsAtTheAttemptCeiling`, `TestASingleAttemptCeilingMakesNoSecondRequest` |
+  | 12 | retry loop stops checking the context | `TestALastAttemptCancellationIsNotReportedAsAnExhaustedBudget` |
+  | 13 | retry loop checks the context **last** | **survived — see below** |
+  | 14 | backoff stops watching the context | `TestCancellationDuringTheRetryBackoffIsImmediate` |
+  | 15 | `format=json` not requested | `TestTheRequestCarriesTheObservedSearXNGParameters` |
+  | 16 | language sent when none was asked for | `TestTheRequestCarriesTheObservedSearXNGParameters` |
+  | 17 | endpoint subpath discarded | `TestASubpathEndpointKeepsItsPrefix` |
+  | 18 | query result ceiling unvalidated | `TestAnUnboundedQueryIsRefusedBeforeAnyRequest` |
+  | 19 | config attempt ceiling unvalidated | `TestAnUnboundedOrUnusableConfigIsRefused` |
+  | 20 | endpoint scheme allowlist removed | `TestAnUnboundedOrUnusableConfigIsRefused/non-http_scheme_with_a_host` |
+  | 21 | "no results" reported as a failure | `TestNothingFoundIsNotAFailure` |
+  | 22 | unparseable body tolerated | `TestAMalformedResponseBodyIsRejected` (all three shapes) |
+  | 23 | 403 loses its operator hint | `TestARefusedRequestIsNotRetried` |
+  | 24 | unreachable endpoint reclassified as a bad response | `TestAnUnreachableEndpointIsNotAnAuthenticationFailure` |
+  | 25 | exhausted budget drops its cause (`%v` for `%w`) | `TestRetryStopsAtTheAttemptCeiling`, `TestAnUnreachableEndpointIsNotAnAuthenticationFailure` |
+  | 26 | decoding turned strict (`DisallowUnknownFields`) | `TestUnknownResponseFieldsAreIgnoredRatherThanRefused` + 16 others |
+  | 27 | retrieved content sanitized instead of carried | `TestInjectionShapedPageTextIsCarriedAsQuotedData` |
+  | 28 | retrieval time read from the wall clock | `TestEvidenceCarriesTheRecordedResultFields` |
+
+- **Two tests were vacuous, and only the mutations exposed it.** Both were
+  green, and both asserted less than they appeared to.
+  1. Mutation 20 first *survived*. The non-http case used
+     `file:///etc/passwd`, which has no host — so the **host** check refused it
+     and the scheme allowlist was never reached. The case tested a different
+     guard than its name claimed. A second spelling with a host
+     (`ftp://searxng.example.test/`) is refusable only on its scheme, and the
+     mutation is caught.
+  2. Mutation 27 first *survived*. "Content is carried, not sanitized" was
+     asserted with a substring check, which a mutation stripping fence
+     sentinels passed comfortably. Carrying untrusted text **verbatim** is the
+     actual property — quoting is the fence's job, not the adapter's — so the
+     assertion is now equality against the source string.
+- **The survivor, and why it stays.** Mutation 13 reorders the retry loop's
+  `select` so the context is checked *after* the non-retryable branch rather
+  than before. Nothing fires, and nothing should: every context failure reaches
+  the loop through `client.Do`, which classifies it as a *retryable* transport
+  error (A-13 B1), so `!retryable` and `ctx.Err() != nil` are disjoint in
+  practice and the order cannot be observed. Mutation 12 — **removing** the
+  check — is the one that proves the guard load-bearing, and it is caught. The
+  ordering is documentation of intent; the presence is behaviour. Recorded
+  rather than papered over: writing extra code purely to make a mutation fail
+  would be gaming the measurement, which is the thing this log exists to
+  prevent.
+- **A note on invalid mutations, a third time.** Mutation 25's first form
+  deleted `lastErr` from the `fmt.Errorf` call and left it declared and unused,
+  so the package did not build. The harness reported `INVALID — no evidence
+  either way` rather than counting it, which is exactly the A-10/A-11 lesson
+  mechanized. Rewritten as `%v` in place of `%w` — semantically valid, and
+  caught.
 
 ---
 
