@@ -241,6 +241,41 @@ These settled the shape of #125 before any implementation was committed.
   count is load-bearing. A guard that only checks the error type would have
   passed it.
 
+### A-9 · Mutation test — do the Wave 0 contract guards actually fail?
+
+- **Question.** The port freeze ships value types carrying real behaviour: the
+  prompt-injection fence, credential redaction, cosine, the BLOB encoding, and
+  the similarity comparison representation. All tests green. Do they bite?
+- **Method.** Nine mutations of `addons/forge/internal/domain`, each reverted
+  immediately, with a control run afterwards.
+- **Result.** **All nine caught, each by exactly the intended guard.**
+
+  | # | Mutation | Guard that fired |
+  | --- | --- | --- |
+  | 1 | fence stops neutralizing sentinels in content | `TestFencedContentCannotCloseItsOwnFence` |
+  | 2 | fence stops neutralizing the id | `TestFencedIdCannotForgeADelimiter` |
+  | 3 | `UntrustedText` loses `Format` | `TestUntrustedTextNeverRendersItsContentUnderAnyVerb` |
+  | 4 | `Secret` loses `Format` | `TestSecretNeverRendersItsValueUnderAnyVerb` |
+  | 5 | cosine scores incomparable vectors as 0 | `TestCosineRefusesIncomparableInputRatherThanScoringIt` |
+  | 6 | canonical text includes the intro | `TestCanonicalTextIgnoresIntroAndRationale` |
+  | 7 | canonical text stops sorting options | `TestCanonicalTextIsInvariantToPresentationOrder` |
+  | 8 | canonical text drops the correctness marker | `TestCanonicalTextDistinguishesTheCorrectAnswer` |
+  | 9 | vector blob written big-endian | `TestVectorBlobEncodingIsLittleEndianIEEE754` |
+
+- **Bug found by the tests, not by the mutations.** The redaction test was
+  written to cover every formatting verb rather than the obvious one, and it
+  failed on first run: `%#v` printed `domain.UntrustedText{value:"..."}` and
+  the mismatched verb `%d` printed `{%!d(string=...)}`. **A `String()` method
+  is not a redaction boundary** — `%#v` ignores `Stringer` entirely and prints
+  unexported fields verbatim. Both types now implement `fmt.Formatter`, which
+  is verb-agnostic and therefore total. Had the test covered only `%s` and
+  `%v` it would have been green, and the leak would have shipped inside the
+  very type built to prevent it.
+- **What it locked in.** Redaction and fencing are asserted against *every*
+  verb, not the ones a developer would naturally reach for. Mutations 3 and 4
+  exist to keep it that way: removing `Format` restores exactly the leak the
+  first run exposed.
+
 ---
 
 ## Part B — Provider & model benchmarks

@@ -540,3 +540,136 @@ pack-level metadata never feeds the per-question content hash.
   taxonomy that must be evaluation-gated before it freezes.
 - Dedup behaviour is identical across `0.1.x` and `0.2.0` imports because the
   hash inputs do not change.
+
+### D-018 — Embedding is an optional provider capability, not a `Provider` method
+
+**Status:** accepted · **Date:** 2026-08-23
+
+**Context.** Forge's similarity gate needs embeddings, and FORGE.md §7 leaves
+the source open: "the recommendation must state the embedding source per
+provider profile, the behaviour when none is available". The behaviour-when-
+none case is not hypothetical or transitional — **Anthropic ships no
+embeddings API at all**, so one of the four mandated V1 profiles can never
+produce a vector however it is configured. The obvious shape, an `Embed`
+method on the single provider port with a sentinel error for the profiles
+that cannot honour it, makes a permanent product fact look like a runtime
+failure and defers discovering it to the moment a user asks for a pack.
+
+**Decision.** Model embedding as a **separate, optional interface**
+(`ports.Embedder`) that a provider adapter either implements or does not.
+
+- `ports.Provider` carries chat/structured generation only. All four V1
+  profiles satisfy it.
+- `ports.Embedder` is satisfied only by profiles that actually expose an
+  embeddings endpoint. The Anthropic adapter does not implement it, so its
+  absence is a **compile-time fact** rather than a runtime branch.
+- `domain.ErrNoEmbeddingCapability` is the typed form for the pipeline's
+  fail-clear path, checked *before* a strategy is chosen rather than
+  discovered mid-run.
+- Rejected: a `Capabilities` struct alongside the interface. Two sources of
+  truth for the same fact can disagree, and the flag is the one that would
+  drift.
+
+**Consequences.**
+
+- The similarity gate must decide its behaviour for a no-embedding profile
+  explicitly, because it cannot obtain an `Embedder` to call in the first
+  place.
+- #123's acceptance wording — "all four profiles satisfy one port contract" —
+  needs reading with care and is recorded as such: **Anthropic satisfies the
+  chat contract, not the embedding one.** That is the design, not a gap in it.
+- The cost is two interfaces where one looks simpler, and a type assertion at
+  the seam that binds them.
+- A test asserting the Anthropic adapter does *not* satisfy `Embedder` fails
+  the moment someone bolts on a stub that pretends otherwise.
+
+### D-019 — Forge resolves secrets from the environment first; the OS keychain is a desktop addition
+
+**Status:** accepted · **Date:** 2026-08-23
+
+**Context.** FORGE.md §6.2 states the direction as "keys live in the **OS
+keychain**; environment variables override for automation", gated on spike
+#106. #106 has not reported. Meanwhile the environments golearn is actually
+developed, tested and run in for this work — containers, headless Linux, CI,
+SSH sessions — are precisely the ones where no Secret Service exists, which
+#106's own scope calls out as the risk. A keychain-first policy would make
+the fallback the common path and the primary path the exception, and every
+keychain library that could implement it is a **new dependency** in a repo
+whose minimal-footprint rule requires one to be justified rather than
+assumed.
+
+**Decision.** Invert the emphasis: **the environment is the primary
+resolution path**, and an OS keychain is a desktop convenience layered on
+later.
+
+- Precedence is environment → keychain → none, expressed in the resolver
+  implementation where it can be tested, not in the interface.
+- `domain.SecretOrigin` records which source supplied the active credential,
+  so a user can ask "where is my key coming from?" and get an answer that is
+  not the key.
+- No keychain library is adopted. The `OriginKeychain` constant exists so the
+  precedence rule is written and tested against the full order rather than
+  retrofitted, but no adapter supplies it; the library choice stays #106's
+  deliverable.
+- This is recorded as an **explicit, documented deviation from FORGE.md
+  §6.2**, not a silent flip. FORGE.md's §6.2 wording is superseded by this
+  entry under the precedence rule (DECISIONS.md wins over FORGE.md).
+
+**Consequences.**
+
+- Forge works identically headless and on a desktop, and the path every test
+  exercises is the path most runs take.
+- Zero new dependencies for V1 secret handling.
+- The cost is that desktop users get no keychain integration at V1 and must
+  supply credentials through the environment, which is a weaker convenience
+  story than §6.2 promised.
+- Credentials are never persisted to SQLite, packs, drafts, logs or
+  diagnostics. `domain.Secret` refuses to render its value under **every**
+  formatting verb, `internal/config`'s shape-based guard covers output that
+  never passes through that type, and neither is a substitute for the other.
+
+### D-020 — Similarity uses float32 embedding BLOBs in the existing database with Go-side cosine
+
+**Status:** accepted · **Date:** 2026-08-23
+
+**Context.** FORGE.md §7 sets a backend priority order — a vector path in the
+pure-Go SQLite stack, then a native-Go alternative, then Go-side scoring —
+under hard constraints: no CGo, no native SQLite extensions (`sqlite-vec` is
+off the table under D-001), no vector database or server, no per-platform
+shared libraries. The constraints eliminate the first two rungs in practice,
+and D-012 makes performance an explicit non-goal at golearn's scale (single
+user, hundreds to low-thousands of questions per topic).
+
+**Decision.** Store embeddings as **little-endian IEEE-754 float32 BLOBs in
+the existing golearn SQLite database** and compute cosine similarity in Go.
+
+- No vector database, no ANN index, no second database, and **no new
+  dependency** — cosine is arithmetic.
+- `float32` rather than `float64`: embedding models emit float32, so float64
+  would store converted precision that never existed, at twice the bytes in a
+  user's database. Accumulation inside the cosine is float64, because summing
+  several hundred float32 products in float32 loses enough precision to move a
+  score across a threshold.
+- Byte order is explicit little-endian, because a database file is a portable
+  artifact and a user moving one between architectures must not read their
+  embeddings back as noise.
+- Vectors from different embedding models are not comparable, so the model
+  identity is stored with every vector and a mixed search is refused rather
+  than scored.
+- The backend sits behind `ports.SimilarityIndex`, which exchanges **vectors,
+  never providers**: the index must not know how a vector was produced, and
+  the embedding source must not know what it will be compared against.
+
+**Consequences.**
+
+- The similarity gate adds no operational surface: no server to run, no index
+  to rebuild, no platform-specific artifact, and the CGo-free cross-compile
+  matrix is untouched.
+- The argument rests entirely on the corpus staying small, so it is benchmarked
+  **adversarially** — the benchmark in `docs/design/FORGE-EXPERIMENTS.md`
+  Part C looks for the corpus size at which brute force stops being
+  irrelevant, rather than confirming that it is.
+- The cost is a linear scan whose cost grows with the corpus; the swap to an
+  indexed backend is a port implementation, not a change to pipeline logic.
+- A future large-corpus use case reopens this as a new entry, exactly as D-012
+  anticipates.
