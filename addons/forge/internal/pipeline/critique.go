@@ -58,26 +58,66 @@ type critiqueReply struct {
 	Problem                string `json:"problem"`
 }
 
+// ungroundedCritiqueSystemPrompt drops the grounding question entirely rather
+// than asking it with nothing to answer from.
+const ungroundedCritiqueSystemPrompt = `You are reviewing one multiple-choice question.
+
+Judge only these, strictly:
+- distractors_plausible: the wrong choices are plausible to someone who has not learned the material, and are definitely wrong.
+- single_defensible_answer: exactly the marked choices are defensible; no unmarked choice is also arguably correct.
+
+If either is false, state the single most serious problem in one sentence. If both are true, leave problem empty.
+Reply with JSON only.`
+
+const ungroundedCritiqueSchema = `{
+  "type": "object",
+  "properties": {
+    "distractors_plausible": {"type": "boolean"},
+    "single_defensible_answer": {"type": "boolean"},
+    "problem": {"type": "string"}
+  },
+  "required": ["distractors_plausible", "single_defensible_answer", "problem"]
+}`
+
 // critique runs the source-grounding and quality gate.
+//
+// With no evidence supplied, the grounding question is not asked and its
+// answer is not read. The live lane found this the hard way: the critic was
+// handed an empty evidence set, correctly reported that nothing supported the
+// question, and every candidate was rejected — a pipeline that could not
+// succeed while research was unwired, presenting as a model quality problem.
+//
+// Not asking is the honest form. Asking and ignoring the answer would be a
+// gate whose verdict nobody acts on, and asking with nothing to judge against
+// invites the model to invent one. The absence of grounding is recorded at the
+// run level, which is where it belongs.
 func (p *Pipeline) critique(ctx context.Context, _ domain.GenerationSpec, evidence []domain.Evidence,
 	candidate domain.Candidate) (ok bool, detail string, cost domain.Cost, err error) {
 
 	call, cancel := context.WithTimeout(ctx, p.budgets.PerCallTimeout)
 	defer cancel()
 
+	cited := citedEvidence(evidence, candidate.Citations)
+	grounded := len(cited) > 0
+
+	system, schema := critiqueSystemPrompt, critiqueSchema
+	if !grounded {
+		system, schema = ungroundedCritiqueSystemPrompt, ungroundedCritiqueSchema
+	}
+
 	var reply critiqueReply
 	if err := p.deps.Provider.Generate(call, ports.Request{
-		System:   critiqueSystemPrompt,
+		System:   system,
 		User:     renderQuestionWithKey(candidate.Question),
-		Evidence: citedEvidence(evidence, candidate.Citations),
-		Schema:   []byte(critiqueSchema),
+		Evidence: cited,
+		Schema:   []byte(schema),
 	}, &reply); err != nil {
 		return false, "", domain.Cost{Attempts: 1}, fmt.Errorf("critique: %w", err)
 	}
 
 	cost = domain.Cost{Attempts: 1}
 	switch {
-	case !reply.Grounded:
+	case grounded && !reply.Grounded:
 		return false, firstNonEmpty(reply.Problem, "not supported by the evidence"), cost, nil
 	case !reply.SingleDefensibleAnswer:
 		return false, firstNonEmpty(reply.Problem, "more than one choice is defensible"), cost, nil

@@ -705,3 +705,75 @@ func TestThePerCallBudgetIsAppliedToEveryProviderCall(t *testing.T) {
 		}
 	}
 }
+
+// The live lane found this and no unit test could have, because every unit
+// test supplied evidence: with research unwired the critic was asked whether
+// the question was supported by evidence, given none, correctly answered no,
+// and rejected every candidate. The pipeline could not succeed, and it
+// presented as a model quality problem.
+//
+// With nothing to judge against, the grounding question is not asked and its
+// answer is not read.
+func TestAnUngroundedRunDoesNotAskTheCriticAboutGrounding(t *testing.T) {
+	provider := newFakeProvider().
+		reply(stageGenerate, batch(goodQuestion("Q1"))).
+		reply(stageVerify, passingVerify()).
+		// A critic that reports grounded=false, exactly as one would when
+		// handed no evidence. It must not cause a rejection here.
+		reply(stageCritique, map[string]any{
+			"grounded": false, "distractors_plausible": true,
+			"single_defensible_answer": true, "problem": "",
+		})
+
+	runs := &fakeRunStore{}
+	drafts := &fakeDraftStore{}
+	p, err := pipeline.New(pipeline.Deps{
+		Provider: provider, Runs: runs, Drafts: drafts,
+		Now: fixedNow, ForgeVersion: "test", AllowUngrounded: true,
+	}, pipeline.DefaultBudgets())
+	if err != nil {
+		t.Fatalf("pipeline.New: %v", err)
+	}
+
+	if _, err := p.Generate(context.Background(), testSpec(1)); err != nil {
+		t.Fatalf("an ungrounded run must not be blocked by the grounding verdict: %v", err)
+	}
+	if len(drafts.saved) != 1 {
+		t.Fatalf("want one draft, got %d", len(drafts.saved))
+	}
+
+	critiques := provider.callsFor(stageCritique)
+	if len(critiques) == 0 {
+		t.Fatal("the critique stage did not run")
+	}
+	if strings.Contains(critiques[0].Request.System, "grounded:") {
+		t.Errorf("the critic was asked about grounding with no evidence to judge against:\n%s",
+			critiques[0].Request.System)
+	}
+	if len(critiques[0].Request.Evidence) != 0 {
+		t.Error("no evidence should have been sent")
+	}
+}
+
+// The complementary case: when evidence IS supplied, an ungrounded verdict
+// must still reject. Dropping the question entirely would remove the gate.
+func TestAGroundedRunStillRejectsAnUngroundedQuestion(t *testing.T) {
+	provider := newFakeProvider().
+		reply(stageGenerate, batch(goodQuestion("Q1"))).
+		reply(stageVerify, passingVerify()).
+		reply(stageCritique, map[string]any{
+			"grounded": false, "distractors_plausible": true,
+			"single_defensible_answer": true, "problem": "invented a fact",
+		}).
+		reply(stageRepair, batch())
+	h := newHarness(t, provider)
+
+	_, err := h.pipeline.Generate(context.Background(), testSpec(1))
+	if !errors.Is(err, pipeline.ErrShortfall) {
+		t.Fatalf("an ungrounded question must be rejected when evidence was supplied, got %v", err)
+	}
+	critiques := provider.callsFor(stageCritique)
+	if !strings.Contains(critiques[0].Request.System, "grounded:") {
+		t.Error("the critic must be asked about grounding when evidence exists")
+	}
+}
