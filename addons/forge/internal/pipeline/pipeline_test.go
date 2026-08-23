@@ -39,17 +39,12 @@ func testEvidence() []domain.Evidence {
 // goodQuestion passes every gate when the scripted verifier and critic agree.
 func goodQuestion(prompt string) map[string]any {
 	return map[string]any{
-		"prompt": prompt,
-		"choices": []map[string]string{
-			{"id": "a", "text": "go"},
-			{"id": "b", "text": "run"},
-			{"id": "c", "text": "spawn"},
-			{"id": "d", "text": "thread"},
-		},
-		"correct_choice_ids": []string{"a"},
-		"explanation":        "The go keyword starts a goroutine.",
-		"tags":               []string{"concurrency"},
-		"citations":          []string{"s1"},
+		"prompt":          prompt,
+		"choices":         []string{"go", "run", "spawn", "thread"},
+		"correct_choices": []int{0},
+		"explanation":     "The go keyword starts a goroutine.",
+		"tags":            []string{"concurrency"},
+		"citations":       []string{"s1"},
 	}
 }
 
@@ -277,7 +272,10 @@ func TestVerificationCarriesNoneOfTheGeneratorsContext(t *testing.T) {
 // afford at roughly a minute per call.
 func TestAStructurallyInvalidCandidateNeverReachesTheProvider(t *testing.T) {
 	invalid := goodQuestion("Q1")
-	invalid["correct_choice_ids"] = []string{"does-not-exist"}
+	// An answer position outside the choice list. It is dropped rather than
+	// clamped, leaving no correct answer, which deterministic validation then
+	// rejects — clamping would silently mark a different choice correct.
+	invalid["correct_choices"] = []int{99}
 
 	provider := newFakeProvider().
 		reply(stageGenerate, batch(invalid)).
@@ -573,5 +571,81 @@ func TestAFullyWiredRunNamesNoSkippedStages(t *testing.T) {
 	}
 	if strings.Contains(h.runs.diagnostic[0], "NOT RUN") {
 		t.Errorf("a fully wired run must not report skipped stages: %s", h.runs.diagnostic[0])
+	}
+}
+
+// Choice ids feed the D-007 content hash, so the same question generated twice
+// must produce the same ids or dedup would stop recognizing it.
+func TestChoiceIdsAreAssignedDeterministicallyByPosition(t *testing.T) {
+	provider := newFakeProvider().
+		reply(stageGenerate, batch(goodQuestion("Q1"))).
+		reply(stageVerify, passingVerify()).
+		reply(stageCritique, passingCritique())
+	h := newHarness(t, provider)
+
+	if _, err := h.pipeline.Generate(context.Background(), testSpec(1)); err != nil {
+		t.Fatalf("Generate: %v", err)
+	}
+	q := h.drafts.saved[0].Pack.Questions[0]
+
+	want := []string{"a", "b", "c", "d"}
+	for i, c := range q.Choices {
+		if c.ID != want[i] {
+			t.Errorf("choice %d has id %q, want %q", i, c.ID, want[i])
+		}
+	}
+	if len(q.CorrectChoiceIDs) != 1 || q.CorrectChoiceIDs[0] != "a" {
+		t.Errorf("answer position 0 should resolve to choice id %q, got %v", "a", q.CorrectChoiceIDs)
+	}
+}
+
+// An answer position outside the choice list must be dropped, never clamped.
+// Clamping would silently mark a different choice correct, which is the single
+// worst defect a practice tool can ship — and it would look like a model
+// quality problem rather than a mapping bug.
+func TestAnOutOfRangeAnswerPositionIsDroppedNotClamped(t *testing.T) {
+	broken := goodQuestion("Q1")
+	broken["correct_choices"] = []int{99}
+
+	provider := newFakeProvider().
+		reply(stageGenerate, batch(broken)).
+		reply(stageVerify, passingVerify()).
+		reply(stageCritique, passingCritique()).
+		reply(stageRepair, batch())
+	h := newHarness(t, provider)
+
+	_, err := h.pipeline.Generate(context.Background(), testSpec(1))
+	if !errors.Is(err, pipeline.ErrShortfall) {
+		t.Fatalf("want the candidate rejected, got %v", err)
+	}
+	if len(h.drafts.saved) != 0 {
+		t.Error("a question with no resolvable answer must never reach a draft")
+	}
+	if provider.countFor(stageVerify) != 0 {
+		t.Error("an unresolvable answer must be caught by deterministic validation, before a model call")
+	}
+}
+
+// A duplicated answer position must not produce a duplicated answer id, which
+// would turn a single-select question into a bogus multi-select.
+func TestARepeatedAnswerPositionIsCountedOnce(t *testing.T) {
+	repeated := goodQuestion("Q1")
+	repeated["correct_choices"] = []int{0, 0}
+
+	provider := newFakeProvider().
+		reply(stageGenerate, batch(repeated)).
+		reply(stageVerify, passingVerify()).
+		reply(stageCritique, passingCritique())
+	h := newHarness(t, provider)
+
+	if _, err := h.pipeline.Generate(context.Background(), testSpec(1)); err != nil {
+		t.Fatalf("Generate: %v", err)
+	}
+	q := h.drafts.saved[0].Pack.Questions[0]
+	if len(q.CorrectChoiceIDs) != 1 {
+		t.Errorf("want one answer id, got %v", q.CorrectChoiceIDs)
+	}
+	if q.Type != coredomain.SingleSelect {
+		t.Errorf("a repeated position must not promote the question to %q", q.Type)
 	}
 }

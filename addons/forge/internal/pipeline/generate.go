@@ -39,36 +39,39 @@ const candidateSchema = `{
         "type": "object",
         "properties": {
           "prompt": {"type": "string"},
-          "choices": {
-            "type": "array",
-            "items": {
-              "type": "object",
-              "properties": {
-                "id": {"type": "string"},
-                "text": {"type": "string"}
-              },
-              "required": ["id", "text"]
-            }
-          },
-          "correct_choice_ids": {"type": "array", "items": {"type": "string"}},
+          "choices": {"type": "array", "items": {"type": "string"}},
+          "correct_choices": {"type": "array", "items": {"type": "integer"}},
           "explanation": {"type": "string"},
           "tags": {"type": "array", "items": {"type": "string"}},
           "citations": {"type": "array", "items": {"type": "string"}}
         },
-        "required": ["prompt", "choices", "correct_choice_ids", "explanation", "citations"]
+        "required": ["prompt", "choices", "correct_choices", "explanation", "citations"]
       }
     }
   },
   "required": ["questions"]
 }`
 
+// generatedQuestion asks for choices as plain strings and the answer as
+// positions, not as objects carrying ids the model invents.
+//
+// Choice ids are arbitrary internal labels — display labels are computed from
+// display order at render time (D-008) — so having the model produce them adds
+// a degree of freedom that can only go wrong: an id repeated, an answer
+// referencing an id that was never emitted. Positions cannot dangle, and the
+// pipeline assigns ids deterministically.
+//
+// It is also markedly cheaper. On the CPU-only reference host, generation is
+// the longest call in the chain and its cost scales with tokens produced;
+// dropping a nesting level and an id per choice removes roughly a third of the
+// output for the same content (B-2.2).
 type generatedQuestion struct {
-	Prompt           string              `json:"prompt"`
-	Choices          []coredomain.Choice `json:"choices"`
-	CorrectChoiceIDs []string            `json:"correct_choice_ids"`
-	Explanation      string              `json:"explanation"`
-	Tags             []string            `json:"tags"`
-	Citations        []string            `json:"citations"`
+	Prompt         string   `json:"prompt"`
+	Choices        []string `json:"choices"`
+	CorrectChoices []int    `json:"correct_choices"`
+	Explanation    string   `json:"explanation"`
+	Tags           []string `json:"tags"`
+	Citations      []string `json:"citations"`
 }
 
 type generatedBatch struct {
@@ -83,7 +86,8 @@ const generatorSystemPrompt = `You write multiple-choice practice questions for 
 Rules:
 - Every question must be answerable from the supplied evidence. Do not use outside knowledge.
 - Cite the evidence id you used for each question.
-- Exactly one correct choice per question unless told otherwise.
+- choices is a list of answer texts. correct_choices holds the ZERO-BASED positions of the correct ones.
+- Exactly one correct position per question unless told otherwise.
 - Distractors must be plausible and wrong, never obviously absurd and never partially correct.
 - The explanation states why the correct answer is correct. It contains no prefix such as "Correct:" and no emoji.
 - Write content only. Do not address the reader or refer to "the evidence" in the question text.
@@ -150,17 +154,52 @@ func generatorUserPrompt(spec domain.GenerationSpec, want int, already []domain.
 	return b.String()
 }
 
-// toCandidate maps a generated question onto the pack format.
+// choiceID is the deterministic label for the nth choice: a, b, c, …
+//
+// Deterministic because the id feeds the D-007 content hash, so the same
+// question generated twice must produce the same ids or dedup would stop
+// recognizing it.
+func choiceID(index int) string {
+	const alphabet = "abcdefghijklmnopqrstuvwxyz"
+	if index < 0 || index >= len(alphabet) {
+		return fmt.Sprintf("c%d", index)
+	}
+	return string(alphabet[index])
+}
+
+// toCandidate maps a generated question onto the pack format, assigning choice
+// ids and resolving answer positions.
+//
+// An out-of-range answer position is dropped rather than clamped: clamping
+// would silently mark a different choice correct, which is the single worst
+// defect a practice tool can ship. A question left with no correct answer
+// fails deterministic validation immediately afterwards, which is the visible
+// outcome.
 func toCandidate(spec domain.GenerationSpec, q generatedQuestion) domain.Candidate {
+	choices := make([]coredomain.Choice, 0, len(q.Choices))
+	for i, text := range q.Choices {
+		choices = append(choices, coredomain.Choice{ID: choiceID(i), Text: text})
+	}
+
+	correct := make([]string, 0, len(q.CorrectChoices))
+	seen := map[int]bool{}
+	for _, position := range q.CorrectChoices {
+		if position < 0 || position >= len(choices) || seen[position] {
+			continue
+		}
+		seen[position] = true
+		correct = append(correct, choices[position].ID)
+	}
+
 	questionType := coredomain.SingleSelect
-	if len(q.CorrectChoiceIDs) > 1 {
+	if len(correct) > 1 {
 		questionType = coredomain.MultiSelect
 	}
 	pq := coredomain.PackQuestion{
 		Type:             questionType,
 		Prompt:           q.Prompt,
-		Choices:          q.Choices,
-		CorrectChoiceIDs: q.CorrectChoiceIDs,
+		Choices:          choices,
+		CorrectChoiceIDs: correct,
 		Tags:             q.Tags,
 		Difficulty:       spec.Difficulty,
 	}
