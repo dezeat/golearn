@@ -265,9 +265,61 @@ questions:
     confidence: 1.0
 ```
 
-`pack_version` is semver; the current MVP format is `0.1.0`. Import accepts only
-`0.1.x` and rejects incompatible versions with actionable errors. Explanations
-are stored content-only — no correctness prefixes or emoji (D-008).
+`pack_version` is semver. Explanations are stored content-only — no
+correctness prefixes or emoji (D-008).
+
+**Compatibility (D-017).** Minors are additive within a major, so import
+accepts any minor **at or below** the highest this binary knows and refuses
+anything above it — a newer minor may carry fields that would be silently
+dropped, and a silent drop loses content on the next re-export. A different
+major is a different contract and is refused outright. Both refusals are
+actionable and name the version.
+
+| Emitted by | Version |
+| --- | --- |
+| `golearn export` | `0.1.0` — export writes what the library stores, and the library stores no pack-level generation metadata |
+| `golearn-forge` | `0.2.0` — a generated pack genuinely carries it |
+
+### Schema `0.2.0` additions
+
+Two optional **pack-level** blocks, absent from `0.1.x` and legal to omit at
+`0.2.0`. The practice engine reads neither; they exist so a generated pack can
+say what was asked for and where the content came from, and so a shared pack
+carries that with it.
+
+```yaml
+pack_version: "0.2.0"
+generation_spec:          # what was requested
+  topic: "Go concurrency"
+  description: "goroutines and channels"
+  count: 10
+  difficulty: easy
+  style: exam             # open string; the intent enum is spike-gated (#105)
+  language: en
+provenance:               # how it was produced
+  generated_at: 2026-08-23T12:00:00Z
+  model:     { provider: ollama, model: "qwen3:8b" }
+  verifier:  { provider: ollama, model: "qwen3:8b" }
+  sources:
+    - { id: s1, url: "https://...", title: "..." }
+  forge_version: "0.3.0"
+```
+
+`style` is deliberately an unvalidated open string: the intent vocabulary is
+sequenced behind spike #105, which is itself sequenced behind a working
+pipeline, so validating it here would create a circular dependency. An unknown
+or missing style is valid and content-neutral.
+
+Excluded from packs categorically (D-017): secrets, raw prompts, raw model or
+tool output, retry and repair counters, and provider request mechanics. A
+`ModelIdentity` names provider and model but never the endpoint — a model
+identifier is safe to disclose, the deployment that served it is not, and a
+pack is a file people share.
+
+**Neither block feeds the content hash.** The D-007 recipe is untouched, so the
+same question hashes identically whichever schema version carries it and dedup
+behaves the same across `0.1.x` and `0.2.0`. Generated questions carry
+`confidence` `0.9`, strictly below the hand-authored default of `1.0`.
 
 ### Validation rules
 

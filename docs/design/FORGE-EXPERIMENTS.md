@@ -276,6 +276,36 @@ These settled the shape of #125 before any implementation was committed.
   exist to keep it that way: removing `Format` restores exactly the leak the
   first run exposed.
 
+### A-10 · Mutation test — the schema 0.2.0 compatibility and hash guards
+
+- **Question.** D-017's compatibility promise ("0.1.x stays importable, Forge
+  exports 0.2.0") and its hash promise ("pack-level metadata never feeds the
+  per-question content hash") are now enforced by tests. Do the tests bite?
+- **Method.** Seven mutations of `internal/domain` and the pack adapter, each
+  reverted, with a control run afterwards.
+- **Result.** **All seven caught.**
+
+  | # | Mutation | Guard that fired |
+  | --- | --- | --- |
+  | 1 | compatibility reverts to an exact-minor match | `...AcceptsOlderMinorsAndRefusesNewer/0.1.0`, `/0.1.7`, plus the pre-existing pack-version test |
+  | 2 | minors above the ceiling accepted | `...AcceptsOlderMinorsAndRefusesNewer/0.3.0` |
+  | 3 | a newer major accepted | `...AcceptsOlderMinorsAndRefusesNewer/1.0.0` |
+  | 4 | `source_ref` and `confidence` fed into the content hash | `TestTheSameQuestionHashesIdenticallyAcrossSchemaVersions` |
+  | 5 | generated confidence raised to the manual default | `TestGeneratedConfidenceIsStrictlyBelowTheManualDefault` |
+  | 6 | `style` validated against a closed enum | `TestUnknownStyleIsAcceptedRatherThanValidated` |
+  | 7 | pack metadata dropped from the wire format tags | `TestGeneratedPackParsesAndValidates` |
+
+- **A flaw in the mutation harness itself, worth recording.** Mutations 2 and 3
+  first appeared *uncaught*. They were not: both had made the package fail to
+  **compile**, and the harness only grepped for `--- FAIL` lines, so a build
+  failure and a surviving mutation looked identical. A mutation that does not
+  compile is not evidence either way — it tests nothing and must not be
+  counted as caught. The harness now reports a build failure explicitly, and
+  both mutations were rewritten to be semantically valid (`> ceiling+10`,
+  `major < supported`) before they became evidence. **A green mutation report
+  is only as trustworthy as its ability to tell "the guard held" from "the
+  experiment never ran"** — the same failure mode as A-1, one level up.
+
 ---
 
 ## Part B — Provider & model benchmarks
