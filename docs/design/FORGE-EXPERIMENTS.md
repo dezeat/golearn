@@ -351,6 +351,55 @@ These settled the shape of #125 before any implementation was committed.
   (`*c > 2.0`) before it counted. Recording it a second time because the
   temptation each time is to read the build failure as a caught mutation.
 
+### A-12 · A-2 in reverse — the developer's workspace hid a broken clean checkout
+
+- **Question.** A-2 concluded that `go.work` stays gitignored and the addon's
+  independence rides on its `replace` directive plus its own `go.sum`. Does
+  that stay true as the addon's import graph grows?
+- **Hypothesis (implicit, and never stated — which is the problem).** Once the
+  addon has a `go.sum`, it stays correct.
+- **Method.** A peer session checked out `origin/feat/forge` into a detached
+  worktree with **no** `go.work` and ran `make check`.
+- **Result. Falsified. Green locally, red in a clean checkout.**
+
+  ```
+  --> go vet in ./addons/forge
+  ../../internal/app/export_pack.go:31:2: missing go.sum entry for module
+  providing package gopkg.in/yaml.v3 (imported by .../internal/app)
+  ```
+
+  `addons/forge/go.sum` had **zero** `yaml.v3` entries. Dropping a `go.work`
+  into the same worktree flipped it to exit 0; removing it reproduced the
+  failure. That was the entire difference.
+- **Cause.** The commit that made Forge alias the core pack types widened the
+  addon's import graph to include `internal/app` and `internal/domain`, which
+  import `yaml.v3`. The addon's `go.sum` was generated at #125, before that
+  edge existed. **Under a workspace, module resolution is workspace-wide**, so
+  the addon never needs its own entry and the gap is invisible to whoever has
+  the workspace — which is exactly the person running the gate before
+  committing.
+- **What it locked in.** Two things, one of them a correction to how this
+  branch verifies:
+  1. **`make check` now runs every module-scoped target under `GOWORK=off`**,
+     so the local gate sees precisely what a clean checkout and CI see. A-2
+     already applied this reasoning to a single boundary guard ("so a
+     developer's workspace can never mask a leak that CI would catch"); the
+     reasoning was right and its scope was too narrow. A `make tidy` target
+     regenerates both modules' `go.sum` the same way.
+  2. Any change that widens a module's import graph invalidates that module's
+     `go.sum`, and **every remaining Forge story reaches further into core
+     internals**, so this trap re-arms rather than being a one-off.
+- **Falsifier for the fix.** Stripping the `yaml` lines from
+  `addons/forge/go.sum` now fails `make vet` locally with the message above.
+  Before this change the same mutation was invisible.
+- **The deeper lesson, and it is the third time on this branch.** A-1: a gate
+  that skips a module reports success. A-10: a mutation that fails to compile
+  reads as a caught mutation. A-12: a gate that runs in a richer environment
+  than production reports success. **Every one is the same failure — the
+  measurement apparatus quietly not measuring, and reporting green for it.**
+  The fix is never a better assertion; it is making the apparatus match the
+  environment the claim is about.
+
 ---
 
 ## Part B — Provider & model benchmarks
