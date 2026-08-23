@@ -516,9 +516,50 @@ rest: everything downstream assumes a parseable candidate.
 
 ### B-2 · Results
 
-*Pending. Populated by the #130 live lane once the pipeline slices land. Each
-row records the model identifier, the sample size, and the pre-registered
-threshold it is judged against.*
+#### B-2.1 · Model reasoning is unaffordable on the reference host
+
+- **Question.** Can the installed models produce a schema-valid question pack
+  candidate within a usable time on the CPU-only reference host?
+- **Hypothesis (going in).** Yes; a 4B model on four cores is slow but
+  workable, and the larger models are the ones at risk.
+- **Method.** One identical structured-output request per configuration,
+  through the shipped Ollama adapter, against the operator-managed host.
+  Judged against the KPIs committed in B-1 — `structured_valid_rate`,
+  `latency_total`, `throughput` — which were written down before any run.
+- **Result. Falsified, and not by the size axis.**
+
+  | Model | Reasoning | `latency_total` | `throughput` | `structured_valid` |
+  | --- | --- | --- | --- | --- |
+  | `qwen3:4b` | on (model default) | **>300 s — deadline exceeded** | — | **no output at all** |
+  | `qwen3:4b` | off | 49.6 s | 2.1 tok/s | yes |
+  | `qwen3.5:4b` | off | 68.9 s | 1.6 tok/s | yes |
+
+  The first run returned nothing after five minutes. These are
+  reasoning-capable models, and on four CPU cores the private reasoning pass
+  costs more than six times the visible answer — the answer itself is ~100
+  tokens.
+- **What it locked in.** The Ollama adapter sends `think: false` by default,
+  and states it **explicitly** rather than omitting the field: omission defers
+  to each model's own default, which is precisely the silent variance that
+  made the first run unreadable. Forge asks for one structured document and
+  runs its own verification pass over it (D-016), so the model's private
+  reasoning is a cost paid without a corresponding benefit to the pipeline.
+  `WithReasoning(true)` overrides it, because this measurement is about one
+  class of hardware and a GPU host would reasonably choose otherwise.
+  `TestOllamaDisablesModelReasoningByDefault` asserts the request body, since
+  a default that flips back is otherwise invisible.
+- **Consequence for pipeline design, stated rather than discovered later.** At
+  ~50–70 s per model call, a full D-016 chain — generate, fresh-context verify,
+  critique, one bounded repair — costs roughly 3–5 minutes *per question* on
+  this hardware. Pack size is therefore the parameter that gives, not the
+  stage chain: D-016's Consequences say cutting stages reopens the decision
+  rather than descoping it.
+- **Withheld claim (#130's scope discipline).** This establishes **mechanism**
+  — wire format, structured-output parseability, latency, throughput — on one
+  CPU host. It says nothing about pack quality, and nothing about any other
+  provider or model. `qwen3:4b` echoed the instruction back as the question
+  prompt while `qwen3.5:4b` produced a genuine question; that is a single
+  observation, not a quality finding, and it is recorded as such.
 
 ---
 

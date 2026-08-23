@@ -30,6 +30,7 @@ type clientConfig struct {
 	endpoint       string
 	embeddingModel string
 	httpClient     *http.Client
+	reasoning      *bool
 }
 
 // ClientOption configures a provider client.
@@ -49,6 +50,16 @@ func WithEndpoint(url string) ClientOption {
 // chat model.
 func WithEmbeddingModel(model string) ClientOption {
 	return func(c *clientConfig) { c.embeddingModel = model }
+}
+
+// WithReasoning overrides whether a reasoning-capable local model is allowed
+// to think before answering.
+//
+// Forge disables it by default on measured grounds — see [reasoningOff]. This
+// option exists because that measurement is about one class of hardware, and a
+// GPU host would reasonably choose otherwise.
+func WithReasoning(enabled bool) ClientOption {
+	return func(c *clientConfig) { c.reasoning = &enabled }
 }
 
 // WithHTTPClient supplies the HTTP client, so a caller can set its own

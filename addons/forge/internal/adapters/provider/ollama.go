@@ -33,8 +33,24 @@ type Ollama struct {
 	model     string
 	embedding string
 	endpoint  string
+	think     *bool
 	tr        *transport
 }
+
+// reasoningOff is the default Think value sent to Ollama.
+//
+// It is a measured default, not a preference. On the CPU-only reference host,
+// a reasoning-enabled 4B model exceeded a five-minute deadline and returned
+// nothing, while the same model with reasoning disabled answered the same
+// prompt in ~50s (docs/design/FORGE-EXPERIMENTS.md B-2). Forge asks for one
+// structured document and runs its own verification pass over it (D-016), so
+// the model's private reasoning is a cost it pays without a corresponding
+// benefit to the pipeline.
+//
+// Set explicitly rather than left nil: omitting the field lets each model's
+// own default decide, which is exactly the silent variance that made the first
+// live run unreadable.
+var reasoningOff = false
 
 var (
 	_ ports.Provider      = (*Ollama)(nil)
@@ -46,10 +62,15 @@ var (
 // taken, because none exists to take.
 func NewOllama(profile domain.Profile, model string, opts ...ClientOption) *Ollama {
 	cfg := applyOptions(profile, opts)
+	think := &reasoningOff
+	if cfg.reasoning != nil {
+		think = cfg.reasoning
+	}
 	return &Ollama{
 		model:     model,
 		embedding: cfg.embeddingModel,
 		endpoint:  cfg.endpoint,
+		think:     think,
 		tr:        newTransport(cfg.endpoint, cfg.httpClient, nil),
 	}
 }
@@ -71,6 +92,7 @@ type ollamaChatRequest struct {
 	Model    string             `json:"model"`
 	Messages []ollamaMessage    `json:"messages"`
 	Stream   bool               `json:"stream"`
+	Think    *bool              `json:"think,omitempty"`
 	Format   json.RawMessage    `json:"format,omitempty"`
 	Options  *ollamaChatOptions `json:"options,omitempty"`
 }
@@ -106,7 +128,7 @@ func (o *Ollama) Generate(ctx context.Context, req ports.Request, out any) error
 	}
 	messages = append(messages, ollamaMessage{Role: "user", Content: req.User})
 
-	body := ollamaChatRequest{Model: o.model, Messages: messages, Stream: false}
+	body := ollamaChatRequest{Model: o.model, Messages: messages, Stream: false, Think: o.think}
 	if len(req.Schema) > 0 {
 		body.Format = json.RawMessage(req.Schema)
 	}
