@@ -26,13 +26,26 @@ jobs:
       - name: Format check
         run: test -z "$(gofmt -l .)" || { echo "Files need formatting:"; gofmt -l .; exit 1; }
 
-      - name: Vet
+      # `go vet ./...` is module-scoped, not workspace-scoped: run from the
+      # root it never descends into addons/forge. Each module is invoked
+      # explicitly here for the same reason the Makefile does it.
+      # See docs/design/FORGE-EXPERIMENTS.md (A-1).
+      - name: Vet (core)
         run: go vet ./...
 
-      - name: Lint
+      - name: Vet (forge addon)
+        run: cd addons/forge && go vet ./...
+
+      - name: Lint (core)
         uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
         with:
           version: v2.12.2
+
+      - name: Lint (forge addon)
+        uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
+        with:
+          version: v2.12.2
+          working-directory: addons/forge
 
   test:
     name: Test & Build
@@ -42,17 +55,69 @@ jobs:
 
       - uses: ./.github/actions/setup
 
-      - name: Test
+      - name: Test (core)
         run: go test ./... -v -count=1
 
-      - name: Build
-        run: go build -o ./bin/golearn ./cmd/golearn
+      - name: Test (forge addon)
+        run: cd addons/forge && go test ./... -v -count=1
+
+      - name: Build both binaries
+        run: |
+          go build -o ./bin/golearn ./cmd/golearn
+          cd addons/forge && go build -o ../../bin/golearn-forge ./cmd/golearn-forge
 
       - name: Smoke test — import + export roundtrip
         run: |
           ./bin/golearn import packs/go-basics.yaml
           ./bin/golearn export go-basics --out /tmp/export-test.yaml
           ./bin/golearn import /tmp/export-test.yaml
+
+      # The authoring binary must start and report without any provider
+      # configured (#125 acceptance). Exercised here rather than only in unit
+      # tests so a broken composition root fails CI, not a user.
+      - name: Smoke test — forge starts with no provider configured
+        run: |
+          ./bin/golearn-forge --version
+          ./bin/golearn-forge config
+          ./bin/golearn-forge help
+
+  core-standalone:
+    name: Core builds standalone
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: ./.github/actions/setup
+
+      # D-015 promises the offline core is unaffected by the addon. A consumer
+      # never has the workspace file, so the core is built and tested here with
+      # GOWORK=off: the addon must be invisible, not merely inert.
+      - name: Build and test the core with the workspace disabled
+        env:
+          GOWORK: "off"
+        run: |
+          go build -o ./bin/golearn ./cmd/golearn
+          go test ./... -count=1
+          ./bin/golearn help
+
+      # The addon must not silently depend on a developer's workspace file
+      # either. A-2 caught exactly this: without its own go.sum the addon
+      # could not resolve the core's transitive dependencies outside a
+      # workspace, and nothing else would have surfaced it.
+      - name: Forge addon builds standalone too
+        env:
+          GOWORK: "off"
+        run: cd addons/forge && go build ./... && go test ./... -count=1
+
+      - name: Core module graph carries no HTTP client
+        env:
+          GOWORK: "off"
+        run: |
+          if go list -deps ./cmd/golearn | grep -qx 'net/http'; then
+            echo "::error::net/http is linked into the offline golearn binary (D-015)"
+            exit 1
+          fi
+          echo "confirmed: net/http absent from the core binary"
 
   security:
     name: Security
@@ -62,5 +127,8 @@ jobs:
 
       - uses: ./.github/actions/setup
 
-      - name: Vulnerability check (govulncheck)
+      - name: Vulnerability check (core)
         run: go run golang.org/x/vuln/cmd/govulncheck@v1.5.0 ./...
+
+      - name: Vulnerability check (forge addon)
+        run: cd addons/forge && go run golang.org/x/vuln/cmd/govulncheck@v1.5.0 ./...

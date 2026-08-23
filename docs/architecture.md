@@ -13,12 +13,18 @@ golearn is a local-first terminal application for practising multiple-choice
 questions (MCQs), aimed at certification prep and technology learning.
 Questions are imported from YAML/JSON pack files, stored in SQLite, and
 practised through an interactive Bubble Tea TUI with per-user stats, multiple
-selection modes, and deterministic export. It is fully offline by design —
-there is no network path — and CGo-free, so it cross-compiles to a static
-binary with no C toolchain (D-001).
+selection modes, and deterministic export. The `golearn` binary is fully
+offline by design — it has no network path — and CGo-free, so it
+cross-compiles to a static binary with no C toolchain (D-001).
 
-Runtime dependencies are deliberately few: `bubbletea`, `lipgloss`,
-`gopkg.in/yaml.v3`, and `modernc.org/sqlite`. Adding one is a design change.
+The offline law is **binary-scoped** (D-015). A second binary,
+`golearn-forge`, adds opt-in question authoring and is the only one that ever
+reaches the network, and then only while authoring. See
+[Authoring boundary](#authoring-boundary).
+
+Runtime dependencies of the core module are deliberately few: `bubbletea`,
+`lipgloss`, `gopkg.in/yaml.v3`, and `modernc.org/sqlite`. Adding one is a
+design change, and `internal/boundary` fails the gate if the set drifts.
 
 ## Architecture diagram
 
@@ -115,7 +121,50 @@ root, `cmd/golearn/main.go`.
   keymap, layout), `localconfig/` (`~/.golearn/config.json`).
 - `packs/` — embedded example packs via `go:embed` (`go-basics.yaml`,
   `llm-agents.yaml`) for first-run bootstrap.
+- `internal/boundary/` — test-only. Executable guards for D-015: no HTTP
+  client in the core binary, exactly four direct runtime dependencies, no
+  first-party network imports, and no core package importing the addon.
 - `cmd/golearn/main.go` — CLI routing and composition root.
+- `addons/forge/` — the authoring addon, a **separate Go module** with its own
+  `go.mod`. Owns every provider SDK, HTTP client and retrieval dependency.
+  Contains `cmd/golearn-forge/` (its composition root) and
+  `internal/config/` (non-secret configuration reporting).
+
+## Authoring boundary
+
+`golearn-forge` is golearn plus assisted question generation (D-015, epic
+#66). It exists as a second binary from a nested module so that the offline
+product carries none of generation's dependencies.
+
+**Module topology.**
+
+- The root module stays the Core module at exactly four runtime dependencies,
+  CGo-free.
+- `addons/forge` is a nested module at import path
+  `github.com/dezeat/golearn/addons/forge`. Because Go grants `internal/`
+  access on import-path prefix rather than module identity, Forge imports core
+  internals directly; a module at an unrelated path cannot.
+- The dependency direction is one-way and enforced twice: by the module graph
+  (the core has no requirement on the addon, so a core file importing Forge
+  fails to resolve) and by `internal/boundary`, which fails the core's own
+  gate.
+- Neither module needs a workspace file. `addons/forge` carries a `replace`
+  directive to the core, and both modules build and test standalone under
+  `GOWORK=off` — CI exercises the core that way as a separate job. A local
+  `go.work` (gitignored, created by `make workspace`) is a convenience for
+  editing across both modules, never a build requirement.
+
+**Gate topology.** `go test ./...` is module-scoped, not workspace-scoped: run
+from the root it does not descend into `addons/forge`. The `Makefile` and CI
+therefore invoke each module explicitly. Collapsing that back into a single
+`./...` run would silently drop every Forge test from a green gate.
+
+**What is not here yet.** Provider profiles, secret resolution, web research,
+the similarity gate, the generation pipeline, and the pack preview surface are
+tracked as stories under epic #66; `golearn-forge config` reports which
+surfaces are ready and which are pending. Measurements behind these choices
+are recorded in `docs/design/FORGE-EXPERIMENTS.md`; the design intent is
+`docs/design/FORGE.md`.
 
 ## Data model
 

@@ -27,9 +27,8 @@ craft.
 
 ## Core principle
 
-**Local-first, fully offline, deterministic, zero lock-in.** Nothing leaves
-the machine; there is no network path by design. When feature pressure hits,
-the order decides — not the excitement:
+**Local-first, offline, deterministic, zero lock-in.** When feature pressure
+hits, the order decides — not the excitement:
 
 ```
 1. keep it correct and deterministic
@@ -37,8 +36,17 @@ the order decides — not the excitement:
 3. then make it richer
 ```
 
-Two properties are law:
+Three properties are law:
 
+- **Binary-scoped offline (D-015).** The `golearn` binary has no network path
+  at all — nothing leaves the machine. Generation lives in a second binary,
+  `golearn-forge`, built from the nested `addons/forge` module, and reaches
+  the network only while authoring. Import, selection, practice, export and
+  stats are offline in *both* binaries, and generated packs re-enter the same
+  deterministic pipeline as hand-authored ones. The boundary is executable,
+  not aspirational: `internal/boundary` fails the gate if an HTTP client, a
+  fifth direct dependency, a first-party network import, or a core-to-addon
+  import appears. Adding a network call to the core is still the cardinal sin.
 - **Determinism.** Same data in → byte-identical output. Selection shuffles
   use a seeded `*rand.Rand`; content hashing is stable (normalised,
   null-byte-separated SHA-256); export orders by a stable column with a hash
@@ -115,7 +123,12 @@ task/PR references in code.
 
 The project's classic failure modes. Don't:
 
-- Add a network call, telemetry, or a runtime dependency beyond the four.
+- Add a network call or telemetry to the core module, or a core runtime
+  dependency beyond the four. Provider SDKs, HTTP clients and retrieval
+  libraries belong in `addons/forge`, never in the root `go.mod` (D-015).
+- Make the core import the Forge addon. The direction is Forge → core, only.
+- Collapse the two-module gate back to a single `go test ./...`: that command
+  is module-scoped and silently skips `addons/forge` entirely.
 - Swap `modernc.org/sqlite` for a CGo driver (breaks cross-compilation).
 - Use the global PRNG or `crypto/rand` for shuffling — pass a seeded
   `*rand.Rand`.
@@ -137,6 +150,11 @@ The project's classic failure modes. Don't:
 keys, or personal paths; bundled packs are synthetic educational content.
 Redact anything sensitive in the same change you notice it. The project needs
 no secrets by design — treat any that appear as a bug.
+
+Forge changes the *handling*, not the rule: provider credentials are supplied
+at runtime and never persisted to SQLite, packs, logs, drafts or diagnostics.
+`addons/forge/internal/config` carries a redaction guard that fails if
+user-facing output ever matches a credential shape.
 
 ### Commits
 

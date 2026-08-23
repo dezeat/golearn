@@ -1,0 +1,241 @@
+# Forge — Experiment & Benchmark Log
+
+**Status: working evidence log for epic #66.** This file records *what was
+measured* while building Forge, so a design choice can be re-checked instead of
+re-argued. `docs/DECISIONS.md` records what was decided and why;
+`docs/architecture.md` records what is true now. This file records the
+observations that justify both, and it is append-only within a section.
+
+## Why this file exists
+
+Forge's implementation runs on a deliberate discipline: **TDD where the answer
+is known, experiment where it is not.**
+
+- A failing test is a falsifiable prediction about behaviour that should exist.
+  Where the required behaviour is already specified — schema validation,
+  migrations, hash invariance, draft lifecycle — the test *is* the
+  specification, and it is written first.
+- Where the answer is genuinely unknown — how the Go toolchain resolves a
+  nested module, whether a local model returns parseable JSON — writing the
+  test first would encode a *guess* as a specification. There the order is
+  **probe → observe → lock the observation into a regression test.**
+
+Two rules keep that honest:
+
+1. **Every guard must be shown to fail.** A test that has never gone red is not
+   evidence; it may assert nothing. Mutation results are recorded alongside the
+   green run.
+2. **Thresholds are committed before the measurement run.** For anything
+   non-deterministic, the pass criterion is written down first, or it silently
+   becomes "whatever the run produced".
+
+Each entry below follows: **Question → Hypothesis → Method → Result →
+What it locked in.**
+
+---
+
+## Part A — Build & boundary experiments
+
+These settled the shape of #125 before any implementation was committed.
+
+### A-1 · Does `go test ./...` reach a nested module?
+
+- **Question.** With a `go.work` tying the root module and `addons/forge`
+  together, does the root's `go test ./...` traverse into the nested module?
+- **Hypothesis.** It does not; `./...` is module-scoped, not workspace-scoped.
+- **Method.** Minimal two-module reproduction in a scratch tree: root module
+  with one testable package plus a nested module with its own testable package,
+  joined by `go work init . ./addons/forge`. Ran `go test ./...` from the root.
+- **Result.** **Confirmed — the nested module is not reached.** Output listed
+  only the root package and its `cmd`; the nested module's passing test never
+  ran.
+- **What it locked in.** `make test`/`make check` and CI must invoke each module
+  explicitly. Had this not been probed, every Forge test would have been
+  silently absent from a green gate — the most dangerous possible failure, since
+  the gate would have *reported* success.
+
+### A-2 · Does committing `go.work` break the standalone core?
+
+- **Question.** Does a committed workspace file break a clean-checkout build of
+  the root module, or `go install <core>@latest`?
+- **Hypothesis.** `GOWORK=off` restores standalone resolution; `go install`
+  with a version suffix is unaffected because it ignores the local module
+  context entirely.
+- **Method.** Built the root module with `GOWORK=off` in the same reproduction;
+  read `go help install` for the versioned-install contract.
+- **Result.** **Both hold.** `GOWORK=off go build ./...` succeeds. `go install`
+  with a version suffix "builds packages in module-aware mode, ignoring the
+  go.mod file in the current directory or any parent directory".
+- **What it locked in.** `go.work` stays **gitignored and optional**, matching
+  FORGE.md §2's wording ("a local `go.work`") and the repo's existing
+  `.gitignore`. Independence is carried by a `replace` directive in the addon
+  instead, which required generating the addon's own `go.sum` — without it the
+  addon could not resolve the core's transitive dependencies outside a
+  workspace, and that failure was only visible once `GOWORK=off` was tried.
+  The boundary guard sets `GOWORK=off` explicitly so a developer's workspace
+  can never mask a leak that CI would catch.
+
+### A-3 · Can the nested Forge module import the core's `internal/`?
+
+- **Question.** Go's `internal/` rule is path-prefix based, but does a **module**
+  boundary also block it? If it does, #125 must additionally expose a public
+  API surface for Forge to consume — a materially larger story.
+- **Hypothesis.** Access is granted on import-path prefix, not module identity,
+  so `<core>/addons/forge` may import `<core>/internal/...`.
+- **Method.** Three modules in one workspace: root (with `internal/secret`), a
+  nested module at the root's path prefix, and a control module at an unrelated
+  path. Built both consumers.
+- **Result.** **Confirmed, with a passing negative control.**
+  - `example.com/root/addons/forge` → build OK.
+  - `example.com/outsider` → `use of internal package example.com/root/internal/secret not allowed`.
+- **What it locked in.** Forge reuses core internals directly; no public API
+  surface is needed for #125. The control matters: without it, the positive
+  result could have come from the workspace short-circuiting the check rather
+  than the prefix rule.
+- **Open risk.** Verified under a `go.work` replace. The same must hold when
+  `addons/forge` resolves the core from the module proxy at release time —
+  tracked as a CI check rather than assumed.
+
+### A-4 · Is "the core imports no network package" actually true?
+
+- **Question.** The obvious boundary guard is "no network packages in the core".
+  Is that assertion true today?
+- **Hypothesis (going in).** True — the core is offline by design.
+- **Method.** `go list -deps ./cmd/golearn` and `./...`, filtered for network
+  packages; then traced the importer of each hit; then grepped first-party
+  source for direct network imports.
+- **Result.** **Hypothesis falsified.** The core binary's transitive graph
+  already contains `net` and `net/url`. Both enter through
+  `github.com/google/uuid`, required transitively by `modernc.org/sqlite`.
+  `net/http` is **absent**. No first-party package imports any of them.
+- **What it locked in.** The naive guard would have failed on its first run and
+  invited someone to weaken it. The guard that shipped instead asserts three
+  narrower, true things (see `internal/boundary`):
+  1. `net/http` and friends absent from the core binary's graph — every provider
+     SDK pulls `net/http`, so this is the real leak detector;
+  2. the root `go.mod`'s direct requirements are exactly the four D-015 fixes;
+  3. no *first-party* package imports a network primitive directly.
+- **Note.** This is the clearest case in the log for probing before asserting. A
+  test-first guard here would have encoded a false specification.
+
+### A-5 · Mutation test — can the guards actually fail?
+
+- **Question.** Every guard passes. Do they assert anything, or are they
+  vacuous?
+- **Method.** Four deliberate mutations, each reverted immediately after the
+  observation.
+- **Result.** **All four caught, each with an actionable message.**
+
+  | # | Mutation | Guard(s) that fired | What the message said |
+  | --- | --- | --- | --- |
+  | 1 | first-party `net/http` import | `TestCoreBinaryHasNoHTTPPath`, `TestFirstPartyCodeImportsNoNetwork` | named `net/http` *and* the `crypto/tls` it drags in, cited D-015 |
+  | 2 | fifth direct dependency in `go.mod` | `TestCoreModuleStaysAtFourRuntimeDeps` | named the module, pointed at `addons/forge` |
+  | 3 | core package imports the addon | `TestCoreNeverImportsForge` | named the one-way rule and that resolution fails at load time |
+  | 4 | config output echoes `OPENAI_API_KEY` | `TestReportLeaksNoCredentialShapes`, `TestReportSucceedsWithProviderEnvSet` | matched the credential shape and caught the sentinel value |
+
+- **What it locked in.** The guards are load-bearing. Reverting each mutation
+  restored green, so none of them is passing by accident.
+- **Secondary finding (mutation 3).** The core module has no requirement on the
+  addon, so a core file importing Forge fails to *resolve* before any assertion
+  runs. The one-way dependency rule is therefore enforced structurally by Go
+  itself; the test is belt-and-braces on top of that. The guard was given an
+  explicit message for this case so a future contributor meets the rule rather
+  than a bare toolchain error.
+
+### A-6 · Does the credential redaction guard survive a hostile environment?
+
+- **Question.** Forge's config output is the surface most likely to grow a
+  credential by accident — "which provider am I using" and "with what key" are
+  one careless line apart. Does the guard catch it?
+- **Hypothesis.** A shape-based guard catches a leak that a name-based
+  allowlist would miss, because it does not need to know the provider.
+- **Method.** Set `OPENAI_API_KEY`, `ANTHROPIC_API_KEY` and
+  `OPENROUTER_API_KEY` to a sentinel, then assert the report contains neither
+  the sentinel nor anything matching a credential shape. Mutation 4 above is
+  the falsification run.
+- **Result.** **Confirmed.** Both guards fired on the mutation; the shape guard
+  matched on the pattern alone, without knowing which provider was involved.
+- **What it locked in.** The guard is written against *shape*, not against
+  today's provider names — a name-based check stops working the moment a new
+  provider is added, which is exactly when it is most needed. It is in place
+  before #123 introduces real credentials, rather than after.
+
+---
+
+## Part B — Provider & model benchmarks
+
+**Scope discipline (#130).** These measurements establish *mechanism* —
+wire-format compatibility, structured-output parseability, timeout and
+cancellation behaviour, throughput. One model on one machine proves nothing
+about pack quality across providers, and #130's non-goals say so explicitly.
+Quality claims are reported per model and never generalised.
+
+**Privacy.** Endpoints, hostnames, network topology and account identity are
+never recorded here. Models are named because a model identifier is safe to
+disclose; the deployment that served it is not.
+
+### B-0 · Environment under test
+
+| Property | Value |
+| --- | --- |
+| Class | Operator-managed local inference host, CPU-only |
+| CPU | Intel N100, 4 cores / 4 threads |
+| GPU | none (integrated display adapter only) |
+| RAM | 15 GiB total, ~12 GiB available to inference |
+| Runtime | Ollama, upgraded 0.13.5 → 0.32.15 during setup |
+
+The upgrade was needed because the installed runtime refused current model
+manifests (HTTP 412, "requires a newer version of Ollama"). Post-upgrade the
+host's own service health suite ran 120 passed / 1 failed / 6 skipped; the
+single failure was proven pre-existing and unrelated by diffing the host's
+working tree against its committed configuration.
+
+### B-1 · KPI definitions
+
+Committed **before** any measurement run, so no threshold can drift to fit a
+result. The pipeline's viability rests on the first metric far more than the
+rest: everything downstream assumes a parseable candidate.
+
+| KPI | Definition | Why it matters |
+| --- | --- | --- |
+| `structured_valid_rate` | share of responses parsing as schema-valid JSON with no repair | D-016's pipeline replaced human review; unparseable output collapses it |
+| `answer_key_accuracy` | share where the marked correct answer is genuinely correct, rubric-scored | the single worst defect a practice tool can ship |
+| `grounding_fidelity` | share of claims supported by the supplied evidence records | separates grounded generation from fluent invention |
+| `distractor_quality` | rubric score: plausible-but-wrong vs obviously wrong | decides whether a question tests anything |
+| `repair_rate` | share of candidates needing the one permitted repair | calibrates the bounded-repair budget |
+| `rejection_rate` | share discarded by validation / verification / critique / similarity | high values mean the model cannot meet the bar at that count |
+| `intra_pack_dup_rate` | near-duplicate collisions within one generated pack | drives similarity-gate thresholds |
+| `latency_total` | wall-clock per completed pack | product viability on modest hardware |
+| `throughput` | generated tokens per second | comparability across models and hosts |
+| `cancel_latency` | time from cancel signal to released request | a hung cancel is a UX and resource defect |
+| `cost_per_pack` | provider tokens billed (zero for local inference) | the cost figure shown at the preview surface |
+
+### B-2 · Results
+
+*Pending. Populated by the #130 live lane once the pipeline slices land. Each
+row records the model identifier, the sample size, and the pre-registered
+threshold it is judged against.*
+
+---
+
+## Part C — Application benchmarks
+
+Measurable properties of the product itself, tracked so a regression is visible
+rather than inferred.
+
+| Metric | Why it is tracked | Baseline |
+| --- | --- | --- |
+| core binary size | D-015 promises an unchanged offline product | *pending* |
+| forge binary size | the cost of the authoring capability | *pending* |
+| core direct dependencies | the four-dependency ceiling; guarded by `internal/boundary` | **4** |
+| `net/http` in core graph | the offline law's leak detector | **absent** |
+| `make check` wall time | the gate must stay fast enough to be run | *pending* |
+| similarity scan vs corpus size | **tests the no-vector-index claim** | *pending* |
+| embedding bytes per 1000 questions | validates BLOB-in-SQLite | *pending* |
+| migration time, populated database | D-014 migrations must not stall startup | *pending* |
+
+The similarity row is deliberately adversarial: the design argument for
+Go-side cosine over a vector backend rests on the corpus being small enough
+that brute force is irrelevant to the user. That argument is only as good as
+the benchmark that tests it, so the benchmark is written to *look for* the
+corpus size at which it stops being true.
