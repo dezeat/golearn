@@ -63,6 +63,19 @@ var (
 	// to, because pack-level acceptance replaced per-question human review.
 	ErrStructuredOutput = errors.New("provider reply did not parse as the requested structure")
 
+	// ErrResearchResponse reports that the research endpoint answered, but the
+	// answer could not be used: a refusing or failing status code, a body that
+	// did not parse, or a body past the configured size bound.
+	//
+	// It is deliberately distinct from ErrProviderUnreachable, which means the
+	// endpoint never answered at all. The pipeline acts on the difference: an
+	// unreachable endpoint may be worth retrying later, while an unusable
+	// answer is nearly always a configuration fault the operator must fix.
+	// ErrStructuredOutput is the wrong sentinel to reuse here — it names a
+	// model reply that failed its schema, and the pack-acceptance reasoning in
+	// its comment does not apply to a search endpoint.
+	ErrResearchResponse = errors.New("research endpoint returned an unusable response")
+
 	// ErrInsufficientEvidence reports that research completed without enough
 	// admissible evidence to ground generation. FORGE.md 5 forbids lowering
 	// the quality bar to reach the requested count, so this fails the run
