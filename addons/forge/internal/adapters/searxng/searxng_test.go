@@ -782,8 +782,13 @@ func TestAZeroTimeoutLeavesTheDeadlineToTheContext(t *testing.T) {
 // The handler reports what it observed, so the test fails loudly rather than
 // hanging if the request is never released.
 func TestCancellationReleasesTheInFlightRequest(t *testing.T) {
+	// The handler announces its arrival rather than the test guessing at it
+	// with a sleep. A timing assumption here would make the gate flaky on a
+	// loaded machine, and a flaky guard is indistinguishable from a broken one.
+	arrived := make(chan struct{}, 1)
 	released := make(chan struct{})
 	srv := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
+		arrived <- struct{}{}
 		select {
 		case <-r.Context().Done():
 			close(released)
@@ -799,7 +804,11 @@ func TestCancellationReleasesTheInFlightRequest(t *testing.T) {
 		done <- err
 	}()
 
-	time.Sleep(50 * time.Millisecond)
+	select {
+	case <-arrived:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the request never reached the server")
+	}
 	cancel()
 
 	select {
@@ -873,7 +882,24 @@ func TestALastAttemptCancellationIsNotReportedAsAnExhaustedBudget(t *testing.T) 
 // TestCancellationDuringTheRetryBackoffIsImmediate stops a sleeping retry from
 // outliving the run that scheduled it.
 func TestCancellationDuringTheRetryBackoffIsImmediate(t *testing.T) {
-	srv, hits := serveJSON(t, http.StatusServiceUnavailable, "down")
+	// The cancel has to land inside the backoff, and that needs both halves of
+	// what follows. The handshake proves the first attempt really happened, so
+	// the request count cannot fail for want of a slow machine. The short grace
+	// after it lets the retry loop get past its own context check and into the
+	// wait — cancel too early and the loop's check answers first, the backoff
+	// is never entered, and the test silently stops testing the thing it is
+	// named for. A mutation run caught exactly that: with the grace removed,
+	// replacing the whole cancellable wait with time.Sleep went undetected. The
+	// grace only has to be short relative to the backoff below, so a loaded
+	// machine makes it more reliable, not less.
+	var hits atomic.Int64
+	answered := make(chan struct{}, 1)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		hits.Add(1)
+		w.WriteHeader(http.StatusServiceUnavailable)
+		answered <- struct{}{}
+	}))
+	t.Cleanup(srv.Close)
 
 	a, err := searxng.New(searxng.Config{
 		BaseURL:          srv.URL,
@@ -893,6 +919,11 @@ func TestCancellationDuringTheRetryBackoffIsImmediate(t *testing.T) {
 		done <- gErr
 	}()
 
+	select {
+	case <-answered:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the first attempt never reached the server")
+	}
 	time.Sleep(50 * time.Millisecond)
 	cancel()
 

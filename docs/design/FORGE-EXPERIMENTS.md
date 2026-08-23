@@ -601,6 +601,20 @@ These settled the shape of #125 before any implementation was committed.
   rather than papered over: writing extra code purely to make a mutation fail
   would be gaming the measurement, which is the thing this log exists to
   prevent.
+- **A determinism fix disarmed a guard, and only re-running the mutations
+  caught it.** Two cancellation tests originally slept 50 ms before canceling,
+  which is a timing assumption the gate should not carry. Replacing the sleep
+  with a handshake — the handler announces its arrival, the test cancels on
+  that signal — fixed the flake and **broke mutation 14**: the cancel now
+  landed before the retry loop had entered its backoff, so the loop's own
+  context check answered first and the backoff was never exercised. The test
+  still passed, still had a plausible name, and no longer tested anything. The
+  shipped form keeps the handshake *and* a short grace after it: the handshake
+  removes the "did the request happen" assumption, the grace guarantees the
+  cancel lands inside the wait, and because the backoff is three orders of
+  magnitude longer, a slower machine makes the test more reliable rather than
+  less. **The rule this reinforces: any change to a test's timing is a change
+  to what it measures, and the only proof is re-running the mutation.**
 - **A note on invalid mutations, a third time.** Mutation 25's first form
   deleted `lastErr` from the `fmt.Errorf` call and left it declared and unused,
   so the package did not build. The harness reported `INVALID — no evidence
