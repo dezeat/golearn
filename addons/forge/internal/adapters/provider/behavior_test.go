@@ -478,3 +478,32 @@ func TestEvidenceIsSentAsQuotedDataNotAsInstruction(t *testing.T) {
 		t.Error("the evidence turn must label the material as data")
 	}
 }
+
+// Two timeout authorities is a bug, and it shipped once: a five-minute
+// http.Client timeout silently pre-empted the pipeline's six-minute per-call
+// budget, and a live run failed as "endpoint unreachable" while the endpoint
+// was answering. Whichever bound is shorter wins, and it is not necessarily
+// the one the caller reasoned about.
+func TestACallerDeadlineIsNeverShortenedByTheTransport(t *testing.T) {
+	srv, _ := blockingServer(t)
+
+	// A deadline comfortably longer than any internal default would have to be
+	// for this to be observable: if the transport imposed its own shorter
+	// bound, the call would return before this fires.
+	const callerBudget = 300 * time.Millisecond
+	ctx, cancel := context.WithTimeout(context.Background(), callerBudget)
+	defer cancel()
+
+	start := time.Now()
+	var got answer
+	err := buildAll(t, srv.URL)[domain.ProfileOllama].Generate(ctx, ports.Request{User: "x"}, &got)
+	elapsed := time.Since(start)
+
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("want DeadlineExceeded, got %v", err)
+	}
+	if elapsed < callerBudget {
+		t.Errorf("the transport cut the call short at %v, before the caller's %v budget",
+			elapsed, callerBudget)
+	}
+}

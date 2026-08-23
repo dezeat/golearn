@@ -76,17 +76,25 @@ func run(args []string, stdout, stderr io.Writer) int {
 		}
 		return 0
 	case "generate":
-		// Fail loudly and name the tracking issue rather than pretending the
-		// surface exists. A silent no-op would be indistinguishable from a
-		// generation that legitimately produced nothing.
-		write(stderr, "error: generation is not available yet\n\n"+
-			"The bounded generation pipeline lands with #122.\n"+
-			"Run 'golearn-forge config' to see which surfaces are ready.\n")
-		return 1
+		return runGenerate(remainingArgs(args, "generate"), stdout, stderr)
+	case "drafts":
+		return runDrafts(remainingArgs(args, "drafts"), stdout, stderr)
 	default:
 		write(stderr, fmt.Sprintf("error: unknown command %q\n\n", subcommand)+usage())
 		return 1
 	}
+}
+
+// remainingArgs returns everything after the subcommand, so a subcommand parses
+// only its own flags. Splitting on the subcommand rather than on position keeps
+// a global flag before it from being handed to the wrong parser.
+func remainingArgs(args []string, subcommand string) []string {
+	for i, arg := range args {
+		if arg == subcommand {
+			return args[i+1:]
+		}
+	}
+	return nil
 }
 
 // write reports a failed write to stderr and otherwise swallows it. There is
@@ -106,7 +114,8 @@ Usage:
 
 Commands:
   config      Show non-secret configuration and capability status
-  generate    Generate a question pack (not available yet — #122)
+  generate    Generate a question pack
+  drafts      List, inspect, add or discard unresolved drafts
   help        Show this help message
 
 Flags:

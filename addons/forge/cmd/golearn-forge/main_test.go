@@ -57,26 +57,64 @@ func TestStartsAndReportsWithoutProviderCall(t *testing.T) {
 	}
 }
 
-// TestUnavailableSurfacesFailClearly guards the fail-loud rule. A surface that
-// has not landed must say so and name where it is tracked; exiting 0 with no
-// output would be indistinguishable from a run that legitimately produced
-// nothing, which is precisely the failure mode the epic forbids.
-func TestUnavailableSurfacesFailClearly(t *testing.T) {
-	var stdout, stderr bytes.Buffer
-	code := run([]string{"generate"}, &stdout, &stderr)
+// TestGenerateRefusesAnIncompleteRequestBeforeDoingAnything guards the
+// fail-loud rule at the surface that now exists.
+//
+// It replaces an earlier guard that asserted `generate` reported itself
+// unavailable and named #122. That guard was correct while the pipeline was
+// absent and became a false specification the moment it landed — the rule it
+// protected is "never exit 0 having silently done nothing", and this asserts
+// the same rule against the shipped behavior.
+func TestGenerateRefusesAnIncompleteRequestBeforeDoingAnything(t *testing.T) {
+	cases := map[string][]string{
+		"no arguments at all": {"generate"},
+		"topic without model": {"generate", "--topic", "Go concurrency"},
+		"model without topic": {"generate", "--model", "qwen3:4b"},
+		"unparseable count":   {"generate", "--topic", "Go", "--model", "m", "--count", "many"},
+	}
+	for name, args := range cases {
+		t.Run(name, func(t *testing.T) {
+			var stdout, stderr bytes.Buffer
+			code := run(args, &stdout, &stderr)
 
-	if code == 0 {
-		t.Error("exit code = 0, want non-zero for an unavailable surface")
+			if code == 0 {
+				t.Error("exit code = 0; an incomplete request must never look like a successful run")
+			}
+			if stderr.Len() == 0 {
+				t.Error("nothing was written to stderr")
+			}
+			if !strings.HasPrefix(stderr.String(), "error:") {
+				t.Errorf("stderr should lead with the error: %q", stderr.String())
+			}
+			if stdout.Len() != 0 {
+				t.Errorf("wrote to stdout on a failure path: %q", stdout.String())
+			}
+		})
 	}
-	msg := stderr.String()
-	if !strings.Contains(msg, "not available") {
-		t.Errorf("stderr does not say the surface is unavailable: %q", msg)
+}
+
+// A dry run must reach no provider, open no database and generate nothing —
+// it is the cheap way to check a command line before committing minutes to it.
+func TestADryRunReportsThePlanWithoutGenerating(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	code := run([]string{
+		"generate", "--topic", "Go concurrency", "--model", "qwen3:4b",
+		"--count", "2", "--dry-run",
+	}, &stdout, &stderr)
+
+	if code != 0 {
+		t.Fatalf("exit code = %d, stderr: %s", code, stderr.String())
 	}
-	if !strings.Contains(msg, "#122") {
-		t.Errorf("stderr does not name the tracking issue: %q", msg)
+	out := stdout.String()
+	for _, want := range []string{"dry run", "Go concurrency", "qwen3:4b"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("plan does not mention %q:\n%s", want, out)
+		}
 	}
-	if stdout.Len() != 0 {
-		t.Errorf("wrote to stdout on a failure path: %q", stdout.String())
+	// The plan must be honest about what is not wired, or a reader would
+	// assume grounding ran.
+	if !strings.Contains(out, "grounding") {
+		t.Errorf("the plan should state the grounding status:\n%s", out)
 	}
 }
 

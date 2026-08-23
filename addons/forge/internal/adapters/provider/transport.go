@@ -58,10 +58,16 @@ import (
 // its own would spend a budget the pipeline is accountable for and make the
 // run's cost summary a lie (FORGE.md 4).
 const (
-	// defaultTimeout bounds one request. Local inference on modest hardware is
-	// slow, so this is generous; the pipeline passes a tighter context when it
-	// wants one.
-	defaultTimeout = 5 * time.Minute
+	// defaultTimeout bounds one request when the caller supplied no deadline
+	// of its own. It is applied to the *context*, never to the http.Client.
+	//
+	// Two timeout authorities is a bug, and it shipped once: an http.Client
+	// timeout of five minutes silently pre-empted the pipeline's six-minute
+	// per-call budget, and the run failed as "endpoint unreachable" while the
+	// endpoint was answering perfectly well. Whichever bound is shorter wins,
+	// and the one the caller reasoned about is not necessarily it. The context
+	// is now the only authority.
+	defaultTimeout = 30 * time.Minute
 
 	// maxErrorBodyBytes caps how much of a provider's error body is read for
 	// diagnostics. An HTML error page from a proxy is not a useful message and
@@ -81,7 +87,8 @@ type transport struct {
 
 func newTransport(baseURL string, client *http.Client, header func(http.Header)) *transport {
 	if client == nil {
-		client = &http.Client{Timeout: defaultTimeout}
+		// Deliberately no Timeout field: see defaultTimeout.
+		client = &http.Client{}
 	}
 	return &transport{
 		client:  client,
@@ -109,6 +116,14 @@ func (t *transport) getJSON(ctx context.Context, path string, out any) error {
 }
 
 func (t *transport) do(ctx context.Context, method, path string, body io.Reader, out any) error {
+	// Apply a default bound only when the caller set none, so a caller's own
+	// deadline is never silently shortened.
+	if _, hasDeadline := ctx.Deadline(); !hasDeadline {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, defaultTimeout)
+		defer cancel()
+	}
+
 	req, err := http.NewRequestWithContext(ctx, method, t.baseURL+path, body)
 	if err != nil {
 		return fmt.Errorf("build request: %w", err)
