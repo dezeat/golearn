@@ -211,15 +211,28 @@ func runGenerate(args []string, stdout, stderr io.Writer) int {
 		return 1
 	}
 
+	// Every degradation is stated before the run starts, together and on one
+	// stream, so the reader sees what will NOT happen before they see the
+	// reassuring banner. Split across stdout and stderr they interleave
+	// unpredictably, and a warning that lands after the progress line reads
+	// like a footnote.
+	var warnings []string
 	if flags.ungrounded {
-		write(stderr, "warning: running UNGROUNDED — questions are not backed by retrieved evidence\n")
+		warnings = append(warnings,
+			"running UNGROUNDED — questions are not backed by retrieved evidence")
+	}
+	if gateUnavailable != "" {
+		warnings = append(warnings, gateUnavailable)
+	}
+	for _, w := range warnings {
+		write(stderr, "warning: "+w+"\n")
+	}
+	if len(warnings) > 0 {
+		write(stderr, "\nThis pack will not meet the V1 trust bar. The run record says so too.\n\n")
 	}
 
 	write(stdout, fmt.Sprintf("Generating %d question(s) on %q using %s.\n",
 		spec.Count, spec.Topic, llm.Identity()))
-	if gateUnavailable != "" {
-		write(stderr, "warning: "+gateUnavailable+"\n")
-	}
 	write(stdout, "The full trust chain runs on every candidate, so this takes minutes rather than seconds. Ctrl-C cancels.\n\n")
 
 	start := time.Now()
