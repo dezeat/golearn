@@ -45,6 +45,46 @@ Runtime dependencies are deliberately few — `bubbletea`, `lipgloss`,
 `yaml.v3`, `modernc.org/sqlite`. Adding one is a design change, not a
 convenience; justify it in the PR.
 
+## Method — hypothesis and test, in that order
+
+TDD and the scientific method are the same loop at different scales, and the
+loop runs in **all three phases**, not just while writing code. The failure
+mode they defend against is the one agents are most prone to: *plausible
+reasoning that was never checked*. Confidence is not evidence.
+
+The hinge: **TDD assumes you already know the right answer; the scientific
+method is for when you do not.** A failing test is a falsifiable prediction —
+red refutes the current theory, green is the smallest theory that survives,
+refactor is simplification under a regression suite.
+
+- **Planning.** A plan is a hypothesis about what will work. Before committing
+  to an approach, name the assumption it rests on and run the cheapest probe
+  that could refute it. An assumption that would change the design if wrong is
+  worth ten minutes; one that would not, is not worth probing at all.
+- **Implementation.** Known behaviour → test-first, the test *is* the spec.
+  Unknown behaviour → probe, observe, then pin the observation with a
+  regression test. Writing the test first for something you have not measured
+  encodes a guess as a specification, and a wrong spec is worse than no test.
+- **Debugging.** A symptom is an observation; a diagnosis is a hypothesis; a
+  fix without a reproduction is a guess wearing a diff. Reproduce first, state
+  what would prove the diagnosis wrong, then fix — and keep the reproduction
+  as the regression test. **Verify a claim in the environment the claim is
+  about**: "it works here" is not "it works".
+
+Three rules make it stick:
+
+1. **State the falsifier.** Whatever you conclude, name the observation that
+   would have shown you were wrong — then go and look for it.
+2. **Pre-register thresholds.** For anything scored rather than asserted,
+   commit the pass criterion *before* the measuring run. A threshold chosen
+   afterwards only describes what happened.
+3. **Distrust green.** A test that has never failed may assert nothing; a gate
+   that passes may have measured nothing. See Gates.
+
+Record what a probe measured in `docs/design/FORGE-EXPERIMENTS.md` as
+Question → Hypothesis → Method → Result → What it locked in, so a design choice
+can be re-checked instead of re-argued.
+
 ## Repo conventions
 
 - **Two modules, two binaries** (D-015). The root module
@@ -119,31 +159,21 @@ requirement.
   issue**. Exiting 0 with no output is indistinguishable from a run that
   legitimately produced nothing.
 
-### Tests — TDD where the answer is known, experiment where it is not
+### Tests
 
-Test-first assumes the correct behaviour is already known — then the test *is*
-the specification. Where it is genuinely unknown, a test written first encodes
-a **guess** as a spec, which is worse than no test. Pick the mode deliberately:
+Which mode applies is decided in **Method** above. The mechanics here:
 
-- **Known → test-first.** The **domain** layer runs red → green → refactor. A
-  pure refactor under green cover needs no new red.
-- **Unknown → probe, observe, lock in.** Smallest throwaway experiment that
-  answers the question, then the regression test pinning what you saw. Delete
-  the probe, keep the test.
-- **Non-deterministic → pre-register the threshold**, committed *before* the
-  measuring run. A threshold chosen afterwards just describes what happened.
+- The **domain** layer runs red → green → refactor. A pure refactor under
+  green cover needs no new red.
 - **Invariant guards must be seen failing** — for the *intended* reason, not a
-  compile error or a skipped test. Applies to invariant guards (no network in
-  the core, no secret in output, the dependency ceiling, the one-way import
-  rule), not ordinary behavioural tests.
+  compile error or a skipped test. Applies to guards protecting an invariant
+  (no network in the core, no secret in output, the dependency ceiling, the
+  one-way import rule), not ordinary behavioural tests.
 - Fixture expectations come from an **external oracle**, never from running the
   implementation under test — that is a tautology, not evidence.
 - Deterministic and table-driven where it fits; seed every shuffle with an
   explicit `*rand.Rand`.
 - A test name states the **invariant**, not the function called.
-
-Observations worth keeping go in `docs/design/FORGE-EXPERIMENTS.md` as
-Question → Hypothesis → Method → Result → What it locked in.
 
 ### Gates — a green check is only evidence if it measured something
 
