@@ -16,6 +16,7 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"io"
@@ -180,12 +181,19 @@ func runGenerate(args []string, stdout, stderr io.Writer) int {
 		return 0
 	}
 
-	// Research is not wired here. #126 landed the adapter but its endpoint
+	// The similarity gate is wired when the configured profile can support one.
+	// When it cannot — no embeddings API (D-018), or no committed calibration
+	// for the embedding model (D-022) — the reason is printed and carried into
+	// the run record. A pack that was never screened for near-duplicates must
+	// not look like one that passed.
+	topicID := existingTopicID(db, pipeline.TopicSlug(spec.Topic))
+	gate, gateUnavailable := buildGate(llm, store, libraryReader{questions: coresqlite.NewQuestionRepo(db)}, topicID)
+
+	// Research is not wired here. #126 landed the adapter, but its endpoint
 	// configuration and the source-authority policy are #120's, so wiring it
 	// would mean choosing a policy this binary has no authority to choose.
-	// The pipeline reports the absence rather than pretending grounding ran.
 	deps := pipeline.Deps{
-		Provider: llm, Runs: store, Drafts: store,
+		Provider: llm, Gate: gate, Runs: store, Drafts: store,
 		Now: time.Now, ForgeVersion: version,
 	}
 	p, err := pipeline.New(deps, pipeline.DefaultBudgets())
@@ -196,6 +204,9 @@ func runGenerate(args []string, stdout, stderr io.Writer) int {
 
 	write(stdout, fmt.Sprintf("Generating %d question(s) on %q using %s.\n",
 		spec.Count, spec.Topic, llm.Identity()))
+	if gateUnavailable != "" {
+		write(stderr, "warning: "+gateUnavailable+"\n")
+	}
 	write(stdout, "The full trust chain runs on every candidate, so this takes minutes rather than seconds. Ctrl-C cancels.\n\n")
 
 	start := time.Now()
@@ -209,6 +220,20 @@ func runGenerate(args []string, stdout, stderr io.Writer) int {
 	write(stdout, fmt.Sprintf("\nDraft %d is saved and is NOT yet library content.\n", result.Draft.ID))
 	write(stdout, "Run 'golearn-forge drafts' to review, add or discard it.\n")
 	return 0
+}
+
+// existingTopicID resolves a topic slug to its stored id, or zero when the
+// topic does not exist yet.
+//
+// Zero is the honest answer for a brand-new topic rather than an error: there
+// is simply no library content to compare against, and the gate reports an
+// empty corpus as an empty corpus.
+func existingTopicID(db *sql.DB, slug string) int64 {
+	topic, err := coresqlite.NewTopicRepo(db).GetBySlug(slug)
+	if err != nil || topic == nil {
+		return 0
+	}
+	return topic.ID
 }
 
 func describePlan(flags generateFlags, spec domain.GenerationSpec, identity domain.ModelIdentity) string {
