@@ -673,3 +673,134 @@ the existing golearn SQLite database** and compute cosine similarity in Go.
   indexed backend is a port implementation, not a change to pipeline logic.
 - A future large-corpus use case reopens this as a new entry, exactly as D-012
   anticipates.
+
+### D-021 — D-020's scan-cost arithmetic is wrong by 30x; the decision survives inside D-012's stated scale
+
+**Status:** accepted · **Date:** 2026-08-24 · **Amends:** D-020
+
+**Context.** D-020 chose Go-side cosine over BLOB vectors and justified
+rejecting an ANN index with a specific number: "A personal MCQ library at
+10,000 questions × 768 dims × float32 is ~30 MB, and a full cosine scan is
+single-digit milliseconds in pure Go." D-020 also required that claim to be
+benchmarked adversarially rather than assumed. It now has been
+(`docs/design/FORGE-EXPERIMENTS.md` A-17), and the number is wrong.
+
+Measured on the development machine, 768 dimensions, warm page cache:
+
+| Corpus | One scan | One pack (20 candidates) |
+| --- | --- | --- |
+| 1,000 | ~8 ms | 0.16 s |
+| 10,000 | **79.5 ms** | **1.6–1.9 s** |
+| 100,000 | ~800 ms | 17–18 s |
+
+The single-scan figure is 10–20x above the estimate. The figure that reaches a
+user is worse again, because the gate scans the corpus **once per candidate**:
+a pack of twenty pays twenty scans. Benchmarking one scan would have reported
+the flattering number and hidden that factor.
+
+**Decision.** Record the arithmetic as **falsified** and D-020's decision as
+**standing, within a scale that is now stated rather than implied.**
+
+- D-012 puts the expected scale at "hundreds to low-thousands of questions per
+  topic". At 1,000–2,000 vectors a pack pass costs 0.16–0.31 s, which is
+  invisible beside the provider latency of the generation it follows. Inside
+  D-012's envelope the design argument holds, and holds comfortably.
+- Against a one-second budget for the whole pack pass, **the knee is near
+  6,000 questions in one topic.** Above that the gate becomes a visible
+  contributor to the wait rather than a background stage.
+- Cost is linear in corpus size with no superlinear term, and the cold-cache
+  measurement lands within noise of the warm one: the work is BLOB decode and
+  arithmetic, not disk. So the knee moves with dimensionality and pack size,
+  not with the user's storage.
+- No index, cache, or second backend is added now. D-012 forbids optimising a
+  cost that does not bite at realistic scale, and 6,000 questions in a single
+  topic is outside the scale this product is for. The swap remains a
+  `ports.SimilarityIndex` implementation, exactly as D-020 says.
+- **The trigger is named rather than left to judgement:** a topic corpus past
+  ~5,000 vectors reopens this. Cheap moves exist before an ANN index — scan
+  once for the whole pack instead of once per candidate, or narrow candidates
+  with FTS5 first — and they are implementation changes, not decision changes.
+
+**Also recorded here: the similarity port moved.** `ports/similarity.go` was
+frozen with the rest of the Wave 0 contracts, and this work amended it:
+
+- `Neighbor.QuestionID` was documented as "a core question id **or** a
+  draft-local index, depending on which method you called" — two id spaces in
+  one `int64`, told apart by a doc comment. It is now
+  `domain.LibraryQuestionID`, and the index addresses library content only.
+  Intra-pack collisions never enter the index at all, because a candidate may
+  be repaired, replaced or rejected and never reach the library; persisting its
+  vector would leave every later search scoring against content no user can
+  practice.
+- `SimilarityIndex.Missing` was added, so the gate embeds only library
+  questions that lack a vector. Without it every run re-embeds the whole topic
+  at the configured provider's expense (D-018).
+
+**Consequences.**
+
+- A reader meeting D-020's "single-digit milliseconds" now finds the measured
+  figure and the scale it holds within, instead of reconciling a 30x gap alone.
+- The similarity gate sends existing library questions to the embedding
+  provider the first time a topic is screened. That follows from D-020 plus
+  D-018's "follow the chat provider" and is the cost #75 asked to have named;
+  `Missing` keeps it a one-off per question rather than a per-run charge.
+- The benchmark states what it holds constant — dimensionality, pack size,
+  cache warmth, process count — because a benchmark whose conditions are
+  implicit is the same class of evidence failure as a gate that skips a module.
+
+### D-022 — An uncalibrated embedding model is refused, not scored with a default threshold
+
+**Status:** accepted · **Date:** 2026-08-24
+
+**Context.** #124 requires "a calibrated, versioned threshold". A similarity
+threshold is a property of an embedding model, not of the gate: the same pair
+of questions scores differently under different models, so a number derived
+under one is a guess under another — the same non-portability D-020 already
+recognised for the vectors themselves. That leaves a question the gate cannot
+avoid: what does it do when asked to score under a model no one has measured?
+
+The obvious answer is a conservative default, high enough to be safe against
+false positives. It is also how a threshold silently becomes "whatever seemed
+reasonable", which this branch's own discipline exists to prevent.
+
+Calibration needs a labeled fixture set, and the set built for this work
+(`addons/forge/internal/app/testdata/similarity_pairs.json`) contains hard
+negatives and two duplicates phrased with **disjoint vocabulary**. The
+deterministic lexical stand-in used to keep `make check` offline scores those
+two *below three of the negatives* — no threshold separates them. That is not
+a tuning problem; it is the difference between lexical overlap and semantic
+similarity, and it means no offline fixture can stand in for a measurement
+against a real embedding model.
+
+**Decision.** The committed calibration table ships **empty**, and a model
+absent from it is **refused** with `domain.ErrUncalibratedEmbeddingModel`.
+
+- Refusing follows the precedent already set across this codebase: `Cosine`
+  refuses a dimension mismatch rather than returning 0, the index refuses a
+  mixed-model search rather than returning a plausible score, and D-014 refuses
+  an unrecognised schema rather than guessing. A threshold is the same kind of
+  claim.
+- `app.NewGate` takes its thresholds **from the table only**. An earlier shape
+  let the caller pass a `Calibration` in, which meant the refusal could be
+  walked around by constructing one — a refusal that can be bypassed is
+  decoration. The test seam that supplies thresholds to the ladder's tests
+  lives in `export_test.go`, which the toolchain compiles only under test.
+- A fixture baseline and an unversioned threshold are both refused at
+  preflight, so neither can decide real content.
+- The derivation procedure and its pass criteria (no false positives, recall
+  floor 0.80, margin 0.02) are committed and testable, and were committed in an
+  earlier commit than any measured number.
+
+**Consequences.**
+
+- **The similarity gate cannot run against a real provider until a calibration
+  entry exists.** This is deliberate and visible rather than silent, but it is
+  a real gap in the pipeline and it belongs to the live provider lane (#130),
+  which is the only lane that can measure a real embedding model. Seeding the
+  table is then a one-line change plus the evidence for it.
+- The maintainer may prefer a named, uncalibrated default that lets the
+  pipeline run degraded. That is a legitimate different call; it is recorded
+  here as refused so that changing it is a decision rather than a drift.
+- The fixture set stays valuable regardless: it is what a real model gets
+  measured *against*, and its semantic pairs are the cases that distinguish a
+  semantic backend from a lexical one.

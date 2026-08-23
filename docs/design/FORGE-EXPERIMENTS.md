@@ -624,6 +624,187 @@ These settled the shape of #125 before any implementation was committed.
 
 ---
 
+### A-16 · Can a deterministic offline embedder calibrate the similarity gate?
+
+- **Question.** The gate needs a near-duplicate threshold, and `make check`
+  must stay offline, so the calibration run has to use a stand-in embedder. Can
+  a number derived that way serve as a production threshold?
+- **Hypothesis (committed before the run).** A hashed bag-of-words embedder
+  would separate the lexical duplicates but **fail** the 0.80 recall floor on
+  the full set, because two fixture pairs ask the same question with disjoint
+  vocabulary. The pass criteria (no false positives, recall floor 0.80, margin
+  0.02) were committed in an earlier commit than any measured number.
+- **Method.** Thirteen labeled pairs in
+  `addons/forge/internal/app/testdata/similarity_pairs.json`, labeled by
+  relation (identical / paraphrase / semantic / competency / concept /
+  unrelated) **before** anything was scored. Scored with a deterministic
+  L2-normalized hashed-token embedder at 256 dims; threshold derived by
+  `domain.Calibrate`.
+- **Result. Hypothesis confirmed, and more sharply than expected.**
+
+  | Pair | Relation | Score |
+  | --- | --- | --- |
+  | verbatim repeat | identical | 1.0000 |
+  | different choice-id scheme and order | identical | 1.0000 |
+  | paraphrase of a channel question | paraphrase | 0.9649 |
+  | reordered options, reworded stem | paraphrase | 0.9619 |
+  | paraphrase with filler words | paraphrase | 0.7670 |
+  | **same option set, different question** | **concept (negative)** | **0.7368** |
+  | shared stem, unrelated concepts | concept (negative) | 0.5618 |
+  | same topic and stem, different concept | concept (negative) | 0.5000 |
+  | **same fact, opposite direction** | **semantic (duplicate)** | **0.4739** |
+  | same assessment, disjoint vocabulary | **semantic (duplicate)** | **0.2860** |
+  | different topics entirely | unrelated (negative) | 0.2449 |
+  | same difficulty and tag, different subject | unrelated (negative) | 0.1312 |
+  | same concept, different competency | competency (negative) | 0.0767 |
+
+  - Full set: threshold 0.76, 0 false positives, recall **0.714** — below the
+    committed floor, so the derivation **fails** and returns an error.
+  - Lexical subset (semantic pairs excluded): threshold **0.76**, 0 false
+    positives, recall 1.00, margin 0.0232.
+- **What it locked in.** The two semantic duplicates do not merely score low —
+  they score **below three negatives the gate must let through**, so no
+  threshold separates them. A lexical scorer is not a weak semantic scorer; it
+  is a different measurement. Therefore:
+  1. The production calibration table ships **empty** and an uncalibrated model
+     is refused (D-022), rather than defaulting to a number this run produced.
+  2. 0.76 is recorded as a **fixture baseline** — a self-consistency check on
+     the derivation procedure — and `Preflight` refuses a calibration marked as
+     one, so it can never decide real content.
+  3. The guard is two-sided. Asserting "no false positives" alone is satisfied
+     by a threshold of 1.0 that catches nothing, so the committed threshold is
+     also asserted to sit at or below the weakest duplicate it must catch.
+- **Note on circularity.** Labels were assigned to the *questions* before any
+  score existed, and `domain.Calibrate` is unit-tested against hand-computed
+  score tables rather than against embedder output. A calibration validated by
+  the thing it calibrates would prove nothing.
+
+### A-17 · At what corpus size does brute-force cosine stop being irrelevant?
+
+- **Question.** D-020 rejected an ANN index on the grounds that "a full cosine
+  scan is single-digit milliseconds in pure Go" at 10,000 × 768, and required
+  that claim to be tested **adversarially**. Where does it break?
+- **Hypothesis (going in).** The claim holds at expected scale; the interesting
+  number is where it stops.
+- **Method.** Real on-disk SQLite databases seeded with a fixed PRNG at seven
+  corpus sizes, 768 dims, measured through `Nearest` — not over an in-memory
+  slice, which would measure arithmetic no user waits for alone. Three
+  benchmarks: one scan, one **pack pass** (20 candidates, the unit a user
+  actually waits for), and a cold-cache pack pass reopening the database each
+  iteration.
+- **Result. The estimate is falsified by 10–20x; the conclusion survives at
+  D-012's stated scale.**
+
+  | Corpus | One scan | Pack pass (20), warm | Pack pass, cold |
+  | --- | --- | --- | --- |
+  | 100 | 0.92 ms | 12.5 ms | 15.4 ms |
+  | 1,000 | 8.0 ms | 160 ms | 158 ms |
+  | 2,000 | — | 313 ms | 323 ms |
+  | 5,000 | — | 791 ms | 838 ms |
+  | 10,000 | **79.5 ms** | **1.63 s** | 1.62 s |
+  | 50,000 | 396 ms | 8.0 s | 8.6 s |
+  | 100,000 | 798 ms | 17.0 s | 17.2 s |
+
+  - Growth is **linear** with no superlinear term.
+  - **Cold ≈ warm.** The cost is BLOB decode plus arithmetic, not disk.
+  - Against a one-second budget for the pack pass, **the knee is near 6,000
+    questions in one topic.**
+- **What it locked in.** D-021: the arithmetic is corrected in the log, the
+  decision stands inside D-012's "hundreds to low-thousands per topic", and the
+  reopening trigger is named (~5,000 vectors in one topic) rather than left to
+  judgement. Two cheap fixes are identified ahead of any ANN index — scan once
+  per pack rather than once per candidate, or narrow with FTS5 first — both
+  implementation changes behind the unchanged port.
+- **The methodological point, which is why the third benchmark exists.**
+  Benchmarking a single scan would have reported 79.5 ms and read as
+  acceptable. The gate scans **once per candidate**, so the number a user meets
+  is twenty times larger. A benchmark that measures the convenient unit is the
+  same failure as a gate that skips a module: it reports success for something
+  it did not measure. What the benchmark holds constant — dimensionality, pack
+  size, cache warmth, single process, random vector content — is stated in the
+  file rather than left to be inferred, and the cold benchmark records that it
+  cannot drop the OS cache and is therefore a floor rather than a worst case.
+
+### A-18 · Mutation test — the similarity index, gate and calibration guards
+
+- **Question.** Twenty-four guards ship with this work and all are green. Do
+  they bite?
+- **Method.** Twenty-four mutations across `forgestore`, `app` and the
+  calibration policy, each build-checked, run, and reverted, with a control
+  afterwards.
+- **Result. Twenty-three caught; one inert by construction, and one that
+  exposed a defect in the code rather than in a test.**
+
+  | # | Mutation | Guard that fired |
+  | --- | --- | --- |
+  | 1 | `Nearest` skips a mismatched vector instead of refusing | `TestASearchRefusesAStoredVectorOfAnotherDimension` |
+  | 2 | a FOREIGN KEY from the Forge table to core `questions` | `TestStoredEmbeddingsDoNotBlockACoreSideDelete` |
+  | 3 | `Put` inserts instead of replacing | `TestPutReplacesAVectorRatherThanAccumulating` |
+  | 4 | `Nearest` orders ascending | `TestAStoredVectorIsItsOwnNearestNeighbor` |
+  | 5 | `Nearest` ignores the model scope | `TestASearchNeverScoresVectorsFromAnotherModel` |
+  | 6 | the write-side dimension guard always passes | `TestPutRefusesAVectorOfADifferentDimensionForTheSameModel` |
+  | 7 | `Missing` ignores the model scope | `TestMissingReportsOnlyTheIdsWithoutAVector` |
+  | 8 | `Count` ignores the model scope | `TestCountIsScopedToOneEmbeddingModel` |
+  | 9 | an empty vector is accepted | `TestPutRefusesAnEmptyVector` |
+  | 10 | an unresolved candidate is accepted, not rejected | `TestACandidateStillTooSimilarWhenTheBudgetRunsOutIsRejected` |
+  | 11 | the no-budget-left break is removed | same, in 0.00 s with "got 3 attempts" |
+  | 12 | the ladder's loop bound is lifted | **inert** — see below |
+  | 13 | no embedding capability waves candidates through | `TestWithoutAnEmbeddingCapabilityTheGateRefusesRatherThanAcceptingEverything` |
+  | 14 | library neighbors never cross the threshold | three ladder tests |
+  | 15 | the reject threshold never routes to replacement | `TestANearIdenticalCandidateIsReplacedRatherThanRepaired` |
+  | 16 | the exact-duplicate short circuit is removed | `TestAVerbatimDuplicateInOnePackSpendsNoRepairBudget` |
+  | 17 | accepted peers never accumulate | `TestTwoCollidingCandidatesInOnePackKeepTheFirst` |
+  | 18 | the backfill re-embeds the whole topic | `TestOnlyLibraryQuestionsWithoutAVectorAreEmbedded` |
+  | 19 | a short embedder reply is accepted | `TestAShortEmbedderReplyIsRefusedRatherThanMisattributed` (panic) |
+  | 20 | candidate vectors written into the library index | `TestTwoCollidingCandidatesInOnePackKeepTheFirst` |
+  | 21 | the calibration/model mismatch check removed | `TestAThresholdCalibratedForAnotherModelIsRefused` |
+  | 22 | `NewGate` invents a calibration instead of looking one up | `TestTheProductionConstructorRefusesAnUncalibratedModel` |
+  | 23 | the fixture-baseline refusal is removed | `TestAFixtureBaselineIsRefusedAsAScoringThreshold` |
+  | 24 | the unversioned-calibration refusal is removed | `TestAnUnversionedCalibrationIsRefused` |
+
+- **Mutation 2 is the one that matters, and it discriminates.** Under a foreign
+  key to `questions(id)`, `TestForgeMigrationsNeverTouchCoreTables` **passes** —
+  it compares `pragma_table_info`, and an inbound foreign key changes no
+  column — while the new delete test fails with `FOREIGN KEY constraint
+  failed`. The core opens the database with `foreign_keys=ON`, so that
+  constraint would make a core-side delete of a question fail: the offline
+  binary would break because the user once ran Forge. The pre-existing guard
+  could not have caught it, and now something does.
+
+- **A fourth instance of the recurring failure, and this time it was in the
+  harness.** Mutation 11's first form removed the budget check from a `for {}`
+  loop whose only exit that check was. The mutated code did not misbehave — it
+  **never returned**. `go test` hit its default timeout, printed a panic rather
+  than a `--- FAIL:` line, and the harness's grep scored it **SURVIVED**. It
+  was neither caught nor survived: the experiment never ran.
+
+  Two fixes, and the first is the important one. **The gate's loop was
+  restructured so termination is structural** — a bounded
+  `for attempt := 0; attempt <= maxGateAttempts` — with rejection as what
+  happens on falling through. The same mutation now fails in milliseconds
+  saying "got 3 attempts", and the fail-safe direction is rejection rather than
+  acceptance. The harness was then taught to report a timeout as
+  **INCONCLUSIVE**, never as a result. Mutation 12 records the consequence:
+  with the inner break intact the outer bound is unreachable, so lifting it
+  changes nothing — it is a backstop, and mutation 11 is what proves the
+  backstop is needed.
+
+  A-1: a gate that skips a module reports success. A-10: a mutation that fails
+  to compile reads as caught. A-12: a gate running in a richer environment than
+  production reports success. A-18: **a mutation that hangs reads as
+  survived.** Every one is the measurement apparatus quietly not measuring, and
+  the fix is never a better assertion.
+
+- **A defect the tests found, not the mutations.** `NewGate` accepted a
+  caller-supplied `Calibration`, so the "refuse an uncalibrated model" policy
+  built one commit earlier could be walked around by simply constructing one —
+  a fixture baseline included. Mutations 22–24 exist because the fix does;
+  before it there was no guard to mutate. A refusal a caller can bypass is
+  decoration, and the empty table only means something because `NewGate` is now
+  the sole path to a threshold.
+
+---
+
 ## Part B — Provider & model benchmarks
 
 **Scope discipline (#130).** These measurements establish *mechanism* —
@@ -733,8 +914,8 @@ rather than inferred.
 | core direct dependencies | the four-dependency ceiling; guarded by `internal/boundary` | **4** |
 | `net/http` in core graph | the offline law's leak detector | **absent** |
 | `make check` wall time | the gate must stay fast enough to be run | *pending* |
-| similarity scan vs corpus size | **tests the no-vector-index claim** | *pending* |
-| embedding bytes per 1000 questions | validates BLOB-in-SQLite | *pending* |
+| similarity scan vs corpus size | **tests the no-vector-index claim** | one scan **79.5 ms** at 10k x 768; one 20-candidate pack pass **1.63 s**. Linear; cold ~ warm. **Knee ~6,000** questions/topic against a 1 s pack budget. Falsifies D-020's "single-digit ms" estimate (A-17, D-021) |
+| embedding bytes per 1000 questions | validates BLOB-in-SQLite | **3.98 MB** (4,177,920 B) at 768 dims — 1.36x the 3.07 MB raw float32 payload, the remainder SQLite page and overflow overhead. Bounded by `TestEmbeddingFootprintPerThousandQuestions` |
 | migration time, populated database | D-014 migrations must not stall startup | *pending* |
 
 The similarity row is deliberately adversarial: the design argument for
