@@ -215,6 +215,23 @@ Migrations are sequential and version-tracked in a `schema_migrations` table;
 each migration is an embedded SQL string applied exactly once. WAL is
 (re)enabled on every open, not assumed sticky (D-006).
 
+Before any migration runs, `Open` guards the schema it found and refuses rather
+than repairs (D-014) — golearn never destroys user data implicitly, and a
+refusal leaves the file exactly as it was:
+
+| Schema found | Behaviour |
+| --- | --- |
+| No tables at all | Created by the migrations |
+| Tracked, at or below this binary's version | Migrated forward in place |
+| Tracked, above this binary's version | Refused, `ErrNewerSchema` |
+| Core tables but no `schema_migrations` | Refused, `ErrIncompatibleSchema` |
+| Tracked but missing a column the repositories read | Refused, `ErrIncompatibleSchema` |
+
+Every refusal names `golearn db reset --yes`, the one consented destructive
+path. Additive tables from another module — Forge's, which carry their own
+`forge_schema_migrations` registry — are *compatible*, not newer: the offline
+binary keeps opening a database that Forge has extended.
+
 ### Local profiles
 
 The `users` table stores profile metadata (`handle`, optional `display_name`).
@@ -223,9 +240,7 @@ insert, with uniqueness enforced in the repository create path (returning a
 typed duplicate error), not in the UI. `display_name` defaults to the handle
 when omitted. Topics and questions are shared globally; sessions, attempts, and
 stats are per-user, and the current profile is persisted in `config.json` as
-`current_user_id`. During the development phase, an older-than-expected schema
-triggers a drop-recreate-reseed on startup — a known dev-only shortcut to be
-removed before public release.
+`current_user_id`.
 
 ## Pack format
 

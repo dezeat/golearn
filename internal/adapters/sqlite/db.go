@@ -58,9 +58,9 @@ func Open(dbPath string) (*sql.DB, error) {
 		return nil, fmt.Errorf("enable foreign keys: %w", err)
 	}
 
-	if err := ensureCompatibleSchema(db); err != nil {
+	if err := guardSchemaCompatibility(db); err != nil {
 		_ = db.Close()
-		return nil, fmt.Errorf("ensure compatible schema: %w", err)
+		return nil, err
 	}
 
 	if err := migrate(db); err != nil {
@@ -69,63 +69,6 @@ func Open(dbPath string) (*sql.DB, error) {
 	}
 
 	return db, nil
-}
-
-func ensureCompatibleSchema(db *sql.DB) error {
-	needsReset, err := schemaNeedsReset(db)
-	if err != nil {
-		return err
-	}
-	if !needsReset {
-		return nil
-	}
-
-	if err := resetSchema(db); err != nil {
-		return fmt.Errorf("reset schema: %w", err)
-	}
-	return nil
-}
-
-func schemaNeedsReset(db *sql.DB) (bool, error) {
-	usersExists, err := tableExists(db, "users")
-	if err != nil {
-		return false, fmt.Errorf("check users table: %w", err)
-	}
-	if !usersExists {
-		hasLegacy, err := hasAnyLegacyTables(db)
-		if err != nil {
-			return false, err
-		}
-		if hasLegacy {
-			return true, nil
-		}
-		return false, nil
-	}
-
-	hasSessionUserID, err := tableHasColumn(db, "sessions", "user_id")
-	if err != nil {
-		return false, fmt.Errorf("check sessions.user_id: %w", err)
-	}
-	hasAttemptUserID, err := tableHasColumn(db, "attempts", "user_id")
-	if err != nil {
-		return false, fmt.Errorf("check attempts.user_id: %w", err)
-	}
-
-	return !hasSessionUserID || !hasAttemptUserID, nil
-}
-
-func hasAnyLegacyTables(db *sql.DB) (bool, error) {
-	tables := []string{"schema_migrations", "topics", "questions", "sessions", "attempts"}
-	for _, table := range tables {
-		exists, err := tableExists(db, table)
-		if err != nil {
-			return false, fmt.Errorf("check table %s: %w", table, err)
-		}
-		if exists {
-			return true, nil
-		}
-	}
-	return false, nil
 }
 
 func tableExists(db *sql.DB, table string) (bool, error) {
@@ -161,21 +104,6 @@ func tableHasColumn(db *sql.DB, table, column string) (bool, error) {
 		return false, err
 	}
 	return false, nil
-}
-
-func resetSchema(db *sql.DB) error {
-	_, err := db.Exec(`
-		DROP TABLE IF EXISTS attempts;
-		DROP TABLE IF EXISTS sessions;
-		DROP TABLE IF EXISTS questions;
-		DROP TABLE IF EXISTS topics;
-		DROP TABLE IF EXISTS users;
-		DROP TABLE IF EXISTS schema_migrations;
-	`)
-	if err != nil {
-		return err
-	}
-	return nil
 }
 
 // migrate applies schema migrations in order.

@@ -215,6 +215,32 @@ These settled the shape of #125 before any implementation was committed.
   behave, not in what anyone intended. Writing P3 as a test-first assertion
   would have encoded the going-in hypothesis, which was wrong.
 
+### A-8 · Mutation test — do the D-014 schema guards actually fail?
+
+- **Question.** A-7's probes justified replacing the drop-recreate path with a
+  refuse-and-leave-intact guard. The replacement's tests are green. Do they
+  assert anything?
+- **Method.** Five deliberate mutations of `internal/adapters/sqlite`, each
+  reverted immediately after the observation, with a control run afterwards to
+  confirm the revert.
+- **Result.** **All five caught, each by exactly the intended guard.**
+
+  | # | Mutation | Guard(s) that fired |
+  | --- | --- | --- |
+  | 1 | `guardSchemaCompatibility` returns nil unconditionally | all four refusal guards |
+  | 2 | refusal message drops the recovery hint | `TestSchemaRefusalNamesTheConsentedRecoveryPath` |
+  | 3 | newer-schema gate removed | `TestNewerSchemaRefusesToOpen` |
+  | 4 | required-column gate removed | `TestTrackedDatabaseMissingARequiredColumnIsRefusedNotReset` |
+  | 5 | legacy branch drops tables, *then* refuses | `TestPopulatedLegacyDatabaseSurvivesAnOpenAttempt` |
+
+- **What it locked in.** Mutation 5 is the one that matters and it was written
+  deliberately: mutations that simply stop refusing fail on the "must refuse"
+  assertion and never reach the row count, so they would leave the
+  data-survival claim — the entire point of D-014 — untested. A mutation that
+  destroys data *and still returns the correct error* is what proves the row
+  count is load-bearing. A guard that only checks the error type would have
+  passed it.
+
 ---
 
 ## Part B — Provider & model benchmarks
