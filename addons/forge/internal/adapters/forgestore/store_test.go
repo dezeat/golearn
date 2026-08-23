@@ -183,20 +183,38 @@ func TestForgeKeepsItsOwnMigrationRegistry(t *testing.T) {
 	}
 }
 
+// The invariant is that reopening applies nothing a second time, which is not
+// the same as a particular registry size. Pinning the literal count made this
+// test fail the moment a migration was added — reporting a schema change as an
+// idempotency defect, which is the wrong alarm.
 func TestMigrationsAreIdempotentAcrossReopens(t *testing.T) {
 	_, db := coreDB(t)
-	for i := 0; i < 3; i++ {
+	if _, err := forgestore.New(context.Background(), db); err != nil {
+		t.Fatalf("first open: %v", err)
+	}
+	afterFirst := countForgeMigrations(t, db)
+	if afterFirst == 0 {
+		t.Fatal("the first open recorded no migrations at all")
+	}
+
+	for i := 0; i < 2; i++ {
 		if _, err := forgestore.New(context.Background(), db); err != nil {
-			t.Fatalf("open %d: %v", i, err)
+			t.Fatalf("reopen %d: %v", i, err)
 		}
 	}
+
+	if got := countForgeMigrations(t, db); got != afterFirst {
+		t.Errorf("reopening re-applied migrations: %d recorded after one open, %d after three", afterFirst, got)
+	}
+}
+
+func countForgeMigrations(t *testing.T, db *sql.DB) int {
+	t.Helper()
 	var versions int
 	if err := db.QueryRow(`SELECT COUNT(*) FROM forge_schema_migrations`).Scan(&versions); err != nil {
-		t.Fatalf("count: %v", err)
+		t.Fatalf("count forge migrations: %v", err)
 	}
-	if versions != 1 {
-		t.Errorf("want 1 recorded migration after three opens, got %d", versions)
-	}
+	return versions
 }
 
 func openCore(t *testing.T, path string) (*sql.DB, error) {

@@ -93,6 +93,31 @@ var migrations = []string{
 	);
 
 	CREATE INDEX IF NOT EXISTS idx_forge_drafts_created ON forge_drafts(created_at);`,
+
+	// v2: embedding vectors for the near-duplicate gate (D-020)
+	//
+	// question_id references a core questions(id) but carries no FOREIGN KEY,
+	// and that is the load-bearing part. The core opens the database with
+	// foreign_keys=ON, so a child row here would make a core-side delete of a
+	// question fail — the offline binary would break because the user once ran
+	// Forge, which is precisely what "additive" is supposed to prevent. The
+	// price is that a deleted question can leave a vector behind; a stale
+	// vector costs bytes, an unopenable library costs the product.
+	//
+	// dim is stored beside the BLOB rather than derived from its length so a
+	// mixed-model corpus is detectable by a query instead of by decoding every
+	// row.
+	`CREATE TABLE IF NOT EXISTS forge_embeddings (
+		id          INTEGER PRIMARY KEY AUTOINCREMENT,
+		question_id INTEGER NOT NULL,
+		provider    TEXT NOT NULL,
+		model       TEXT NOT NULL,
+		dim         INTEGER NOT NULL,
+		vector      BLOB NOT NULL,
+		UNIQUE (question_id, provider, model)
+	);
+
+	CREATE INDEX IF NOT EXISTS idx_forge_embeddings_model ON forge_embeddings(provider, model);`,
 }
 
 func migrate(ctx context.Context, db *sql.DB) error {
