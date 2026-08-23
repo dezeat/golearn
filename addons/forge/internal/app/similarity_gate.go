@@ -57,8 +57,16 @@ type Reason string
 const (
 	// ReasonNone marks a candidate nothing was wrong with.
 	ReasonNone Reason = ""
-	// ReasonExactDuplicate marks a candidate whose comparison representation
-	// is byte-identical to something already present.
+	// ReasonExactDuplicate marks a candidate whose comparison representation is
+	// byte-identical to another candidate in the same pack.
+	//
+	// It is intra-pack only, and deliberately so. A candidate identical to a
+	// STORED question is caught by score instead: it reaches 1.0, lands above
+	// the reject threshold, and is replaced. The asymmetry is the remedy, not
+	// the detection — two siblings can be resolved by dropping one, whereas
+	// nothing can be dropped on the library side (FORGE.md 7), so the
+	// candidate has to be regenerated either way and the short circuit would
+	// save nothing.
 	ReasonExactDuplicate Reason = "exact-duplicate"
 	// ReasonLibraryNearDuplicate marks a candidate too close to stored content.
 	ReasonLibraryNearDuplicate Reason = "library-near-duplicate"
@@ -145,15 +153,34 @@ type Gate struct {
 	calib    domain.Calibration
 }
 
-// NewGate wires the gate.
+// NewGate wires the gate, taking its thresholds from the committed
+// calibration table rather than from its caller.
+//
+// The thresholds are looked up rather than passed in on purpose. A gate that
+// accepted a [domain.Calibration] from its caller would let a number picked by
+// feel reach a scoring decision — the composition root writes
+// `Calibration{Model: realModel, NearDuplicate: 0.85}` and everything works —
+// which is precisely the failure the empty table and
+// [domain.ErrUncalibratedEmbeddingModel] exist to prevent. Refusing in
+// CalibrationFor while leaving a second, unchecked way in would have made that
+// refusal decorative.
 //
 // A nil embedder is the explicit encoding of "this provider profile has no
 // embedding capability". D-018 makes [ports.Embedder] a separate optional
 // interface precisely because Anthropic ships no embeddings API, so the
 // composition root's type assertion either succeeds or does not, and the
 // failure is handed here as nil rather than discovered mid-run.
-func NewGate(embedder ports.Embedder, index ports.SimilarityIndex, library ports.LibraryReader, calib domain.Calibration) *Gate {
-	return &Gate{embedder: embedder, index: index, library: library, calib: calib}
+func NewGate(embedder ports.Embedder, index ports.SimilarityIndex, library ports.LibraryReader) (*Gate, error) {
+	if embedder == nil {
+		return nil, fmt.Errorf(
+			"similarity gate: %w, so no candidate can be compared for near-duplication",
+			domain.ErrNoEmbeddingCapability)
+	}
+	calib, err := domain.CalibrationFor(embedder.EmbeddingIdentity())
+	if err != nil {
+		return nil, fmt.Errorf("similarity gate: %w", err)
+	}
+	return &Gate{embedder: embedder, index: index, library: library, calib: calib}, nil
 }
 
 // Preflight reports whether the gate can run at all, before a run spends a
@@ -178,10 +205,31 @@ func (g *Gate) Preflight() error {
 			"%w: the gate is calibrated for %s but the profile embeds with %s",
 			domain.ErrUncalibratedEmbeddingModel, g.calib.Model, identity)
 	}
+
+	// A fixture baseline is derived from a deterministic stand-in embedder so
+	// the derivation procedure can be tested offline. It says nothing about a
+	// real model's score distribution, so it must never decide real content.
+	if g.calib.Fixture {
+		return fmt.Errorf(
+			"%w: %s carries a fixture baseline, which is a self-consistency check on the derivation and not a measured threshold",
+			domain.ErrUncalibratedEmbeddingModel, g.calib.Model)
+	}
+	if g.calib.Version == "" {
+		return fmt.Errorf(
+			"%w: the calibration for %s carries no version, so a recalibration could not be told from the original",
+			domain.ErrUncalibratedEmbeddingModel, g.calib.Model)
+	}
 	return nil
 }
 
 // Screen classifies candidates without changing anything.
+//
+// It is a diagnostic view, not a dry run of [Apply], and the two do not always
+// agree: Screen compares each candidate against every earlier one, while Apply
+// compares only against the peers it actually accepted. So Screen can report an
+// intra-pack collision with a candidate Apply would have rejected anyway. That
+// is the right bias for a diagnostic — it shows what is in the batch — but it
+// means a Screen finding is not a prediction of an Apply decision.
 func (g *Gate) Screen(ctx context.Context, topicID int64, candidates []domain.Candidate) (Report, error) {
 	if err := g.Preflight(); err != nil {
 		return Report{}, err

@@ -195,6 +195,51 @@ func canonicalOf(prompt string) string {
 	return domain.CanonicalText(&q)
 }
 
+// The production constructor is the only way a gate can be built outside a
+// test, and it takes its thresholds from the committed table. Every model is
+// uncalibrated today, so it refuses — which is the honest state until a real
+// embedding model has been measured, and is exactly what stops a threshold
+// picked by feel from reaching a scoring decision.
+func TestTheProductionConstructorRefusesAnUncalibratedModel(t *testing.T) {
+	_, err := app.NewGate(&scriptedEmbedder{}, newMemoryIndex(), &stubLibrary{})
+	if !errors.Is(err, domain.ErrUncalibratedEmbeddingModel) {
+		t.Fatalf("want ErrUncalibratedEmbeddingModel, got %v", err)
+	}
+}
+
+func TestTheProductionConstructorRefusesAMissingEmbeddingCapability(t *testing.T) {
+	_, err := app.NewGate(nil, newMemoryIndex(), &stubLibrary{})
+	if !errors.Is(err, domain.ErrNoEmbeddingCapability) {
+		t.Fatalf("want ErrNoEmbeddingCapability, got %v", err)
+	}
+}
+
+// A fixture baseline is a self-consistency check on the derivation procedure,
+// measured with a lexical stand-in. It says nothing about a real model's score
+// distribution, so it must never decide real content — even through the test
+// seam, which is why Preflight and not just the table enforces it.
+func TestAFixtureBaselineIsRefusedAsAScoringThreshold(t *testing.T) {
+	calib := testCalibration()
+	calib.Fixture = true
+	gate := app.NewGateWithCalibration(&scriptedEmbedder{}, newMemoryIndex(), &stubLibrary{}, calib)
+
+	if err := gate.Preflight(); !errors.Is(err, domain.ErrUncalibratedEmbeddingModel) {
+		t.Fatalf("a fixture baseline must not score real content, got %v", err)
+	}
+}
+
+// A threshold with no version cannot be told apart from a later recalibration,
+// so a score it produced could never be explained after the fact.
+func TestAnUnversionedCalibrationIsRefused(t *testing.T) {
+	calib := testCalibration()
+	calib.Version = ""
+	gate := app.NewGateWithCalibration(&scriptedEmbedder{}, newMemoryIndex(), &stubLibrary{}, calib)
+
+	if err := gate.Preflight(); !errors.Is(err, domain.ErrUncalibratedEmbeddingModel) {
+		t.Fatalf("an unversioned calibration must be refused, got %v", err)
+	}
+}
+
 // testCalibration is a threshold pair chosen for the tests, not a measured
 // one. It is deliberately not in the production table.
 func testCalibration() domain.Calibration {
@@ -203,7 +248,6 @@ func testCalibration() domain.Calibration {
 		Version:       "test",
 		NearDuplicate: 0.80,
 		Reject:        0.95,
-		Fixture:       true,
 	}
 }
 
@@ -213,7 +257,7 @@ func TestACandidateUnlikeAnythingIsAccepted(t *testing.T) {
 		canonicalOf("fresh"):  angleFor(0.10),
 	}}
 	library := &stubLibrary{questions: []coredomain.Question{libraryQuestion(1, "stored")}}
-	gate := app.NewGate(embedder, newMemoryIndex(), library, testCalibration())
+	gate := app.NewGateWithCalibration(embedder, newMemoryIndex(), library, testCalibration())
 
 	out, err := gate.Apply(context.Background(), 1, []domain.Candidate{candidate("fresh")}, &scriptedReviser{})
 	if err != nil {
@@ -238,7 +282,7 @@ func TestACandidateTooCloseToLibraryContentIsRepairedThenAccepted(t *testing.T) 
 	}}
 	library := &stubLibrary{questions: []coredomain.Question{libraryQuestion(1, "stored")}}
 	reviser := &scriptedReviser{repairs: []domain.Candidate{candidate("reworded")}}
-	gate := app.NewGate(embedder, newMemoryIndex(), library, testCalibration())
+	gate := app.NewGateWithCalibration(embedder, newMemoryIndex(), library, testCalibration())
 
 	out, err := gate.Apply(context.Background(), 1, []domain.Candidate{candidate("too close")}, reviser)
 	if err != nil {
@@ -270,7 +314,7 @@ func TestACandidateStillTooSimilarWhenTheBudgetRunsOutIsRejected(t *testing.T) {
 	library := &stubLibrary{questions: []coredomain.Question{libraryQuestion(1, "stored")}}
 	// The reviser hands back the same candidate every time.
 	reviser := &scriptedReviser{}
-	gate := app.NewGate(embedder, newMemoryIndex(), library, testCalibration())
+	gate := app.NewGateWithCalibration(embedder, newMemoryIndex(), library, testCalibration())
 
 	out, err := gate.Apply(context.Background(), 1, []domain.Candidate{candidate("stubborn")}, reviser)
 	if err != nil {
@@ -301,7 +345,7 @@ func TestANearIdenticalCandidateIsReplacedRatherThanRepaired(t *testing.T) {
 	}}
 	library := &stubLibrary{questions: []coredomain.Question{libraryQuestion(1, "stored")}}
 	reviser := &scriptedReviser{replaces: []domain.Candidate{candidate("different")}}
-	gate := app.NewGate(embedder, newMemoryIndex(), library, testCalibration())
+	gate := app.NewGateWithCalibration(embedder, newMemoryIndex(), library, testCalibration())
 
 	out, err := gate.Apply(context.Background(), 1, []domain.Candidate{candidate("almost same")}, reviser)
 	if err != nil {
@@ -328,7 +372,7 @@ func TestTwoCollidingCandidatesInOnePackKeepTheFirst(t *testing.T) {
 		canonicalOf("fixed"):  angleFor(0.10),
 	}}
 	reviser := &scriptedReviser{repairs: []domain.Candidate{candidate("fixed")}}
-	gate := app.NewGate(embedder, newMemoryIndex(), &stubLibrary{}, testCalibration())
+	gate := app.NewGateWithCalibration(embedder, newMemoryIndex(), &stubLibrary{}, testCalibration())
 
 	out, err := gate.Apply(context.Background(), 1,
 		[]domain.Candidate{candidate("first"), candidate("second")}, reviser)
@@ -352,7 +396,7 @@ func TestTwoCollidingCandidatesInOnePackKeepTheFirst(t *testing.T) {
 func TestAVerbatimDuplicateInOnePackSpendsNoRepairBudget(t *testing.T) {
 	embedder := &scriptedEmbedder{angles: map[string]float64{canonicalOf("same"): 0}}
 	reviser := &scriptedReviser{}
-	gate := app.NewGate(embedder, newMemoryIndex(), &stubLibrary{}, testCalibration())
+	gate := app.NewGateWithCalibration(embedder, newMemoryIndex(), &stubLibrary{}, testCalibration())
 
 	out, err := gate.Apply(context.Background(), 1,
 		[]domain.Candidate{candidate("same"), candidate("same")}, reviser)
@@ -382,7 +426,7 @@ func TestARejectedCandidateLeavesNoVectorInTheIndex(t *testing.T) {
 	}}
 	library := &stubLibrary{questions: []coredomain.Question{libraryQuestion(1, "stored")}}
 	index := newMemoryIndex()
-	gate := app.NewGate(embedder, index, library, testCalibration())
+	gate := app.NewGateWithCalibration(embedder, index, library, testCalibration())
 
 	if _, err := gate.Apply(context.Background(), 1, []domain.Candidate{candidate("stubborn")}, &scriptedReviser{}); err != nil {
 		t.Fatalf("Apply: %v", err)
@@ -407,7 +451,7 @@ func TestTheGateLeavesLibraryContentExactlyAsItFoundIt(t *testing.T) {
 	library := &stubLibrary{questions: original}
 
 	embedder := &scriptedEmbedder{angles: map[string]float64{canonicalOf("fresh"): angleFor(0.10)}}
-	gate := app.NewGate(embedder, newMemoryIndex(), library, testCalibration())
+	gate := app.NewGateWithCalibration(embedder, newMemoryIndex(), library, testCalibration())
 
 	if _, err := gate.Apply(context.Background(), 1, []domain.Candidate{candidate("fresh")}, &scriptedReviser{}); err != nil {
 		t.Fatalf("Apply: %v", err)
@@ -426,7 +470,7 @@ func TestTheGateLeavesLibraryContentExactlyAsItFoundIt(t *testing.T) {
 // only the error type would leave that policy untested.
 func TestWithoutAnEmbeddingCapabilityTheGateRefusesRatherThanAcceptingEverything(t *testing.T) {
 	library := &stubLibrary{questions: []coredomain.Question{libraryQuestion(1, "stored")}}
-	gate := app.NewGate(nil, newMemoryIndex(), library, testCalibration())
+	gate := app.NewGateWithCalibration(nil, newMemoryIndex(), library, testCalibration())
 
 	// Byte-identical to the stored question: the most obvious duplicate there is.
 	out, err := gate.Apply(context.Background(), 1, []domain.Candidate{candidate("stored")}, &scriptedReviser{})
@@ -445,7 +489,7 @@ func TestWithoutAnEmbeddingCapabilityTheGateRefusesRatherThanAcceptingEverything
 // The same refusal must be available before a run spends anything, which is
 // what D-018 means by checking the capability before a strategy is chosen.
 func TestPreflightReportsAMissingEmbeddingCapabilityBeforeAnyGeneration(t *testing.T) {
-	gate := app.NewGate(nil, newMemoryIndex(), &stubLibrary{}, testCalibration())
+	gate := app.NewGateWithCalibration(nil, newMemoryIndex(), &stubLibrary{}, testCalibration())
 	if err := gate.Preflight(); !errors.Is(err, domain.ErrNoEmbeddingCapability) {
 		t.Fatalf("want ErrNoEmbeddingCapability, got %v", err)
 	}
@@ -458,7 +502,7 @@ func TestAThresholdCalibratedForAnotherModelIsRefused(t *testing.T) {
 	embedder := &scriptedEmbedder{}
 	wrong := testCalibration()
 	wrong.Model = domain.ModelIdentity{Provider: "openai", Model: "text-embedding-3-small"}
-	gate := app.NewGate(embedder, newMemoryIndex(), &stubLibrary{}, wrong)
+	gate := app.NewGateWithCalibration(embedder, newMemoryIndex(), &stubLibrary{}, wrong)
 
 	err := gate.Preflight()
 	if !errors.Is(err, domain.ErrUncalibratedEmbeddingModel) {
@@ -478,7 +522,7 @@ func TestAThresholdCalibratedForAnotherModelIsRefused(t *testing.T) {
 // the count is the only thing that tells them apart.
 func TestAnEmptyLibraryIsReportedAsAnEmptyCorpus(t *testing.T) {
 	embedder := &scriptedEmbedder{angles: map[string]float64{canonicalOf("fresh"): 0}}
-	gate := app.NewGate(embedder, newMemoryIndex(), &stubLibrary{}, testCalibration())
+	gate := app.NewGateWithCalibration(embedder, newMemoryIndex(), &stubLibrary{}, testCalibration())
 
 	report, err := gate.Screen(context.Background(), 1, []domain.Candidate{candidate("fresh")})
 	if err != nil {
@@ -509,7 +553,7 @@ func TestOnlyLibraryQuestionsWithoutAVectorAreEmbedded(t *testing.T) {
 	}
 	index.puts = 0
 
-	gate := app.NewGate(embedder, index, library, testCalibration())
+	gate := app.NewGateWithCalibration(embedder, index, library, testCalibration())
 	if _, err := gate.Screen(context.Background(), 1, []domain.Candidate{candidate("fresh")}); err != nil {
 		t.Fatalf("Screen: %v", err)
 	}
@@ -528,7 +572,7 @@ func TestOnlyLibraryQuestionsWithoutAVectorAreEmbedded(t *testing.T) {
 // than an error.
 func TestAShortEmbedderReplyIsRefusedRatherThanMisattributed(t *testing.T) {
 	embedder := &scriptedEmbedder{angles: map[string]float64{}, short: true}
-	gate := app.NewGate(embedder, newMemoryIndex(), &stubLibrary{}, testCalibration())
+	gate := app.NewGateWithCalibration(embedder, newMemoryIndex(), &stubLibrary{}, testCalibration())
 
 	_, err := gate.Screen(context.Background(), 1, []domain.Candidate{candidate("a"), candidate("b")})
 	if err == nil {
@@ -538,7 +582,7 @@ func TestAShortEmbedderReplyIsRefusedRatherThanMisattributed(t *testing.T) {
 
 func TestAnEmbedderFailureStopsTheGateRatherThanPassingCandidates(t *testing.T) {
 	embedder := &scriptedEmbedder{fail: errors.New("endpoint down")}
-	gate := app.NewGate(embedder, newMemoryIndex(), &stubLibrary{}, testCalibration())
+	gate := app.NewGateWithCalibration(embedder, newMemoryIndex(), &stubLibrary{}, testCalibration())
 
 	out, err := gate.Apply(context.Background(), 1, []domain.Candidate{candidate("a")}, &scriptedReviser{})
 	if err == nil {
