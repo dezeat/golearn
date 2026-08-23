@@ -61,11 +61,19 @@ convenience; justify it in the PR.
 
 ## Repo conventions
 
-- Go module `github.com/dezeat/golearn`; hexagonal layers under `internal/`
-  plus a `cmd/golearn` entrypoint.
+- **Two modules, two binaries** (D-015). The root module
+  `github.com/dezeat/golearn` is the offline core: hexagonal layers under
+  `internal/`, entrypoint `cmd/golearn`. The nested module
+  `github.com/dezeat/golearn/addons/forge` is the opt-in authoring addon,
+  entrypoint `addons/forge/cmd/golearn-forge`. It owns every provider SDK and
+  HTTP client; the core never imports it.
 - Task entry point: the Makefile (`make help`). **`make check` = fmt + vet +
-  lint + test** and must be green before any work is reported complete; CI
-  additionally builds and runs the import/export smoke test.
+  lint + test, across both modules, with `GOWORK=off`** — and must be green
+  before any work is reported complete. CI additionally builds both binaries,
+  runs the import/export smoke test, and builds the core standalone.
+- A local `go.work` (gitignored, `make workspace`) is a convenience for editing
+  across both modules. It is never a build requirement, and the gate ignores it
+  on purpose — see Gates below.
 - Tests: stdlib `testing`, table-driven, deterministic. No external test
   deps.
 - The single supported Go version is the one in `go.mod` — README badge,
@@ -89,28 +97,102 @@ An adapter importing another adapter (e.g. `tui` importing `sqlite`) is an
 architecture violation. All dependency injection happens in the composition
 root.
 
+The Forge addon repeats the same layering inside its own module, and adds one
+rule across the module boundary:
+
+```
+addons/forge/internal/domain/    Forge-side pure types (evidence, drafts,
+                                 vectors). Aliases core types where the two
+                                 describe the same wire format — never a
+                                 second struct for one format.
+addons/forge/internal/ports/     Provider, Research, Similarity, Secrets,
+                                 Store interfaces.
+addons/forge/internal/app/       Generation use cases.
+addons/forge/internal/adapters/  Provider/research/store implementations.
+addons/forge/cmd/golearn-forge/  The only place core and Forge are wired.
+```
+
+**The dependency direction is Forge → core, one-way, always.** Forge may import
+core `internal/` packages (Go grants that on import-path prefix, not module
+identity). The core importing Forge is doubly prevented: the core module has no
+requirement on the addon, so it fails to resolve, and `internal/boundary`
+fails the core's own gate. Do not "fix" a resolution error by adding that
+requirement.
+
 ### Go
 
 - `context.Context` threaded through repository calls; wrap errors with
   `fmt.Errorf("...: %w", err)`.
 - Use `filepath.Join` for paths, never string concatenation.
 - Extract magic numbers into named package-level constants.
-- The CLI routes commands via manual `os.Args` parsing — **not** cobra/flag.
-  Add a command by extending the switch; a framework is deferred until the
-  surface grows. Global flags like `--db` are parsed at the root before
+- Both CLIs route commands via manual `os.Args` parsing — **not** cobra/flag
+  (D-003). Add a command by extending the switch; a framework is deferred until
+  the surface grows. Global flags like `--db` are parsed at the root before
   subcommand dispatch.
+- A surface that has not landed yet **fails loudly and names its tracking
+  issue**. Exiting 0 with no output is indistinguishable from a run that
+  legitimately produced nothing.
 
-### Tests
+### Tests — TDD where the answer is known, experiment where it is not
 
-- The **domain** layer is developed test-first (red → green → refactor):
-  a behaviour change starts with a failing test. A pure refactor under
-  existing green cover needs no new red.
+Test-first assumes you already know the correct behaviour; the test *is* the
+specification. That holds for most of this repo. Where the answer is genuinely
+unknown — how a toolchain resolves something, what a model returns — writing
+the test first encodes a **guess** as a specification, and a wrong spec is
+worse than no test. Pick the mode deliberately:
+
+- **Known behaviour → test-first.** The **domain** layer is developed
+  red → green → refactor: a behaviour change starts with a failing test. A
+  pure refactor under existing green cover needs no new red.
+- **Unknown behaviour → probe, observe, then lock in.** Run the smallest
+  throwaway experiment that answers the question, record what was observed,
+  then write the regression test that pins it. The experiment produces the
+  specification; it does not replace it. Delete the probe, keep the test.
+- **Non-deterministic behaviour → pre-register the threshold.** Anything
+  scored rather than asserted (model output, timing, quality) has its pass
+  criterion **committed before the measuring run**. A threshold decided
+  afterwards is just a description of what happened.
+- **Invariant guards must be seen failing.** A guard that has never gone red
+  may assert nothing. Break it once deliberately, confirm it fails **for the
+  intended reason** — not a compile error, not a skipped test — and record
+  that alongside the passing run. This applies to guards protecting an
+  invariant (no network in the core, no secret in output, the dependency
+  ceiling, the one-way import rule), not to ordinary behavioural tests, which
+  the red-green cycle falsifies anyway.
 - Fixture expectations come from an **external oracle** — published values,
   a reference implementation, or the maintainer — **never** from running the
-  implementation under test.
+  implementation under test. A test written after the code, asserting what the
+  code already does, is a tautology rather than evidence.
 - Deterministic and table-driven where it fits. Seed every shuffle with an
   explicit `*rand.Rand`.
 - A test name states the **invariant** asserted, not the function called.
+
+Observations worth keeping are appended to `docs/design/FORGE-EXPERIMENTS.md`
+in the form **Question → Hypothesis → Method → Result → What it locked in**, so
+a design choice can be re-checked instead of re-argued.
+
+### Gates — a green check is only evidence if it measured something
+
+Three times on one branch the gate passed while quietly measuring nothing, and
+in none of those cases had anyone weakened a check. The assertions were fine;
+the apparatus was wrong. Guard against all three shapes:
+
+- **The gate must cover the whole repo.** `go test ./...` is *module-scoped,
+  not workspace-scoped* — run from the root it does **not** descend into
+  `addons/forge`. The Makefile and CI invoke each module explicitly. Collapsing
+  that back into one `./...` run yields a green gate that runs none of the
+  addon's tests.
+- **The gate must match production.** Every module-scoped target runs under
+  `GOWORK=off`, because a developer's workspace file supplies resolution that a
+  clean checkout and CI do not. Verify a clean-checkout claim in a clean
+  checkout — a detached worktree off the branch, not your working tree.
+- **The falsification must actually falsify.** A mutation that fails to compile
+  is not a caught mutation; read the failure, do not just observe redness.
+- Prefer a gate that **cannot be bypassed** to one that must be remembered, and
+  prefer **globs and recursion to enumerated lists** — an enumerated list is
+  correct the day it is written and silently wrong when the next package lands.
+
+Portfolio standard: `docs/standards/GATE-INTEGRITY.md` in `bridge`.
 
 ### Comments
 
@@ -261,6 +343,14 @@ reads while working, not software to be packaged and installed:
 - **docs/DECISIONS.md** — append-only decision log; entry criteria and format
   are at the top of the file. A changed mind adds a new entry marked
   `superseded by`; it never edits an old one.
+- **docs/design/FORGE.md** — the Forge design spec: product frame, module
+  topology, pipeline, providers, similarity, schema evolution. Design *intent*;
+  `DECISIONS.md` and `architecture.md` outrank it on any conflict.
+- **docs/design/FORGE-EXPERIMENTS.md** — the experiment and benchmark log: what
+  was *measured*, in Question → Hypothesis → Method → Result → What it locked in
+  form, plus the provider/model KPI definitions and their results. Read Part A
+  before changing the build or the gate; several entries record traps that cost
+  an experiment each to find.
 - **docs/OPERATING-MODEL.md** — the recommended workflow convention: state
   model, authority envelope, roles, boards, labels, wayfinder mapping.
   Convention, not contract — binding rules stay in this file.
