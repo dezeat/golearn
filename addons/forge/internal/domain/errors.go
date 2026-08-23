@@ -89,4 +89,14 @@ var (
 	// ErrDraftNotFound reports a draft that no longer exists, typically
 	// because it was resolved by another window or process.
 	ErrDraftNotFound = errors.New("draft not found")
+
+	// ErrUncalibratedEmbeddingModel reports that no similarity threshold has
+	// been derived for the embedding model in use.
+	//
+	// A threshold is no more portable between embedding models than a vector
+	// is: the same pair of questions scores differently under each, so a
+	// number carried over from another model is a guess wearing a decimal
+	// point. The gate refuses for the same reason Cosine refuses a dimension
+	// mismatch — a plausible-looking score is worse than no score.
+	ErrUncalibratedEmbeddingModel = errors.New("no calibrated similarity threshold for this embedding model")
 )
