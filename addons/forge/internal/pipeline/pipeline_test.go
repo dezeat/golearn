@@ -777,3 +777,58 @@ func TestAGroundedRunStillRejectsAnUngroundedQuestion(t *testing.T) {
 		t.Error("the critic must be asked about grounding when evidence exists")
 	}
 }
+
+// The candidate schema requires a citations field, so an ungrounded run still
+// gets one — populated with whatever the model invents. Copying that into a
+// question's source_ref would make an ungrounded question look grounded at
+// exactly the level a reader inspects, which is worse than carrying no
+// reference at all.
+func TestAnUngroundedPackCarriesNoFabricatedSourceReferences(t *testing.T) {
+	fabricated := goodQuestion("Q1")
+	fabricated["citations"] = []string{"s1", "https://example.test/invented"}
+
+	provider := newFakeProvider().
+		reply(stageGenerate, batch(fabricated)).
+		reply(stageVerify, passingVerify()).
+		reply(stageCritique, map[string]any{
+			"distractors_plausible": true, "single_defensible_answer": true, "problem": "",
+		})
+
+	drafts := &fakeDraftStore{}
+	p, err := pipeline.New(pipeline.Deps{
+		Provider: provider, Runs: &fakeRunStore{}, Drafts: drafts,
+		Now: fixedNow, ForgeVersion: "test", AllowUngrounded: true,
+	}, pipeline.DefaultBudgets())
+	if err != nil {
+		t.Fatalf("pipeline.New: %v", err)
+	}
+	if _, err := p.Generate(context.Background(), testSpec(1)); err != nil {
+		t.Fatalf("Generate: %v", err)
+	}
+
+	pack := drafts.saved[0].Pack
+	if got := pack.Questions[0].SourceRef; got != "" {
+		t.Errorf("an ungrounded question carried a source reference %q", got)
+	}
+	if len(pack.Provenance.Sources) != 0 {
+		t.Errorf("an ungrounded pack must carry no sources, got %v", pack.Provenance.Sources)
+	}
+}
+
+// A grounded run must still record the reference, or the fix would have
+// removed the attribution rather than the fabrication.
+func TestAGroundedPackCarriesTheCitationItActuallyUsed(t *testing.T) {
+	provider := newFakeProvider().
+		reply(stageGenerate, batch(goodQuestion("Q1"))).
+		reply(stageVerify, passingVerify()).
+		reply(stageCritique, passingCritique())
+	h := newHarness(t, provider)
+
+	if _, err := h.pipeline.Generate(context.Background(), testSpec(1)); err != nil {
+		t.Fatalf("Generate: %v", err)
+	}
+	pack := h.drafts.saved[0].Pack
+	if got := pack.Questions[0].SourceRef; got != "s1" {
+		t.Errorf("source_ref = %q, want the evidence id the question cited", got)
+	}
+}

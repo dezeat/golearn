@@ -312,6 +312,24 @@ func diagnose(err error) string {
 	return text
 }
 
+// resolveCitation returns the first citation that names a source this run
+// actually retrieved.
+func resolveCitation(citations []string, sources []coredomain.SourceRef) (string, bool) {
+	if len(sources) == 0 {
+		return "", false
+	}
+	known := make(map[string]bool, len(sources))
+	for _, s := range sources {
+		known[s.ID] = true
+	}
+	for _, c := range citations {
+		if known[strings.TrimSpace(c)] {
+			return strings.TrimSpace(c), true
+		}
+	}
+	return "", false
+}
+
 // packFrom assembles the final pack from accepted candidates.
 func (p *Pipeline) packFrom(spec domain.GenerationSpec, accepted []domain.Candidate,
 	sources []domain.SourceRef, identity domain.ModelIdentity) coredomain.Pack {
@@ -321,8 +339,16 @@ func (p *Pipeline) packFrom(spec domain.GenerationSpec, accepted []domain.Candid
 		confidence := coredomain.GeneratedConfidence
 		q.Confidence = &confidence
 		q.Source = "llm:" + identity.Provider
-		if q.SourceRef == "" && len(c.Citations) > 0 {
-			q.SourceRef = c.Citations[0]
+		// Only record a source reference that resolves to evidence actually
+		// supplied. The schema requires a citations field, so an ungrounded run
+		// still gets one — populated with whatever the model invents. Copying
+		// that into source_ref would make an ungrounded question look grounded
+		// at exactly the level a reader inspects, which is worse than carrying
+		// no reference at all.
+		if q.SourceRef == "" {
+			if ref, ok := resolveCitation(c.Citations, sources); ok {
+				q.SourceRef = ref
+			}
 		}
 		questions = append(questions, q)
 	}
