@@ -900,6 +900,35 @@ rest: everything downstream assumes a parseable candidate.
   prompt while `qwen3.5:4b` produced a genuine question; that is a single
   observation, not a quality finding, and it is recorded as such.
 
+#### B-2.2 · Does structured-output schema shape change generation cost?
+
+**Pre-registered before the measuring run.** B-2.1 measured a *flat* schema —
+one object of scalars — and reported ~50–70 s per request. The pipeline's real
+generator asks for a nested shape: an array of questions, each with an array of
+choice objects each carrying an id. The first live pipeline run spent **over
+ten minutes inside a single generation call for one question**, against a
+B-2.1-derived expectation of roughly one minute.
+
+- **Question.** Does the schema's shape, as distinct from the amount of content
+  requested, materially change generation cost under constrained decoding?
+- **Hypothesis.** Yes. Constrained decoding must emit the structural tokens as
+  well as the content, and a nested shape with a per-choice id spends a large
+  fraction of its output on punctuation, keys and labels that carry no
+  information. Estimated ~30% of output tokens are structural in the nested
+  form.
+- **Why this matters beyond performance.** B-2.1's number was quoted in a
+  commit message and used to size the per-call budget. It was measured on a
+  different schema than the one that shipped, so it was never a prediction
+  about the pipeline — **the probe and the system under test measured
+  different things**. That is the A-12 failure mode in a new place: not a gate
+  that skipped a module, but a benchmark that benchmarked the wrong workload.
+- **Pass criterion, committed now.** The simplified schema — choices as plain
+  strings, answers as zero-based positions, ids assigned by the pipeline —
+  should reduce wall-clock for the same requested content by **at least 25%**.
+  Below that, schema shape is not the dominant factor and the slowness has
+  another cause that must be found rather than assumed.
+- **Result.** *Pending the measuring run.*
+
 ---
 
 ## Part C — Application benchmarks
