@@ -41,6 +41,18 @@ var (
 	// profile that requires one. It never carries the value it looked for.
 	ErrCredentialMissing = errors.New("no credential resolved for provider profile")
 
+	// ErrCredentialRejected reports that a credential was supplied and the
+	// provider refused it. Distinct from ErrCredentialMissing: one means "you
+	// have not configured a key", the other "the key you configured is not
+	// accepted", and sending a user to look for a missing key they already set
+	// is the most frustrating error this surface can produce.
+	ErrCredentialRejected = errors.New("provider rejected the credential")
+
+	// ErrRateLimited reports a provider-side rate limit. It is separated from
+	// other failures because it is the one worth waiting on rather than
+	// reconfiguring.
+	ErrRateLimited = errors.New("provider rate limit reached")
+
 	// ErrModelNotAvailable reports that the requested model is not present at
 	// the resolved endpoint. Distinct from ErrProviderUnreachable: the service
 	// answered, and the answer was "not that model".

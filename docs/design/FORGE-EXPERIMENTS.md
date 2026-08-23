@@ -400,6 +400,70 @@ These settled the shape of #125 before any implementation was committed.
   The fix is never a better assertion; it is making the apparatus match the
   environment the claim is about.
 
+### A-13 · Mutation test — provider profiles, capability and secret precedence
+
+- **Question.** #123's claims are the security-sensitive ones on this branch:
+  environment beats keychain, Anthropic cannot embed, reachability is not
+  authentication, and no surface leaks a credential. Do the guards hold them?
+- **Method.** Sixteen mutations of `addons/forge`, each reverted, control
+  after. The harness was strengthened first — see the note below.
+- **Result. Thirteen caught outright; three survived and each exposed a real
+  defect in the guards rather than in the code.**
+
+  | # | Mutation | Outcome |
+  | --- | --- | --- |
+  | 1 | an `Embedder` stub bolted onto Anthropic | caught by 3 guards |
+  | 2 | precedence flipped to keychain-before-environment | caught |
+  | 3 | provider error snippets stop being redacted | caught |
+  | 4 | unreachable Ollama described in credential terms | caught |
+  | 5 | rejected credential reported as missing | caught |
+  | 6 | broken keychain reported as a missing credential | caught |
+  | 7 | `sk-` shape removed from redaction | caught |
+  | 8 | redaction made over-broad, destroying diagnostics | caught |
+  | 9 | profile registry claims Anthropic embeds | caught |
+  | 10 | Ollama required to have a credential | caught |
+  | 11 | `sk-ant-` shape removed | **survived** — see below |
+  | 12 | bearer-header echo no longer redacted | caught |
+  | 13 | embedding reply index ignored | **survived** — see below |
+  | 14 | incomplete embedding reply accepted | **survived** — see below |
+  | 15 | Ollama accepts an empty vector | caught |
+  | 16 | `sk-` shape removed (now the sole such pattern) | caught |
+
+- **11 — a redundant guard that could not fail.** A separate `sk-ant-` pattern
+  sat above the general `sk-` one. Every Anthropic-style key also matches
+  `sk-`, so the specific pattern asserted nothing while implying coverage it
+  did not add. It was **removed**, not fixed. A redundant guard is worse than
+  a missing one: it reads as protection that was never there.
+- **13 — a claim in a comment with no test under it.** The OpenAI embeddings
+  adapter honours the per-item `index` rather than assuming arrival order, and
+  a comment said why. Nothing tested it. A reordered reply would have
+  mismatched vectors to questions and corrupted every similarity verdict
+  downstream — presenting as a threshold problem, so it would have been
+  debugged in entirely the wrong place. Three tests now cover mapping,
+  out-of-range indices and short replies.
+- **14 — two guards, one assertion.** The count check was subsumed by the
+  per-vector nil check, so `err != nil` could not tell them apart. The count
+  check earns its place through its *message* — it names the shortfall rather
+  than reporting "no vector for input 1" — so the test now asserts the
+  message. That is what makes it load-bearing instead of redundant.
+- **A leak found by a test, before any mutation.** The credential-redaction
+  test failed on first run: `readErrorSnippet` echoed the provider's error body
+  verbatim into Forge's error, so a provider or proxy reflecting the submitted
+  key back would put it straight into a diagnostic — the exact text users paste
+  into bug reports. `domain.Redact` now scrubs credential shapes from anything
+  arriving from outside. `Secret` covers the other direction. Neither
+  substitutes for the other.
+- **The harness had to be fixed first, and this is the fourth instance.**
+  Mutation 7 first read as *survived*. It had not survived: `gofmt` had
+  realigned the comment it anchored on, so the string replacement silently
+  matched nothing and **the file was never modified**. The harness now
+  verifies the file actually changed before running the tests, in addition to
+  the build-failure check A-10 added. Three ways a mutation can fail to be
+  evidence are now known: it does not apply, it does not compile, or it is
+  semantically vacuous — and all three look identical to a naive harness.
+  Compare A-1, A-10 and A-12: **the apparatus quietly not measuring, and
+  reporting green for it.**
+
 ---
 
 ## Part B — Provider & model benchmarks
