@@ -113,16 +113,34 @@ func (p *Pipeline) screen(ctx context.Context, spec domain.GenerationSpec, evide
 	}
 
 	// Stage 7b: the near-duplicate gate.
+	//
+	// The batch is built into a fresh slice rather than with append(accepted,
+	// candidate): appending to the caller's accumulator can write into its
+	// backing array, so the pipeline would be handing a callee a slice
+	// aliasing its own accepted set.
+	//
+	// The candidate under test goes last, and only its verdict is read. The
+	// earlier entries are context — already-accepted questions the newcomer
+	// must be distinct from — so "reject the newcomer" is the right resolution
+	// of a collision here, and it is deterministic: the first of two colliding
+	// siblings keeps its place.
 	if p.deps.Gate != nil {
-		verdicts, err := p.deps.Gate.Screen(ctx, TopicSlug(spec.Topic), append(accepted, candidate))
+		batch := make([]domain.Candidate, 0, len(accepted)+1)
+		batch = append(batch, accepted...)
+		batch = append(batch, candidate)
+
+		verdicts, err := p.deps.Gate.Screen(ctx, TopicSlug(spec.Topic), batch)
 		if err != nil {
 			return "", fmt.Errorf("similarity gate: %w", err)
 		}
-		if len(verdicts) > 0 {
-			last := verdicts[len(verdicts)-1]
-			if last.TooSimilar {
-				return fmt.Sprintf("too similar to existing content: %s", last.Reason), nil
-			}
+		if len(verdicts) != len(batch) {
+			// A short verdict list would silently make the last entry someone
+			// else's verdict, which is worse than no gate at all.
+			return "", fmt.Errorf("similarity gate returned %d verdicts for %d candidates",
+				len(verdicts), len(batch))
+		}
+		if last := verdicts[len(verdicts)-1]; last.TooSimilar {
+			return fmt.Sprintf("too similar to existing content: %s", last.Reason), nil
 		}
 	}
 

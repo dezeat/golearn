@@ -53,6 +53,7 @@ type generateFlags struct {
 	dbPath      string
 	language    string
 	dryRun      bool
+	ungrounded  bool
 }
 
 func parseGenerateFlags(args []string) (generateFlags, error) {
@@ -104,6 +105,8 @@ func parseGenerateFlags(args []string) (generateFlags, error) {
 			f.language, err = value()
 		case "--dry-run":
 			f.dryRun = true
+		case "--allow-ungrounded":
+			f.ungrounded = true
 		default:
 			if strings.HasPrefix(arg, "-") {
 				err = fmt.Errorf("unknown flag %q", arg)
@@ -194,12 +197,22 @@ func runGenerate(args []string, stdout, stderr io.Writer) int {
 	// would mean choosing a policy this binary has no authority to choose.
 	deps := pipeline.Deps{
 		Provider: llm, Gate: gate, Runs: store, Drafts: store,
-		Now: time.Now, ForgeVersion: version,
+		Now: time.Now, ForgeVersion: version, AllowUngrounded: flags.ungrounded,
 	}
 	p, err := pipeline.New(deps, pipeline.DefaultBudgets())
 	if err != nil {
 		write(stderr, fmt.Sprintf("error: %v\n", err))
+		if errors.Is(err, domain.ErrInsufficientEvidence) {
+			write(stderr, "\nGrounding is required in V1 (FORGE.md 5), and no research adapter is wired\n"+
+				"yet — the V1 adapter choice and its source-authority policy are tracked in #120.\n"+
+				"Pass --allow-ungrounded to generate anyway. The questions will not be\n"+
+				"evidence-backed, and the run record will say so.\n")
+		}
 		return 1
+	}
+
+	if flags.ungrounded {
+		write(stderr, "warning: running UNGROUNDED — questions are not backed by retrieved evidence\n")
 	}
 
 	write(stdout, fmt.Sprintf("Generating %d question(s) on %q using %s.\n",
@@ -246,7 +259,11 @@ func describePlan(flags generateFlags, spec domain.GenerationSpec, identity doma
 	}
 	fmt.Fprintf(&b, "  provider    %s\n", identity)
 	fmt.Fprintf(&b, "  database    %s\n", flags.dbPath)
-	b.WriteString("  grounding   not wired (research adapter selection is tracked in #120)\n")
+	if flags.ungrounded {
+		b.WriteString("  grounding   NOT RUN — explicitly allowed via --allow-ungrounded\n")
+	} else {
+		b.WriteString("  grounding   required; no adapter wired, so this run would be refused (#120)\n")
+	}
 	return b.String()
 }
 
@@ -320,6 +337,7 @@ Options:
   --language         Content language (default en)
   --db               Database path
   --dry-run          Show the plan without generating
+  --allow-ungrounded Generate without retrieved evidence (not V1-trustworthy)
 
 Notes:
   The full trust chain runs on every candidate — generation, validation,

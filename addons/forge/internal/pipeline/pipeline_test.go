@@ -407,7 +407,8 @@ func TestARepairBudgetOtherThanOneIsRefused(t *testing.T) {
 	budgets.RepairsPerCandidate = 3
 
 	_, err := pipeline.New(pipeline.Deps{
-		Provider: newFakeProvider(), Runs: &fakeRunStore{}, Drafts: &fakeDraftStore{},
+		Provider: newFakeProvider(), Research: &fakeResearch{}, Gate: &fakeGate{},
+		Runs: &fakeRunStore{}, Drafts: &fakeDraftStore{},
 	}, budgets)
 	if err == nil {
 		t.Fatal("a repair budget other than 1 must be refused")
@@ -495,5 +496,82 @@ func TestRunDiagnosticsAreRedacted(t *testing.T) {
 	}
 	if strings.Contains(h.runs.diagnostic[0], "sk-aaaaaaaaaaaaaaaa") {
 		t.Errorf("the run diagnostic leaked a credential: %s", h.runs.diagnostic[0])
+	}
+}
+
+// FORGE.md 5 requires grounding in V1 and forbids silently degrading to
+// ungrounded generation. Without a research adapter, a pack would look exactly
+// like a grounded one — same schema, same provenance block, an empty source
+// list nobody reads — so running ungrounded has to be a deliberate act.
+func TestAnUngroundedRunMustBeOptedIntoExplicitly(t *testing.T) {
+	deps := pipeline.Deps{
+		Provider: newFakeProvider(), Runs: &fakeRunStore{}, Drafts: &fakeDraftStore{},
+		Now: fixedNow,
+	}
+
+	_, err := pipeline.New(deps, pipeline.DefaultBudgets())
+	if err == nil {
+		t.Fatal("a pipeline with no research adapter must refuse to be built")
+	}
+	if !errors.Is(err, domain.ErrInsufficientEvidence) {
+		t.Errorf("want ErrInsufficientEvidence, got %v", err)
+	}
+
+	deps.AllowUngrounded = true
+	if _, err := pipeline.New(deps, pipeline.DefaultBudgets()); err != nil {
+		t.Errorf("an explicitly ungrounded pipeline must be permitted: %v", err)
+	}
+}
+
+// Opting in makes the run ungrounded, not grounded. The run record has to say
+// so, because it is the one artifact that could later let an unscreened,
+// ungrounded pack pass for a checked one when nobody remembers how it was
+// produced.
+func TestASkippedStageIsNamedInTheRunDiagnostic(t *testing.T) {
+	provider := newFakeProvider().
+		reply(stageGenerate, batch(goodQuestion("Q1"))).
+		reply(stageVerify, passingVerify()).
+		reply(stageCritique, passingCritique())
+	runs := &fakeRunStore{}
+
+	p, err := pipeline.New(pipeline.Deps{
+		Provider: provider, Runs: runs, Drafts: &fakeDraftStore{},
+		Now: fixedNow, ForgeVersion: "test", AllowUngrounded: true,
+	}, pipeline.DefaultBudgets())
+	if err != nil {
+		t.Fatalf("pipeline.New: %v", err)
+	}
+
+	if _, err := p.Generate(context.Background(), testSpec(1)); err != nil {
+		t.Fatalf("Generate: %v", err)
+	}
+	if len(runs.diagnostic) == 0 {
+		t.Fatal("no diagnostic recorded")
+	}
+	diagnostic := runs.diagnostic[0]
+	for _, stage := range []string{"grounding", "similarity"} {
+		if !strings.Contains(diagnostic, stage) {
+			t.Errorf("the diagnostic must name the skipped %s stage, got: %s", stage, diagnostic)
+		}
+	}
+	if !strings.Contains(diagnostic, "NOT RUN") {
+		t.Errorf("the diagnostic must be unmistakable about what did not run, got: %s", diagnostic)
+	}
+}
+
+// A fully wired run must not carry the warning, or the signal would mean
+// nothing.
+func TestAFullyWiredRunNamesNoSkippedStages(t *testing.T) {
+	provider := newFakeProvider().
+		reply(stageGenerate, batch(goodQuestion("Q1"))).
+		reply(stageVerify, passingVerify()).
+		reply(stageCritique, passingCritique())
+	h := newHarness(t, provider)
+
+	if _, err := h.pipeline.Generate(context.Background(), testSpec(1)); err != nil {
+		t.Fatalf("Generate: %v", err)
+	}
+	if strings.Contains(h.runs.diagnostic[0], "NOT RUN") {
+		t.Errorf("a fully wired run must not report skipped stages: %s", h.runs.diagnostic[0])
 	}
 }

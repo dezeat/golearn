@@ -58,6 +58,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/dezeat/golearn/addons/forge/internal/domain"
@@ -138,6 +139,17 @@ type Deps struct {
 	// ForgeVersion is recorded in provenance so a defect traced to a
 	// generation vintage can be scoped.
 	ForgeVersion string
+
+	// AllowUngrounded permits a run with no Research adapter wired.
+	//
+	// It defaults to false and must be set deliberately, because FORGE.md 5
+	// requires grounding in V1 and forbids silently degrading to ungrounded
+	// generation. Without this, a missing adapter would produce a pack that
+	// looks exactly like a grounded one — same schema, same provenance block,
+	// an empty source list nobody reads — which is precisely the outcome
+	// D-016 rules out. Setting it records the fact in the run diagnostic; it
+	// does not make the pack grounded.
+	AllowUngrounded bool
 }
 
 // Pipeline runs the bounded generation workflow.
@@ -167,6 +179,11 @@ func New(deps Deps, budgets Budgets) (*Pipeline, error) {
 		// let a caller quietly reopen a decision.
 		return nil, fmt.Errorf("pipeline: repairs per candidate is fixed at 1 by D-016, got %d",
 			budgets.RepairsPerCandidate)
+	}
+	if deps.Research == nil && !deps.AllowUngrounded {
+		return nil, fmt.Errorf(
+			"%w: no research adapter is wired, and FORGE.md 5 forbids degrading to ungrounded generation; set AllowUngrounded to accept an explicitly ungrounded run",
+			domain.ErrInsufficientEvidence)
 	}
 	return &Pipeline{deps: deps, budgets: budgets}, nil
 }
@@ -213,8 +230,7 @@ func (p *Pipeline) Generate(ctx context.Context, spec domain.GenerationSpec) (Re
 	}
 
 	if finishErr := p.deps.Runs.FinishRun(ctx, runID, domain.RunSucceeded, sources, cost,
-		fmt.Sprintf("%d accepted, %d rejected, %d repaired, %d round(s)",
-			result.Accepted, result.Rejected, result.Repaired, result.Rounds)); finishErr != nil {
+		p.successDiagnostic(result)); finishErr != nil {
 		return Result{}, fmt.Errorf("finish run: %w", finishErr)
 	}
 
@@ -230,6 +246,29 @@ func (p *Pipeline) Generate(ctx context.Context, spec domain.GenerationSpec) (Re
 	result.Draft.ID = draftID
 	result.RunID = runID
 	return result, nil
+}
+
+// successDiagnostic summarizes a completed run.
+//
+// Any stage that did not run is named. A run diagnostic that reads the same
+// whether or not the pack was grounded and screened is the one artifact that
+// could let an unscreened pack pass for a screened one later, when nobody
+// remembers how it was produced.
+func (p *Pipeline) successDiagnostic(result Result) string {
+	summary := fmt.Sprintf("%d accepted, %d rejected, %d repaired, %d round(s)",
+		result.Accepted, result.Rejected, result.Repaired, result.Rounds)
+
+	var skipped []string
+	if p.deps.Research == nil {
+		skipped = append(skipped, "grounding")
+	}
+	if p.deps.Gate == nil {
+		skipped = append(skipped, "similarity")
+	}
+	if len(skipped) > 0 {
+		summary += "; NOT RUN: " + strings.Join(skipped, ", ")
+	}
+	return summary
 }
 
 // finish records a terminal run state, swallowing its own error.
