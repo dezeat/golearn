@@ -15,95 +15,62 @@
 package domain
 
 import (
-	"time"
-
 	coredomain "github.com/dezeat/golearn/internal/domain"
 )
 
-// PackVersion is the schema version Forge emits (D-017). 0.1.x stays
-// importable; the importer carries the compatibility policy.
-const PackVersion = "0.2.0"
-
-// Style is the pack-level intent selector.
+// The pack-format types are defined once, in the core domain, and aliased here.
 //
-// The vocabulary is intentionally not enumerated. FORGE.md 12 sequences the
-// intent enum behind spike #105, which is itself sequenced behind a working
-// pipeline — so fixing values here would both pre-empt the spike and create
-// the circular dependency #121 explicitly forbids. Forge therefore treats an
-// unknown or missing style as valid and content-neutral, which is the
-// backwards-compatible behavior #121 requires.
-type Style string
-
-// StyleUnset is the absence of a style selection, and is always valid.
-const StyleUnset Style = ""
-
-// GenerationSpec is every user-visible, content-shaping input to a run
-// (D-017). It answers "what was requested?" and is what makes a run
-// inspectable, filterable, and partially reproducible.
+// They describe a *file format*, and the offline binary must parse a pack Forge
+// produced (D-017), so the core owns the definitions. Redeclaring them here
+// would create two structs for one wire format, and the first field added to
+// only one of them would produce a pack that round-trips differently depending
+// on which binary read it.
 //
-// It carries inputs only. Effort presets, retry counters, budgets and request
-// mechanics are deliberately absent: FORGE.md 8 forbids persisting them, and
-// they do not shape content in a way a reader of the pack needs to know.
-type GenerationSpec struct {
-	Topic       string
-	Description string
-	Count       int
-	Difficulty  coredomain.Difficulty
-	Style       Style
-	Language    string
-}
+// These are true aliases, not conversions: Forge code reads naturally as
+// domain.GenerationSpec while remaining the same type the core marshals.
+type (
+	// Style is the pack-level intent selector; see [coredomain.Style].
+	Style = coredomain.Style
 
-// ModelIdentity names the provider and model that served a request. It is
-// safe to disclose and is recorded in provenance; the endpoint that served it
-// is not part of it, because a deployment address is operator information.
-type ModelIdentity struct {
-	Provider string
-	Model    string
-}
+	// GenerationSpec records the content-shaping inputs to a run.
+	GenerationSpec = coredomain.GenerationSpec
 
-// String renders "provider/model", the form used in provenance and diagnostics.
-func (m ModelIdentity) String() string {
-	if m.Model == "" {
-		return m.Provider
-	}
-	return m.Provider + "/" + m.Model
-}
+	// ModelIdentity names the provider and model that served a request.
+	ModelIdentity = coredomain.ModelIdentity
 
-// Provenance is the durable record of how a pack came to exist (D-017):
-// generation time, provider/model identity, and source references.
-//
-// Categorically excluded, per D-017 and FORGE.md 8: secrets, raw prompts, raw
-// model or tool output, retry and repair counters, and provider request
-// mechanics.
-type Provenance struct {
-	GeneratedAt time.Time
-	Model       ModelIdentity
-	Verifier    ModelIdentity
-	Sources     []SourceRef
-	// ForgeVersion identifies the binary that produced the pack, so a defect
-	// traced to a generation vintage can be scoped.
-	ForgeVersion string
-}
+	// SourceRef is the compact pointer to grounding evidence that a pack carries.
+	SourceRef = coredomain.SourceRef
 
-// GeneratedConfidence is the per-question confidence Forge assigns.
-//
-// FORGE.md 9 keeps hand-authored content at the manual default of 1.0 and
-// requires generated questions to sit strictly below it. The value is a
-// marker of provenance class, not a calibrated probability — the finer
-// assurance taxonomy (Ideas #99) is deferred.
-const GeneratedConfidence = 0.9
+	// Provenance records how a pack came to exist.
+	Provenance = coredomain.Provenance
+)
 
-// Candidate is one generated question before it has been accepted into a
-// pack. It is the unit the validation, verification, critique and similarity
-// stages operate on.
+const (
+	// PackVersion is the pack schema version Forge emits (D-017).
+	PackVersion = coredomain.PackVersionGenerated
+
+	// StyleUnset is the absence of a style selection, and is always valid.
+	StyleUnset = Style("")
+
+	// GeneratedConfidence marks a question as machine-produced, strictly below
+	// the hand-authored default.
+	GeneratedConfidence = coredomain.GeneratedConfidence
+)
+
+// Candidate is one generated question before it has been accepted into a pack.
+// It is the unit the validation, verification, critique and similarity stages
+// operate on, and it exists only inside a run — nothing here reaches a pack.
 type Candidate struct {
 	Question coredomain.PackQuestion
+
 	// Citations are the evidence ids the generator claimed support for this
 	// question. Grounding fidelity is checked against these.
 	Citations []string
+
 	// Vector is the embedding of the candidate's canonical representation,
 	// populated only when the bound profile has an embedding capability. A nil
-	// vector is the normal state under a provider that exposes none, and the
-	// similarity gate's fallback policy — not a panic — decides what happens.
+	// vector is the normal state under a provider that exposes none — Anthropic
+	// ships no embeddings API (D-018) — and the similarity gate's fallback
+	// policy, not a panic, decides what happens next.
 	Vector Vector
 }

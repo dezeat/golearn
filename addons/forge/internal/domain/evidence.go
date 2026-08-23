@@ -72,16 +72,11 @@ type Evidence struct {
 	Quality SourceQuality
 }
 
-// SourceRef is the durable, compact pointer that survives into a pack's
-// provenance. FORGE.md 8 keeps raw pages and full traces out of persistence,
-// so what a shipped pack carries is this, not the Evidence record.
-type SourceRef struct {
-	ID    string
-	URL   string
-	Title string
-}
-
 // Ref reduces an Evidence record to what a pack may carry.
+//
+// The reduction is the point: FORGE.md 8 keeps raw pages and full traces out
+// of persistence, so a shipped pack carries the pointer and never the content.
+// [SourceRef] is the core pack-format type, aliased in this package.
 func (e Evidence) Ref() SourceRef {
 	return SourceRef{ID: e.ID, URL: e.URL, Title: e.Title}
 }
