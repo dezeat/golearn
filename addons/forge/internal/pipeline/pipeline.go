@@ -113,9 +113,14 @@ func DefaultBudgets() Budgets {
 	return Budgets{
 		MaxCandidateRounds:  3,
 		RepairsPerCandidate: 1, // D-016: exactly one
-		PerCallTimeout:      6 * time.Minute,
-		EvidencePerRun:      6,
-		MaxBytesPerSource:   4000,
+		// Generous, because the bound that matters is the caller's context and
+		// a tight default here would surface as "endpoint unreachable" on
+		// hardware that was working correctly — the least diagnosable failure
+		// available. The reference host answers a small structured request in
+		// about a minute and a larger one in several (B-2.1).
+		PerCallTimeout:    10 * time.Minute,
+		EvidencePerRun:    6,
+		MaxBytesPerSource: 4000,
 	}
 }
 

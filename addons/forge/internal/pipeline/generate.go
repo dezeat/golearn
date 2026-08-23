@@ -93,12 +93,17 @@ Rules:
 func (p *Pipeline) generateCandidates(ctx context.Context, spec domain.GenerationSpec,
 	evidence []domain.Evidence, want int, already []domain.Candidate) ([]domain.Candidate, domain.Cost, error) {
 
-	// Ask for a little more than is missing, because some candidates will be
-	// rejected downstream and a second round costs a full model call. The
-	// surplus is capped so a large shortfall cannot inflate one request into
-	// something the model answers badly.
-	const maxOverAsk = 3
-	ask := want + min(want, maxOverAsk)
+	// Ask for exactly what is missing.
+	//
+	// Over-asking to absorb downstream rejections is the obvious optimization,
+	// and measurement says it is wrong here. Generation is the longest call in
+	// the chain and its cost scales with the tokens produced, so asking for
+	// spares inflates the single most expensive call on every round — on the
+	// reference host a four-question batch approaches the per-call budget
+	// while a two-question batch sits comfortably inside it (B-2.1). The round
+	// budget already covers the rejection case, and unlike an over-ask it only
+	// spends time when rejections actually happen.
+	ask := want
 
 	call, cancel := context.WithTimeout(ctx, p.budgets.PerCallTimeout)
 	defer cancel()
