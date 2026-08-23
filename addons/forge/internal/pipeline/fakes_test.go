@@ -19,6 +19,7 @@ import (
 	"encoding/json"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/dezeat/golearn/addons/forge/internal/domain"
 	"github.com/dezeat/golearn/addons/forge/internal/pipeline"
@@ -65,6 +66,12 @@ type fakeProvider struct {
 	replies  map[stage][]any
 	errs     map[stage]error
 	calls    []call
+
+	// observeDeadline records how much time each call was actually given, so a
+	// test can assert the configured budget reached the provider rather than
+	// only that it was configured.
+	observeDeadline bool
+	deadlines       []time.Duration
 }
 
 func newFakeProvider() *fakeProvider {
@@ -96,6 +103,13 @@ func (f *fakeProvider) Generate(ctx context.Context, req ports.Request, out any)
 
 	s := classify(req.System)
 	f.calls = append(f.calls, call{Stage: s, Request: req})
+	if f.observeDeadline {
+		if deadline, ok := ctx.Deadline(); ok {
+			f.deadlines = append(f.deadlines, time.Until(deadline))
+		} else {
+			f.deadlines = append(f.deadlines, 0)
+		}
+	}
 	if err := f.errs[s]; err != nil {
 		return err
 	}

@@ -649,3 +649,59 @@ func TestARepeatedAnswerPositionIsCountedOnce(t *testing.T) {
 		t.Errorf("a repeated position must not promote the question to %q", q.Type)
 	}
 }
+
+// The per-call budget must actually reach the provider call. A budget that is
+// configured but never applied is invisible until a run hangs — and then it
+// looks like a provider problem, because the pipeline is the one component
+// nobody suspects of not enforcing its own limit.
+func TestThePerCallBudgetIsAppliedToEveryProviderCall(t *testing.T) {
+	provider := newFakeProvider()
+	// Report back the deadline each call was given, so the test asserts on
+	// what the provider actually received rather than on what was configured.
+	provider.observeDeadline = true
+	provider.reply(stageGenerate, batch(goodQuestion("Q1"))).
+		reply(stageVerify, passingVerify()).
+		reply(stageCritique, passingCritique())
+
+	budgets := pipeline.DefaultBudgets()
+	budgets.PerCallTimeout = 90 * time.Second
+
+	h := &harness{
+		provider: provider,
+		research: &fakeResearch{evidence: testEvidence()},
+		gate:     &fakeGate{},
+		runs:     &fakeRunStore{},
+		drafts:   &fakeDraftStore{},
+	}
+	p, err := pipeline.New(pipeline.Deps{
+		Provider: provider, Research: h.research, Gate: h.gate,
+		Runs: h.runs, Drafts: h.drafts, Now: fixedNow, ForgeVersion: "test",
+	}, budgets)
+	if err != nil {
+		t.Fatalf("pipeline.New: %v", err)
+	}
+	if _, err := p.Generate(context.Background(), testSpec(1)); err != nil {
+		t.Fatalf("Generate: %v", err)
+	}
+
+	if len(provider.deadlines) == 0 {
+		t.Fatal("no provider call was made")
+	}
+	for i, remaining := range provider.deadlines {
+		if remaining <= 0 {
+			t.Errorf("call %d received no deadline at all", i)
+			continue
+		}
+		// Generous bounds: the assertion is "the configured budget reached the
+		// call", not a timing measurement. A default of ten minutes would fail
+		// this; an unset deadline fails above.
+		if remaining > budgets.PerCallTimeout {
+			t.Errorf("call %d received %v, more than the configured budget %v",
+				i, remaining, budgets.PerCallTimeout)
+		}
+		if remaining < budgets.PerCallTimeout/2 {
+			t.Errorf("call %d received only %v of the configured %v",
+				i, remaining, budgets.PerCallTimeout)
+		}
+	}
+}
