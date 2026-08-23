@@ -36,7 +36,10 @@
 // backend must not know how a vector was produced, and the embedding source
 // must not know what it will be compared against. The pipeline holds both and
 // fetches the vectors; giving the index a Provider reference would fuse the
-// two seams and make either one unswappable.
+// two seams and make either one unswappable. It also addresses one corpus
+// only — library questions, by [domain.LibraryQuestionID] — because a
+// candidate that may still be rejected must not leave a vector behind in a
+// store whose entire contents are supposed to be practisable content (D-021).
 //
 // 3. The store interfaces are Forge-local and additive. They are implemented
 // by a Forge adapter that opens the same database the core does and keeps its
