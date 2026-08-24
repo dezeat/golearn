@@ -942,9 +942,10 @@ These settled the shape of #125 before any implementation was committed.
 
 ### A-22 · Does a real embedding model separate the fixture set a lexical one could not?
 
-**Pre-registered. This entry was committed before the model was contacted; the
-Result section below is empty on purpose and is filled by the run it
-describes.**
+**Pre-registered.** Everything above the Result was committed in the commit
+immediately preceding this one (`f111bd1` before any rebase), before the model
+was contacted; the measured numbers were appended afterwards and nothing above
+them was edited to fit.
 
 - **Question.** A-16 established that the deterministic lexical stand-in cannot
   calibrate the gate: its two disjoint-vocabulary duplicates score *below*
@@ -998,8 +999,193 @@ describes.**
     the endpoint itself and computes cosine and the selection rule in its own
     arithmetic. It proves it embedded the same strings by matching the
     SHA-256 digests the runner publishes, so the two paths share no code.
-- **Result.** *(pending — filled by the run this entry pre-registers)*
-- **What it locked in.** *(pending)*
+- **Result. The hypothesis is falsified, and the falsifier named above fired in
+  a sharper form than it predicted.**
+
+  | Pair | Relation | Lexical (A-16) | **nomic-embed-text** |
+  | --- | --- | --- | --- |
+  | verbatim repeat | identical (dup) | 1.0000 | **1.0000** |
+  | different choice-id scheme and order | identical (dup) | 1.0000 | **1.0000** |
+  | reordered options, reworded stem | paraphrase (dup) | 0.9619 | **0.9898** |
+  | paraphrase with filler words | paraphrase (dup) | 0.7670 | **0.9809** |
+  | paraphrase of a channel question | paraphrase (dup) | 0.9649 | **0.9311** |
+  | same fact, opposite direction | **semantic (dup)** | 0.4739 | **0.8478** |
+  | **same option set, different question** | **concept (negative)** | 0.7368 | **0.8436** |
+  | same assessment, disjoint vocabulary | **semantic (dup)** | 0.2860 | **0.7614** |
+  | same concept, different competency | competency (negative) | 0.0767 | 0.6875 |
+  | same topic and stem, different concept | concept (negative) | 0.5000 | 0.6795 |
+  | shared stem, unrelated concepts | concept (negative) | 0.5618 | 0.6363 |
+  | different topics entirely | unrelated (negative) | 0.2449 | 0.5296 |
+  | same difficulty and tag, different subject | unrelated (negative) | 0.1312 | 0.4815 |
+
+  - **Near-duplicate: derivation fails.** Highest negative 0.8436, so the
+    committed procedure cuts at 0.8436 + 0.02 → **0.87**, which yields 0 false
+    positives but **recall 0.714** against the 0.80 floor. Two positives fall
+    below the cut.
+  - **Reject: derivation fails, and for a different reason.** With only the
+    `identical` pairs counted as positives, the highest negative is a
+    paraphrase at 0.9898, so the procedure cuts at **1.01** — above the range
+    cosine can reach. Recall is 0. No reject threshold exists for this model
+    on this fixture set at all, which the lexical baseline never revealed
+    because its paraphrases scored far lower.
+  - **The model is bit-deterministic.** The same text embedded twice returns
+    a bit-identical vector, single and batched embedding agree to 1.0000000000,
+    and a full re-run in a separate process reproduced every score exactly
+    (delta 0). The failure is a property of the model and the fixture set, not
+    of a noisy measurement.
+- **Independent recomputation.** A separate implementation sharing no code with
+  the runner — its own canonical-text projection, its own HTTP call, its own
+  cosine and its own copy of the selection rule, in plain-Python float
+  arithmetic — reproduced every score to a maximum absolute divergence of
+  **1.4e-09** (float32-versus-float64 accumulation) and returned the same two
+  verdicts. It matched the runner's published SHA-256 digests for all 26
+  canonical texts first, so both paths provably embedded the same strings.
+- **What it locked in.**
+
+  1. **D-022 stands, and the calibration table stays empty.** The one embedding
+     model available to measure does not pass the criteria committed before it
+     was measured, so no entry is added. `nomic-embed-text` remains refused
+     with `ErrUncalibratedEmbeddingModel`, and the similarity gate still cannot
+     run against a real provider. This is the blocker reported on #124, not a
+     step toward removing it.
+  2. **A real embedding model is emphatically better than the lexical
+     stand-in, and still not good enough.** A-16's load-bearing negative was
+     that the lexical scorer put both semantic duplicates *below three
+     negatives*. nomic-embed-text lifts one of them (0.4739 → 0.8478) **above
+     every negative** and the other (0.2860 → 0.7614) above five of six. The
+     ordering claim A-16 made about lexical scoring is now confirmed as
+     specific to lexical scoring — the fixture set is not intrinsically
+     unseparable.
+  3. **The run fails on the margin, not on separation, and that distinction is
+     the whole point of having pre-registered one.** Six of seven positives
+     rank above the highest negative. The gap between the weakest of them and
+     that negative is **0.00414** — real separation, roughly a fifth of the
+     0.02 the criteria demand. A threshold of 0.85 would have scored 0 false
+     positives and 0.857 recall on this set and looked entirely respectable.
+     It is refused because 0.02 was committed in an earlier commit than any
+     number here, and a margin relaxed after seeing the data is not a
+     criterion but a description of the data. This is exactly the move D-022
+     exists to make impossible, and it is recorded rather than quietly taken.
+  4. **The blocking negative is one pair, and it is the right pair.** `same
+     option set, different question` (0.8436) is the fixture set's hardest
+     negative by construction: two different questions sharing an identical
+     answer-option set, which `CanonicalText` weights heavily because options
+     make up most of the embedded string. A model that ranked it below a
+     disjoint-vocabulary duplicate would be reading the stem rather than the
+     surface. Nothing about this argues for removing the pair — it is the case
+     that separates a gate worth having from one that fires on shared option
+     sets.
+  5. **Two hypotheses this run does *not* test, named so they are not
+     mistaken for having been ruled out.** Whether an asymmetric-prefix model
+     (nomic's documented `search_document:` / `clustering:` task prefixes) or a
+     larger embedding model widens the 0.00414 gap past 0.02 are open
+     questions, each requiring its own pre-registered entry. Neither was tried
+     here: A-22 committed to one text variant — the exact string the gate
+     sends — and a second variant tried after seeing the first fail would be
+     two shots at one target, which is the same error as relaxing the margin
+     wearing different clothes.
+
+### A-23 · Mutation test — the guards that pin the A-22 negative result
+
+- **Question.** A-22 produced a *negative* result, and a negative result is the
+  easy kind to let rot: the calibration table is empty, every guard around it
+  passes, and nothing would notice if the evidence underneath drifted away from
+  what the documents claim. Five guards now pin that result offline. Do they
+  bite?
+- **Method.** Ten mutations against the measured score fixture, its
+  provenance block, the labeled fixture set and the calibration table itself, each applied, checked for
+  having actually changed something, build-checked, run under a 90-second
+  timeout, classified and reverted. The harness carries A-18's lesson: a
+  mutation that fails to apply, is a no-op, fails to compile, or times out is
+  reported as **INCONCLUSIVE** and never scored as survived.
+- **Result. Ten applied, ten caught. No survivors.**
+
+  | # | Mutation | Guard that fired |
+  | --- | --- | --- |
+  | 1 | the blocking negative is relabeled as a duplicate | `TestTheMeasuredScoresStillDescribeTheCommittedFixtureSet` |
+  | 2 | a fixture question is reworded after the measurement | same, via the fixture SHA-256 |
+  | 3 | the blocking negative's score is lowered until a threshold derives | `TestTheMeasuredModelStillFailsTheCommittedCriteria` |
+  | 4 | the narrow winning gap is widened past the committed margin | `TestTheMeasuredModelSeparatesByRankButNotByMargin` |
+  | 5 | the top paraphrases are lowered until a reject threshold derives | `TestNoRejectThresholdIsDerivableForTheMeasuredModel` |
+  | 6 | **the table is seeded with 0.85 — the number the run did not justify** | `TestTheMeasuredModelIsStillRefusedAsUncalibrated` |
+  | 7 | the table is seeded under the `:latest` spelling only | same |
+  | 8 | the score file is repointed at a different embedding model | `TestTheMeasuredScoresStillDescribeTheCommittedFixtureSet` |
+  | 9 | the recorded vector dimension is changed | same |
+  | 10 | a canonical-text digest is dropped from the provenance | same |
+
+- **Mutations 8-10 close a hole the first seven did not reach, and finding it
+  is the argument for running the pass at all.** The guards parsed the score
+  file's provenance — model identity, dimension, canonical-text digests — and
+  asserted on none of it, while the refusal guard named its model as a
+  hardcoded constant. Nothing connected the two. The score file could have been
+  replaced wholesale with another model's measurements and every guard would
+  still have passed, leaving "this model still fails the criteria" and "this
+  model is still refused" as claims about two different models. Three
+  assertions now tie the file to the model it measured, and mutations 8-10 are
+  what show they bite.
+- **Mutation 6 is the one this whole entry exists for.** It is not a
+  hypothetical slip; it is the exact move A-22 declined to make. A threshold of
+  0.85 sits above every measured negative and catches six of seven duplicates,
+  so the pipeline would run and look entirely reasonable, and the only thing
+  wrong with it is that the margin it was derived under was chosen after seeing
+  the scores. Two independent guards now fail on it — the new one and the
+  pre-existing `TestAnUncalibratedModelIsRefusedRatherThanGivenADefault`, which
+  already names this exact model.
+- **Mutation 7 records a real hole that was closed rather than found.** Ollama
+  resolves a bare model name to its `:latest` tag, so both spellings name one
+  artifact, while `CalibrationFor` matches `ModelIdentity` by exact struct
+  equality and would happily calibrate one spelling and refuse the other. The
+  guard asserts both, and the live check below exercised both through the
+  binary.
+- **Four inconclusive results, all apparatus, none counted.** Two mutations
+  addressed the fixture by a path relative to the wrong module root and failed
+  to apply; two more wrote `{{` into Go source through a mis-escaped patch
+  template and failed to compile. Each was reported as INCONCLUSIVE and rerun
+  after the harness was fixed. This is the fifth instance of the recurring
+  failure recorded in A-1, A-10, A-12 and A-18 — the apparatus quietly not
+  measuring — and the only reason it did not read as four survivors is that the
+  harness was built to distrust its own green.
+- **A vacuity check on the neighbours.** Seeding the table (mutation 6) was
+  rerun against the whole `app` and `domain` suite to see what else reacts.
+  Exactly two tests fail and no others, which is the expected blast radius; the
+  A-18 mutations 22–24 guards keep their meaning because they name model
+  identities that are still absent from the table.
+- **What it locked in.** The empty calibration table is now defended by
+  evidence rather than by the absence of any. Before A-22, `nomic-embed-text`
+  was refused because nothing had been measured; after it, the same model is
+  refused because something *was* measured and failed the criteria — the same
+  assertion, a completely different epistemic status, and mutation 3 is what
+  keeps the second claim honest.
+- **Verification of the surrounding claims.**
+  - `GOWORK=off make check` — green, 542 assertions across both modules in a
+    detached worktree with no `go.work`; `GOWORK=off make eval` — green.
+  - **`make check` is network-free, demonstrated rather than asserted.** The
+    full gate was rerun inside a network namespace with no route to anything
+    and passed identically. A first attempt left loopback *down* and produced
+    two failures, which were the `httptest` servers failing to bind rather than
+    a gate reaching the network — recorded here because it is the same
+    apparatus error the entry above is about, caught the same way.
+  - **Live check through the shipped binary, not a constructed identity.**
+    `golearn-forge generate` against the real endpoint printed
+    `similarity gate not run: ollama/nomic-embed-text has no committed
+    calibration … (D-022)`, and the same under `nomic-embed-text:latest`. The
+    identity string that reaches `CalibrationFor` in production is therefore
+    the one the guards assert, which a unit test building the identity by hand
+    could not have shown.
+  - `gitleaks` 8.30.1 (the pinned CI version) — clean over the working tree and
+    clean over the branch's history (81 commits from `origin/feat/forge`
+    through this work). `govulncheck` v1.5.0 — no vulnerabilities in either
+    module.
+  - **A sixth apparatus error, recorded because it nearly became a false
+    report.** The first history scan was run as `gitleaks git .`, which sweeps
+    every commit reachable from *any local ref*, and it reported three findings
+    in test files. They sit in commits that are **not ancestors of
+    `origin/feat/forge`**: leftovers from an earlier force-push of the branch,
+    alive only in one clone's object store. CI, scanning the actual PR head,
+    passes. Constraining the scan with `--log-opts` to the branch's real
+    history reports no leaks. The finding was about a local artifact, not about
+    the branch, and only checking it against CI — the environment the claim was
+    about — separated the two.
 
 ## Part B — Provider & model benchmarks
 
