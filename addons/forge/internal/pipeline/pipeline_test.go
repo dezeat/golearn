@@ -901,3 +901,77 @@ func TestAFailedDraftSaveCorrectsTheRunRatherThanLeavingItSucceeded(t *testing.T
 			runs.diagnostic[len(runs.diagnostic)-1])
 	}
 }
+
+// D-008 makes presentation a render-time concern: labels are computed from
+// display order and the stored text is content. A model asked for choices
+// prints them the way it has seen them printed, and the repair stage makes it
+// worse — the question is rendered to the model WITH a correctness marker and
+// the model copies that back.
+//
+// The first live run produced "* b. To enable...", which then rendered as
+// "* B) * b. To enable...". The label was applied twice and the answer was
+// marked twice, in stored data.
+func TestModelSuppliedChoiceLabelsAreStrippedFromStoredText(t *testing.T) {
+	labeled := goodQuestion("Q1")
+	labeled["choices"] = []string{
+		"a. go",
+		"B) run",
+		"* c. spawn",
+		"4. thread",
+	}
+
+	provider := newFakeProvider().
+		reply(stageGenerate, batch(labeled)).
+		reply(stageVerify, passingVerify()).
+		reply(stageCritique, passingCritique())
+	h := newHarness(t, provider)
+
+	if _, err := h.pipeline.Generate(context.Background(), testSpec(1)); err != nil {
+		t.Fatalf("Generate: %v", err)
+	}
+
+	want := []string{"go", "run", "spawn", "thread"}
+	for i, c := range h.drafts.saved[0].Pack.Questions[0].Choices {
+		if c.Text != want[i] {
+			t.Errorf("choice %d text = %q, want %q — presentation was stored as content", i, c.Text, want[i])
+		}
+	}
+}
+
+// Stripping must be conservative. Removing real content would be far worse
+// than leaving a stray prefix, because the question would silently change
+// meaning rather than merely look untidy.
+func TestChoiceTextThatMerelyResemblesALabelIsKept(t *testing.T) {
+	cases := map[string]string{
+		"a. go":              "go",
+		"go":                 "go",
+		"Go. The keyword":    "Go. The keyword",
+		"3.14 approximately": "3.14 approximately",
+		"x := 5":             "x := 5",
+		// The marker goes; the label does not, because "b" is not the label
+		// position 0 would carry. A mismatched label is either a model error
+		// or real content, and stripping it would be a guess.
+		"* b. channels":          "b. channels",
+		"- buffered channels":    "buffered channels",
+		"i.e. a lightweight one": "i.e. a lightweight one",
+	}
+	for in, want := range cases {
+		t.Run(in, func(t *testing.T) {
+			labeled := goodQuestion("Q1")
+			labeled["choices"] = []string{in, "other one", "other two", "other three"}
+
+			provider := newFakeProvider().
+				reply(stageGenerate, batch(labeled)).
+				reply(stageVerify, passingVerify()).
+				reply(stageCritique, passingCritique())
+			h := newHarness(t, provider)
+
+			if _, err := h.pipeline.Generate(context.Background(), testSpec(1)); err != nil {
+				t.Fatalf("Generate: %v", err)
+			}
+			if got := h.drafts.saved[0].Pack.Questions[0].Choices[0].Text; got != want {
+				t.Errorf("%q became %q, want %q", in, got, want)
+			}
+		})
+	}
+}

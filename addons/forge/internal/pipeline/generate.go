@@ -17,6 +17,7 @@ package pipeline
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/dezeat/golearn/addons/forge/internal/domain"
@@ -167,6 +168,64 @@ func choiceID(index int) string {
 	return string(alphabet[index])
 }
 
+// stripChoicePrefix removes presentation the model baked into choice text.
+//
+// D-008 makes presentation a render-time concern: labels are computed from
+// display order, and the stored text is content. A model asked for choices
+// prints them the way it has seen them printed, so it emits "a. To define...";
+// the repair stage makes it worse, because the question is rendered to the
+// model WITH a correctness marker and the model copies that back. The first
+// live run produced "* b. To enable...", which then rendered as
+// "* B) * b. To enable..." — the label applied twice and the answer marked
+// twice, in stored data.
+//
+// The rule is position-aware, and that is what makes it safe. Only the label
+// this choice would actually carry is removable: position 0 may shed "a", "A"
+// or "1" and nothing else. A first-attempt regex that stripped any short
+// leading token turned "Go. The keyword" into "The keyword", "3.14
+// approximately" into "14 approximately" and "x := 5" into "= 5" — silently
+// changing what the question asks, which is far worse than an untidy label.
+func stripChoicePrefix(text string, position int) string {
+	rest := strings.TrimSpace(text)
+
+	// A bullet or correctness marker, only when whitespace follows it: that
+	// distinguishes "- buffered channels" from "-1 is invalid".
+	if len(rest) > 1 && strings.ContainsRune("*-•", rune(rest[0])) &&
+		(rest[1] == ' ' || rest[1] == '\t') {
+		rest = strings.TrimSpace(rest[1:])
+	}
+
+	// The label this position would be given, in the forms a model uses.
+	labels := []string{}
+	if position >= 0 && position < 26 {
+		letter := string(rune('a' + position))
+		labels = append(labels, letter, strings.ToUpper(letter))
+	}
+	labels = append(labels, strconv.Itoa(position+1))
+
+	for _, label := range labels {
+		if len(rest) <= len(label) {
+			continue
+		}
+		if !strings.HasPrefix(rest, label) {
+			continue
+		}
+		after := strings.TrimLeft(rest[len(label):], " \t")
+		if after == "" || !strings.ContainsRune(".):]", rune(after[0])) {
+			continue
+		}
+		stripped := strings.TrimSpace(after[1:])
+		if stripped == "" {
+			// The whole string was a label. Keep the original rather than emit
+			// an empty choice: validation would reject it either way, but for
+			// a reason that sends the reader to the wrong place.
+			return rest
+		}
+		return stripped
+	}
+	return rest
+}
+
 // toCandidate maps a generated question onto the pack format, assigning choice
 // ids and resolving answer positions.
 //
@@ -178,7 +237,7 @@ func choiceID(index int) string {
 func toCandidate(spec domain.GenerationSpec, q generatedQuestion) domain.Candidate {
 	choices := make([]coredomain.Choice, 0, len(q.Choices))
 	for i, text := range q.Choices {
-		choices = append(choices, coredomain.Choice{ID: choiceID(i), Text: text})
+		choices = append(choices, coredomain.Choice{ID: choiceID(i), Text: stripChoicePrefix(text, i)})
 	}
 
 	correct := make([]string, 0, len(q.CorrectChoices))
