@@ -24,6 +24,11 @@ import (
 	_ "modernc.org/sqlite" // CGo-free SQLite driver
 )
 
+// busyTimeoutMillis is how long a writer waits for a lock before giving up.
+// Long enough to absorb another process finishing a write, short enough that a
+// genuinely stuck lock still surfaces as an error rather than a hang.
+const busyTimeoutMillis = 5000
+
 // DefaultDBPath returns ~/.golearn/golearn.db.
 func DefaultDBPath() string {
 	home, err := os.UserHomeDir()
@@ -41,21 +46,33 @@ func Open(dbPath string) (*sql.DB, error) {
 		return nil, fmt.Errorf("create db directory %s: %w", dir, err)
 	}
 
-	db, err := sql.Open("sqlite", dbPath)
+	// Per-connection pragmas go in the DSN, not in a db.Exec.
+	//
+	// database/sql is a connection POOL. A pragma issued with db.Exec lands on
+	// whichever pooled connection happened to serve it, and every connection
+	// opened afterwards starts at the driver default. A probe reading
+	// PRAGMA foreign_keys across eight concurrent connections returned
+	// [1 1 0 0 0 0 1 1] — foreign keys were enforced on some connections and
+	// not others, in a database whose data integrity depends on them.
+	//
+	// The driver applies _pragma= parameters when it opens each connection, so
+	// they hold for all of them.
+	//
+	// journal_mode is deliberately still set below rather than here: WAL is a
+	// persistent property of the database file, not of a connection, and
+	// setting it per-connection would attempt a mode change on every open.
+	dsn := dbPath + fmt.Sprintf("?_pragma=foreign_keys(1)&_pragma=busy_timeout(%d)", busyTimeoutMillis)
+
+	db, err := sql.Open("sqlite", dsn)
 	if err != nil {
 		return nil, fmt.Errorf("open sqlite %s: %w", dbPath, err)
 	}
 
 	// Enable WAL mode to avoid "database is locked" with concurrent readers.
+	// One connection is enough: it is a property of the file.
 	if _, err := db.Exec("PRAGMA journal_mode=WAL"); err != nil {
 		_ = db.Close()
 		return nil, fmt.Errorf("enable WAL: %w", err)
-	}
-
-	// Enable foreign keys.
-	if _, err := db.Exec("PRAGMA foreign_keys=ON"); err != nil {
-		_ = db.Close()
-		return nil, fmt.Errorf("enable foreign keys: %w", err)
 	}
 
 	if err := guardSchemaCompatibility(db); err != nil {

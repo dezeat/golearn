@@ -37,6 +37,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"strings"
 )
 
 // Store is the Forge persistence adapter. It borrows an already-open database
@@ -129,35 +130,96 @@ func migrate(ctx context.Context, db *sql.DB) error {
 
 	for i, stmt := range migrations {
 		version := i + 1
-		var applied int
-		if err := db.QueryRowContext(ctx,
-			`SELECT COUNT(*) FROM `+migrationsTable+` WHERE version = ?`, version,
-		).Scan(&applied); err != nil {
-			return fmt.Errorf("check migration %d: %w", version, err)
-		}
-		if applied > 0 {
-			continue
-		}
-		// Statement and version bump land together, so a crash between them
-		// cannot leave a migration applied but unrecorded — which would run it
-		// a second time on the next open.
-		tx, err := db.BeginTx(ctx, nil)
-		if err != nil {
-			return fmt.Errorf("begin migration %d: %w", version, err)
-		}
-		if _, err := tx.ExecContext(ctx, stmt); err != nil {
-			_ = tx.Rollback()
-			return fmt.Errorf("migration %d: %w", version, err)
-		}
-		if _, err := tx.ExecContext(ctx,
-			`INSERT INTO `+migrationsTable+` (version) VALUES (?)`, version,
-		); err != nil {
-			_ = tx.Rollback()
-			return fmt.Errorf("record migration %d: %w", version, err)
-		}
-		if err := tx.Commit(); err != nil {
-			return fmt.Errorf("commit migration %d: %w", version, err)
+		if err := applyMigration(ctx, db, version, stmt); err != nil {
+			return err
 		}
 	}
 	return nil
+}
+
+// migrationAttempts bounds the retry on write contention.
+const migrationAttempts = 5
+
+// applyMigration applies one migration, retrying on write contention.
+//
+// The applied-check runs INSIDE the transaction that applies the migration:
+// checking outside leaves a window where two processes both see "not applied"
+// and both try to record it, and one then fails on the primary key against a
+// perfectly valid schema.
+//
+// Putting them in one transaction moves the contention rather than removing
+// it. The transaction starts as a read and upgrades to a write at the INSERT,
+// so a writer that committed in between produces SQLITE_BUSY_SNAPSHOT — which
+// busy_timeout deliberately does NOT wait out, because the snapshot the reader
+// holds is already stale. The correct response is to start over on a fresh
+// snapshot, which is what the retry does. Two golearn windows opening at once
+// is an ordinary thing for a local tool, and a concurrency test reproduced it
+// immediately.
+func applyMigration(ctx context.Context, db *sql.DB, version int, stmt string) error {
+	var lastErr error
+	for attempt := 0; attempt < migrationAttempts; attempt++ {
+		done, err := tryMigration(ctx, db, version, stmt)
+		if done {
+			return nil
+		}
+		if err == nil {
+			return nil
+		}
+		if !isContention(err) {
+			return err
+		}
+		lastErr = err
+	}
+	return fmt.Errorf("migration %d: still contended after %d attempts: %w",
+		version, migrationAttempts, lastErr)
+}
+
+// isContention reports whether an error is SQLite telling us to try again.
+// Matched on message text because the driver does not export a typed error for
+// it; the alternative is treating a retryable condition as fatal.
+func isContention(err error) bool {
+	text := strings.ToLower(err.Error())
+	return strings.Contains(text, "database is locked") || strings.Contains(text, "database table is locked")
+}
+
+func tryMigration(ctx context.Context, db *sql.DB, version int, stmt string) (done bool, err error) {
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		return false, fmt.Errorf("begin migration %d: %w", version, err)
+	}
+	defer func() {
+		if !done && err != nil {
+			_ = tx.Rollback()
+		}
+	}()
+
+	var applied int
+	if err := tx.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM `+migrationsTable+` WHERE version = ?`, version,
+	).Scan(&applied); err != nil {
+		_ = tx.Rollback()
+		return false, fmt.Errorf("check migration %d: %w", version, err)
+	}
+	if applied > 0 {
+		_ = tx.Rollback()
+		return true, nil
+	}
+
+	// Statement and version bump land together, so a crash between them cannot
+	// leave a migration applied but unrecorded — which would run it a second
+	// time on the next open.
+	if _, err := tx.ExecContext(ctx, stmt); err != nil {
+		_ = tx.Rollback()
+		return false, fmt.Errorf("migration %d: %w", version, err)
+	}
+	if _, err := tx.ExecContext(ctx,
+		`INSERT INTO `+migrationsTable+` (version) VALUES (?)`, version,
+	); err != nil {
+		_ = tx.Rollback()
+		return false, fmt.Errorf("record migration %d: %w", version, err)
+	}
+	if err := tx.Commit(); err != nil {
+		return false, fmt.Errorf("commit migration %d: %w", version, err)
+	}
+	return true, nil
 }

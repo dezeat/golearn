@@ -233,3 +233,37 @@ func generatedConfidence() *float64 {
 	c := coredomain.GeneratedConfidence
 	return &c
 }
+
+// Two golearn windows opening at once is an ordinary thing for a local tool.
+// With the applied-check outside the transaction that applies the migration,
+// both openers see "not applied", both try to record it, and one fails on the
+// primary key — on a database whose schema is perfectly valid.
+func TestConcurrentOpensDoNotCollideOnMigrations(t *testing.T) {
+	_, db := coreDB(t)
+
+	const openers = 8
+	errs := make(chan error, openers)
+	start := make(chan struct{})
+	for i := 0; i < openers; i++ {
+		go func() {
+			<-start
+			_, err := forgestore.New(context.Background(), db)
+			errs <- err
+		}()
+	}
+	close(start)
+
+	for i := 0; i < openers; i++ {
+		if err := <-errs; err != nil {
+			t.Errorf("concurrent open %d failed: %v", i, err)
+		}
+	}
+
+	var versions int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM forge_schema_migrations`).Scan(&versions); err != nil {
+		t.Fatalf("count: %v", err)
+	}
+	if versions != len(forgestore.MigrationCount()) {
+		t.Errorf("want %d recorded migrations, got %d", len(forgestore.MigrationCount()), versions)
+	}
+}

@@ -54,6 +54,24 @@ var forbiddenFirstPartyImports = []string{
 	"net/url",
 	"net/http",
 	"crypto/tls",
+	// A socket does not have to arrive through net/. An independent review
+	// noted that first-party code calling syscall.Socket, or reaching for
+	// golang.org/x/sys, would open a network path while passing every check
+	// above — the guard banned a vocabulary rather than a capability.
+	//
+	// These are listed as prefixes as well as exact names below, because
+	// golang.org/x/sys/unix is a different import path from golang.org/x/sys.
+	"syscall",
+	"golang.org/x/net",
+	"golang.org/x/sys",
+}
+
+// forbiddenFirstPartyPrefixes catches subpackages of a banned module, since an
+// exact-name list is correct on the day it is written and silently wrong when
+// someone imports a subpackage of the same thing.
+var forbiddenFirstPartyPrefixes = []string{
+	"golang.org/x/net/",
+	"golang.org/x/sys/",
 }
 
 func moduleRoot(t *testing.T) string {
@@ -207,8 +225,16 @@ func TestFirstPartyCodeImportsNoNetwork(t *testing.T) {
 		// pair, so adding a set to the template cannot leave it unscanned.
 		for _, set := range parts[1:] {
 			for _, imp := range strings.Split(set, ",") {
-				if banned[strings.TrimSpace(imp)] {
+				imp = strings.TrimSpace(imp)
+				if banned[imp] {
 					t.Errorf("first-party package %s imports %q directly: the core has no network path (D-015)", pkg, imp)
+					continue
+				}
+				for _, prefix := range forbiddenFirstPartyPrefixes {
+					if strings.HasPrefix(imp, prefix) {
+						t.Errorf("first-party package %s imports %q directly: the core has no network path (D-015)", pkg, imp)
+						break
+					}
 				}
 			}
 		}

@@ -15,10 +15,13 @@
 package sqlite_test
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"path/filepath"
+	"runtime"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/dezeat/golearn/internal/adapters/sqlite"
@@ -219,5 +222,87 @@ func TestForgeExtendedDatabaseStaysOpenableByTheCore(t *testing.T) {
 	}
 	if got := countRows(t, path, "forge_runs"); got != 0 {
 		t.Errorf("core must not disturb Forge tables, got %d rows", got)
+	}
+}
+
+// database/sql is a connection POOL, and foreign_keys and busy_timeout are
+// per-connection settings. Issued with db.Exec they land on whichever pooled
+// connection served the call, and every connection opened afterwards starts at
+// the driver default.
+//
+// A probe across eight concurrent connections returned [1 1 0 0 0 0 1 1] for
+// foreign_keys: enforced on some connections and not others, in a database
+// whose integrity depends on them. Nothing failed, nothing logged, and a
+// foreign key violation on the wrong connection would simply have been
+// accepted.
+func TestPerConnectionPragmasHoldOnEveryPooledConnection(t *testing.T) {
+	db, err := sqlite.Open(filepath.Join(t.TempDir(), "pool.db"))
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer func() { _ = db.Close() }()
+
+	const connections = 8
+	db.SetMaxOpenConns(connections)
+
+	// Hold every connection open at once, so the pool is forced to create them
+	// all rather than reusing the one that received a pragma.
+	var wg sync.WaitGroup
+	release := make(chan struct{})
+	foreignKeys := make([]int, connections)
+	busyTimeout := make([]int, connections)
+
+	for i := 0; i < connections; i++ {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			conn, err := db.Conn(context.Background())
+			if err != nil {
+				t.Errorf("conn %d: %v", i, err)
+				return
+			}
+			defer func() { _ = conn.Close() }()
+			if err := conn.QueryRowContext(context.Background(), "PRAGMA foreign_keys").Scan(&foreignKeys[i]); err != nil {
+				t.Errorf("conn %d foreign_keys: %v", i, err)
+			}
+			if err := conn.QueryRowContext(context.Background(), "PRAGMA busy_timeout").Scan(&busyTimeout[i]); err != nil {
+				t.Errorf("conn %d busy_timeout: %v", i, err)
+			}
+			<-release
+		}(i)
+	}
+	// Give every goroutine a chance to take its own connection before any is
+	// returned to the pool.
+	for db.Stats().OpenConnections < connections {
+		runtime.Gosched()
+	}
+	close(release)
+	wg.Wait()
+
+	for i := 0; i < connections; i++ {
+		if foreignKeys[i] != 1 {
+			t.Errorf("connection %d has foreign_keys=%d; integrity is not enforced there", i, foreignKeys[i])
+		}
+		if busyTimeout[i] == 0 {
+			t.Errorf("connection %d has no busy timeout; a concurrent writer fails instead of waiting", i)
+		}
+	}
+}
+
+// WAL is a property of the file rather than of a connection, so it is set once
+// and must hold on every connection regardless.
+func TestWalModeHoldsAcrossConnections(t *testing.T) {
+	db, err := sqlite.Open(filepath.Join(t.TempDir(), "wal.db"))
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer func() { _ = db.Close() }()
+
+	var mode string
+	if err := db.QueryRow("PRAGMA journal_mode").Scan(&mode); err != nil {
+		t.Fatalf("journal_mode: %v", err)
+	}
+	if !strings.EqualFold(mode, "wal") {
+		t.Errorf("journal_mode = %q, want wal (D-006)", mode)
 	}
 }

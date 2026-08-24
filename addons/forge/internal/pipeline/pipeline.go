@@ -248,7 +248,7 @@ func (p *Pipeline) Generate(ctx context.Context, spec domain.GenerationSpec) (Re
 	})
 	if err != nil {
 		p.finish(ctx, runID, domain.RunFailed, sources, cost,
-			"generation succeeded but the draft could not be saved: "+diagnose(err))
+			"generation succeeded but the draft could not be saved")
 		return Result{}, fmt.Errorf("save draft: %w", err)
 	}
 	result.Draft.ID = draftID
@@ -309,15 +309,46 @@ func statusFor(ctx context.Context, err error) domain.RunStatus {
 
 // diagnose renders one concise clause for the run record.
 //
-// FORGE.md 8 forbids persisting raw model output and request mechanics, so
-// this is the error's own text, redacted, and nothing else.
+// It classifies rather than quotes. An earlier version wrote the error's own
+// text, redacted — but that text can contain a provider's response body, and
+// FORGE.md 8 categorically forbids persisting raw model or tool output.
+// Shape-based redaction is not a sufficient answer either: it catches things
+// shaped like credentials, and a proxy echoing an arbitrary token is not
+// shaped like anything.
+//
+// So the diagnostic says which class of failure occurred and what the operator
+// can do about it. That is what a run record is for; the full error still
+// reaches the caller, which prints it and does not store it.
 func diagnose(err error) string {
-	const maxDiagnostic = 300
-	text := domain.Redact(err.Error())
-	if len(text) > maxDiagnostic {
-		text = text[:maxDiagnostic] + "…"
+	switch {
+	case err == nil:
+		return ""
+	case errors.Is(err, context.Canceled):
+		return "canceled"
+	case errors.Is(err, context.DeadlineExceeded):
+		return "a provider call exceeded its time budget"
+	case errors.Is(err, ErrShortfall):
+		// Built by this package from its own counters, so it quotes nothing.
+		return err.Error()
+	case errors.Is(err, domain.ErrInsufficientEvidence):
+		return "research returned no usable sources"
+	case errors.Is(err, domain.ErrStructuredOutput):
+		return "the provider did not return the requested structure"
+	case errors.Is(err, domain.ErrProviderUnreachable):
+		return "the provider endpoint was unreachable"
+	case errors.Is(err, domain.ErrCredentialRejected):
+		return "the provider rejected the credential"
+	case errors.Is(err, domain.ErrCredentialMissing):
+		return "no credential was configured for the provider"
+	case errors.Is(err, domain.ErrRateLimited):
+		return "the provider rate limit was reached"
+	case errors.Is(err, domain.ErrModelNotAvailable):
+		return "the requested model was not available"
+	case errors.Is(err, domain.ErrNoEmbeddingCapability):
+		return "the provider exposes no embedding capability"
+	default:
+		return "the run failed for an unclassified reason; see the error reported at the time"
 	}
-	return text
 }
 
 // resolveCitation returns the first citation that names a source this run

@@ -508,10 +508,17 @@ func TestAProviderFailureIsReportedAsItselfNotAsAShortfall(t *testing.T) {
 	}
 }
 
-// Run diagnostics are user-facing and must never carry a credential.
-func TestRunDiagnosticsAreRedacted(t *testing.T) {
+// FORGE.md 8 categorically forbids persisting raw model or tool output, and a
+// provider's error body is exactly that. Shape-based redaction is not a
+// sufficient answer: it catches things shaped like credentials, and a proxy
+// echoing an arbitrary token is not shaped like anything.
+//
+// So the diagnostic classifies rather than quotes.
+func TestRunDiagnosticsClassifyRatherThanQuoteProviderOutput(t *testing.T) {
+	const leaked = "ordinary-secret-not-shaped-like-a-key"
 	provider := newFakeProvider().
-		fail(stageGenerate, errors.New("upstream said: api_key=sk-aaaaaaaaaaaaaaaa"))
+		fail(stageGenerate, fmt.Errorf("%w: provider said: %s",
+			domain.ErrProviderUnreachable, leaked))
 	h := newHarness(t, provider)
 
 	_, _ = h.pipeline.Generate(context.Background(), testSpec(1))
@@ -519,8 +526,31 @@ func TestRunDiagnosticsAreRedacted(t *testing.T) {
 	if len(h.runs.diagnostic) == 0 {
 		t.Fatal("no diagnostic recorded")
 	}
-	if strings.Contains(h.runs.diagnostic[0], "sk-aaaaaaaaaaaaaaaa") {
-		t.Errorf("the run diagnostic leaked a credential: %s", h.runs.diagnostic[0])
+	recorded := h.runs.diagnostic[0]
+	if strings.Contains(recorded, leaked) {
+		t.Errorf("the run diagnostic quoted provider output: %s", recorded)
+	}
+	if !strings.Contains(recorded, "unreachable") {
+		t.Errorf("the diagnostic must still classify the failure, got: %s", recorded)
+	}
+}
+
+// A shortfall diagnostic is built by the pipeline from its own counters, so it
+// quotes nothing and must keep its numbers — they are the whole diagnostic
+// value of a failed run.
+func TestAShortfallDiagnosticKeepsItsCounts(t *testing.T) {
+	provider := newFakeProvider().
+		reply(stageGenerate, batch(goodQuestion("Q1"))).
+		reply(stageVerify, failingVerify()).
+		reply(stageCritique, passingCritique()).
+		reply(stageRepair, batch())
+	h := newHarness(t, provider)
+
+	_, _ = h.pipeline.Generate(context.Background(), testSpec(2))
+
+	recorded := h.runs.diagnostic[0]
+	if !strings.Contains(recorded, "of 2") {
+		t.Errorf("the shortfall diagnostic lost its counts: %s", recorded)
 	}
 }
 
@@ -973,5 +1003,62 @@ func TestChoiceTextThatMerelyResemblesALabelIsKept(t *testing.T) {
 				t.Errorf("%q became %q, want %q", in, got, want)
 			}
 		})
+	}
+}
+
+// FORGE.md 5 requires a bounded retry before failing clear, and one attempt is
+// not a retry. An earlier version claimed "bounded retry then fail clear" in a
+// comment and returned on the first empty response — the comment described the
+// specification and the code did not implement it, with nothing testing the
+// difference.
+func TestATransientlyEmptyResearchResultIsRetried(t *testing.T) {
+	provider := newFakeProvider().
+		reply(stageGenerate, batch(goodQuestion("Q1"))).
+		reply(stageVerify, passingVerify()).
+		reply(stageCritique, passingCritique())
+	h := newHarness(t, provider)
+	// Empty first, usable second.
+	h.research.perAttempt = [][]domain.Evidence{nil, testEvidence()}
+
+	if _, err := h.pipeline.Generate(context.Background(), testSpec(1)); err != nil {
+		t.Fatalf("a transient empty result must be retried, not fatal: %v", err)
+	}
+	if len(h.research.queries) < 2 {
+		t.Errorf("research was attempted %d time(s); the retry did not happen", len(h.research.queries))
+	}
+}
+
+// The retry is bounded: persistent emptiness still fails clear rather than
+// looping.
+func TestPersistentlyEmptyResearchFailsClearWithinTheBound(t *testing.T) {
+	provider := newFakeProvider()
+	h := newHarness(t, provider)
+	h.research.evidence = nil
+
+	_, err := h.pipeline.Generate(context.Background(), testSpec(1))
+	if !errors.Is(err, domain.ErrInsufficientEvidence) {
+		t.Fatalf("want ErrInsufficientEvidence, got %v", err)
+	}
+	if len(h.research.queries) > 3 {
+		t.Errorf("research was attempted %d times; the retry is not bounded", len(h.research.queries))
+	}
+	if len(provider.calls) != 0 {
+		t.Error("generation ran despite there being no evidence")
+	}
+}
+
+// A record with no extractable content is not evidence, however well-formed.
+// Counting it would let a candidate cite a source that says nothing.
+func TestEvidenceWithNoContentDoesNotCountAsGrounding(t *testing.T) {
+	provider := newFakeProvider()
+	h := newHarness(t, provider)
+	h.research.evidence = []domain.Evidence{{
+		ID: "s1", URL: "https://example.test/empty", Title: "Empty",
+		Content: domain.Untrusted("   "),
+	}}
+
+	_, err := h.pipeline.Generate(context.Background(), testSpec(1))
+	if !errors.Is(err, domain.ErrInsufficientEvidence) {
+		t.Fatalf("empty content must not count as grounding, got %v", err)
 	}
 }

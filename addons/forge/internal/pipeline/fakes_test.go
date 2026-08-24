@@ -151,11 +151,25 @@ type fakeResearch struct {
 	evidence []domain.Evidence
 	err      error
 	queries  []ports.Query
+
+	// perAttempt, when set, supplies a different result per call so a test can
+	// exercise the retry rather than only the steady state.
+	perAttempt [][]domain.Evidence
 }
 
 func (f *fakeResearch) Gather(_ context.Context, q ports.Query) ([]domain.Evidence, error) {
 	f.queries = append(f.queries, q)
-	return f.evidence, f.err
+	if f.err != nil {
+		return nil, f.err
+	}
+	if len(f.perAttempt) > 0 {
+		result := f.perAttempt[0]
+		if len(f.perAttempt) > 1 {
+			f.perAttempt = f.perAttempt[1:]
+		}
+		return result, nil
+	}
+	return f.evidence, nil
 }
 
 // fakeGate scripts the similarity verdict for the candidate under test, which

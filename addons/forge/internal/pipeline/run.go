@@ -106,12 +106,18 @@ func (p *Pipeline) run(ctx context.Context, spec domain.GenerationSpec, _ int64)
 	return result, sources, cost, nil
 }
 
+// evidenceAttempts bounds the research stage. FORGE.md 5 requires a bounded
+// retry before failing clear, and one attempt is not a retry.
+const evidenceAttempts = 2
+
 // gatherEvidence runs the research stage.
 //
 // FORGE.md 5 requires grounding in V1 and forbids silently degrading to
-// ungrounded generation. With no Research adapter wired, this returns nothing
-// and the caller records that in the run diagnostic — the absence is visible
-// rather than invisible.
+// ungrounded generation, so an empty result is retried within a bound and then
+// fails clear. An earlier version claimed "bounded retry then fail clear" in a
+// comment and did neither — it returned on the first empty response. The
+// comment described the specification; the code did not implement it, and
+// nothing tested the difference.
 func (p *Pipeline) gatherEvidence(ctx context.Context, spec domain.GenerationSpec) ([]domain.Evidence, error) {
 	if p.deps.Research == nil {
 		return nil, nil
@@ -123,16 +129,43 @@ func (p *Pipeline) gatherEvidence(ctx context.Context, spec domain.GenerationSpe
 		Timeout:           p.budgets.PerCallTimeout,
 		Language:          spec.Language,
 	}
-	evidence, err := p.deps.Research.Gather(ctx, query)
-	if err != nil {
-		return nil, fmt.Errorf("research: %w", err)
+
+	for attempt := 0; attempt < evidenceAttempts; attempt++ {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		evidence, err := p.deps.Research.Gather(ctx, query)
+		if err != nil {
+			// A transport failure is the adapter's to bound; retrying it here
+			// would spend a budget the adapter already spent.
+			return nil, fmt.Errorf("research: %w", err)
+		}
+		if usable := usableEvidence(evidence); len(usable) > 0 {
+			return usable, nil
+		}
 	}
-	if len(evidence) == 0 {
-		// Bounded retry then fail clear, rather than generating ungrounded.
-		return nil, fmt.Errorf("%w: the research adapter returned no usable sources for %q",
-			domain.ErrInsufficientEvidence, spec.Topic)
+
+	return nil, fmt.Errorf("%w: research returned no usable sources for %q after %d attempts",
+		domain.ErrInsufficientEvidence, spec.Topic, evidenceAttempts)
+}
+
+// usableEvidence drops records that cannot ground anything.
+//
+// A record with no content is not evidence, however well-formed it is: the
+// adapter may legitimately return a result whose extractable content was empty,
+// and counting it would let a candidate cite a source that says nothing. The
+// source-authority policy — which sources are admissible at all — is #120's and
+// is deliberately not decided here; this is only the floor below which the
+// question does not arise.
+func usableEvidence(evidence []domain.Evidence) []domain.Evidence {
+	usable := make([]domain.Evidence, 0, len(evidence))
+	for _, e := range evidence {
+		if e.Content.IsEmpty() || strings.TrimSpace(e.ID) == "" {
+			continue
+		}
+		usable = append(usable, e)
 	}
-	return evidence, nil
+	return usable
 }
 
 // researchTerms plans the query. Query planning is the pipeline's, never the
