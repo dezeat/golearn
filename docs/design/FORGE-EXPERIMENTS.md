@@ -1310,6 +1310,75 @@ them was edited to fit.
   a false "the guards do not bite" was that its own no-op classification looked
   implausible next to a mutation that *was* caught on the same run.
 
+### A-25 · Can an LLM judge classify the pairs that cosine could not?
+
+**Pre-registered.** Everything above the Result was committed before any model
+was contacted; the measured numbers were appended afterwards and nothing above
+them was edited to fit.
+
+- **Question.** A-22 and A-24 located the blocker in the representation rather
+  than in either model: cosine over one whole-question embedding is asked to
+  call a lexically near-identical pair *different* and a lexically disjoint
+  pair *the same*, and two independent architectures decline in the same place.
+  A judge that sees both questions at once never compresses either into a point
+  and is not subject to that limit. Does it actually clear the cases that
+  defeated the embedders?
+- **Hypothesis (committed before the run).** The judge classifies both
+  disjoint-vocabulary duplicates as duplicates and lets the shared-option-set
+  negative through, because joint encoding lets it attend to what the question
+  *asks about* — `slice` versus `map` — rather than to how much text the two
+  share. **The named falsifier is the same pair that defeated the embedders:**
+  if the judge calls `same option set, different question` a duplicate, or
+  misses both semantic pairs, it has failed in exactly the way cosine did and
+  the joint-encoding argument is wrong.
+- **Pre-registered criteria.** Deliberately the *same* bar the embedding runs
+  were held to, so the two methods are comparable rather than each graded on
+  its own curve:
+  - **false positives = 0** — a non-duplicate judged a duplicate discards a
+    good question and spends repair budget;
+  - **recall >= 0.80** — at seven positives this again allows exactly one miss;
+  - **position consistency >= 0.90** — added because it is the failure mode
+    specific to this method rather than to the previous one. Pairwise LLM
+    judgements are known to move when the ordering moves, so every pair is
+    judged in both orderings and a pair counts as *caught* only when **both**
+    orderings say duplicate. Taking the optimistic reading of a disagreement
+    would measure the bias away instead of measuring it.
+  - **No margin criterion**, because there is no threshold. That is the point
+    of the method and also the honest cost: the decision boundary moves from a
+    committed number into model weights and a prompt, where it cannot be
+    inspected. This measurement is what replaces that inspectability, which is
+    why it uses the fixture set rather than replacing it.
+- **Method.**
+  - The same thirteen labeled pairs, unchanged, same labels. **No pair is
+    relabelled, added or dropped**, and no subsetting is applied.
+  - `addons/forge/cmd/judgecheck` issues one structured `Generate` call per
+    pair per ordering — 26 calls — through the existing `ports.Provider`. No
+    reranker model, no embeddings endpoint, no new dependency: the judgement
+    runs against the chat model a user has already configured.
+  - The judge is asked only for a **relation label** from the fixture set's own
+    six-way taxonomy, never for a duplicate/not verdict. The mapping from label
+    to verdict is the fixture set's, predates this run, and is never shown to
+    the model — a model that has learned to answer "unrelated" when unsure must
+    not score well for the wrong reason.
+  - Each question is rendered with stem, options with the correct one marked,
+    and tags: the same content the embedding path compares, so a difference in
+    outcome is a difference in method rather than in what each method saw.
+  - Temperature is pinned to zero and the schema is enforced server-side, so a
+    rerun measures the model rather than its sampler.
+  - **Two models are declared in advance and both will be reported**, because
+    they answer different questions and reporting only the flattering one would
+    be the same error as trying a second text variant after the first failed:
+    - `qwen3.5:4b` — can a small model that runs comfortably on the CPU-only
+      reference host (B-0) do this at all?
+    - `qwen3.5:9b` — does the *approach* work when model capacity is not the
+      binding constraint?
+  - Latency per call is recorded, because a judgement that is correct and
+    unaffordable is not a solution. The gate would issue one call per candidate
+    per neighbour, so the per-call cost decides whether the cascade needs
+    batching before it is usable.
+- **Result.** *(pending — filled by the run this entry pre-registers)*
+- **What it locked in.** *(pending)*
+
 ## Part B — Provider & model benchmarks
 
 **Scope discipline (#130).** These measurements establish *mechanism* —
