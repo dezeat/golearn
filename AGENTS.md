@@ -238,6 +238,34 @@ at runtime and never persisted to SQLite, packs, logs, drafts or diagnostics.
 `addons/forge/internal/config` carries a redaction guard that fails if
 user-facing output ever matches a credential shape.
 
+#### Historical secret scanning
+
+CI runs the pinned Gitleaks command against the **full Git history**. A finding
+in an old test fixture therefore fails the gate even when the current checkout
+is clean. Treat every finding as potentially real until an independent check
+establishes that it is synthetic; never repeat secret-shaped values in commits,
+issues or PR text. A real credential is a security incident: stop, revoke or
+rotate it, and redact it in the same change.
+
+When a finding is a deliberate test fixture:
+
+1. Reproduce it with the CI command in a clean, single-branch clone and
+   distinguish current-tree findings from historical findings.
+2. Preserve the test's invariant and branch coverage, but use deterministic,
+   low-entropy values that still match the production shape. The test must
+   assert both removal of the value and presence of the redaction marker.
+3. Prefer no suppression. If a maintainer explicitly approves an exception,
+   use the narrowest exact fingerprint or an AND-constrained commit-plus-path
+   allowlist. Never add a broad path-wide exemption or weaken the full-history
+   scan.
+4. If the values must be removed from history, rewrite only the feature range
+   after the current base so the base ancestry stays intact. Create a local
+   recovery ref first; force-push only with `--force-with-lease`; never rewrite
+   `main` or push the recovery ref.
+5. Re-run `make check`, both module security scans, the full-history Gitleaks
+   scan in a clean clone, and GitHub CI. Remove stale local old-history refs
+   only after those checks pass.
+
 ### Commits
 
 - **Conventional Commits**: `feat:`, `fix:`, `refactor:`, `test:`, `docs:`,
