@@ -147,14 +147,10 @@ const migrationAttempts = 5
 // and both try to record it, and one then fails on the primary key against a
 // perfectly valid schema.
 //
-// Putting them in one transaction moves the contention rather than removing
-// it. The transaction starts as a read and upgrades to a write at the INSERT,
-// so a writer that committed in between produces SQLITE_BUSY_SNAPSHOT — which
-// busy_timeout deliberately does NOT wait out, because the snapshot the reader
-// holds is already stale. The correct response is to start over on a fresh
-// snapshot, which is what the retry does. Two golearn windows opening at once
-// is an ordinary thing for a local tool, and a concurrency test reproduced it
-// immediately.
+// The transaction starts with BEGIN IMMEDIATE, acquiring the write lock before
+// the applied-check reads the registry. Competing openers therefore wait for
+// the current writer or retry on a fresh connection instead of upgrading a
+// stale read snapshot to a write and receiving SQLITE_BUSY_SNAPSHOT.
 func applyMigration(ctx context.Context, db *sql.DB, version int, stmt string) error {
 	var lastErr error
 	for attempt := 0; attempt < migrationAttempts; attempt++ {
@@ -183,43 +179,51 @@ func isContention(err error) bool {
 }
 
 func tryMigration(ctx context.Context, db *sql.DB, version int, stmt string) (done bool, err error) {
-	tx, err := db.BeginTx(ctx, nil)
+	// A deferred transaction reads the migration registry before it asks for a
+	// write lock. If another opener commits in between, SQLite cannot upgrade
+	// that stale snapshot and returns SQLITE_BUSY immediately; busy_timeout is
+	// intentionally not consulted for that case. Pin a connection and acquire
+	// the write lock before reading so every retry starts from a current snapshot.
+	conn, err := db.Conn(ctx)
 	if err != nil {
+		return false, fmt.Errorf("get connection for migration %d: %w", version, err)
+	}
+	defer func() { _ = conn.Close() }()
+
+	if _, err := conn.ExecContext(ctx, "BEGIN IMMEDIATE"); err != nil {
 		return false, fmt.Errorf("begin migration %d: %w", version, err)
 	}
+	committed := false
 	defer func() {
-		if !done && err != nil {
-			_ = tx.Rollback()
+		if !committed {
+			_, _ = conn.ExecContext(context.Background(), "ROLLBACK")
 		}
 	}()
 
 	var applied int
-	if err := tx.QueryRowContext(ctx,
+	if err := conn.QueryRowContext(ctx,
 		`SELECT COUNT(*) FROM `+migrationsTable+` WHERE version = ?`, version,
 	).Scan(&applied); err != nil {
-		_ = tx.Rollback()
 		return false, fmt.Errorf("check migration %d: %w", version, err)
 	}
 	if applied > 0 {
-		_ = tx.Rollback()
 		return true, nil
 	}
 
 	// Statement and version bump land together, so a crash between them cannot
 	// leave a migration applied but unrecorded — which would run it a second
 	// time on the next open.
-	if _, err := tx.ExecContext(ctx, stmt); err != nil {
-		_ = tx.Rollback()
+	if _, err := conn.ExecContext(ctx, stmt); err != nil {
 		return false, fmt.Errorf("migration %d: %w", version, err)
 	}
-	if _, err := tx.ExecContext(ctx,
+	if _, err := conn.ExecContext(ctx,
 		`INSERT INTO `+migrationsTable+` (version) VALUES (?)`, version,
 	); err != nil {
-		_ = tx.Rollback()
 		return false, fmt.Errorf("record migration %d: %w", version, err)
 	}
-	if err := tx.Commit(); err != nil {
+	if _, err := conn.ExecContext(ctx, "COMMIT"); err != nil {
 		return false, fmt.Errorf("commit migration %d: %w", version, err)
 	}
+	committed = true
 	return true, nil
 }
