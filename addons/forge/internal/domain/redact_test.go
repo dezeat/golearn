@@ -26,6 +26,8 @@ import (
 // or proxy that reflects the submitted key back would put a credential into
 // the text users paste into bug reports.
 func TestRedactRemovesCredentialShapesWhoeverIssuedThem(t *testing.T) {
+	// These deterministic, low-entropy stand-ins preserve credential shapes
+	// without creating secret-shaped values for historical scanners.
 	cases := []struct {
 		name   string
 		in     string
@@ -35,9 +37,6 @@ func TestRedactRemovesCredentialShapesWhoeverIssuedThem(t *testing.T) {
 		// Anthropic keys are covered by the same sk- pattern rather than a
 		// separate one; the case stays because the coverage claim is what
 		// matters, not which pattern happens to satisfy it.
-		// Anthropic keys are covered by the same sk- pattern rather than a separate
-		// one; this case stays because the coverage claim is what matters, not
-		// which pattern happens to satisfy it.
 		{"anthropic style", `rejected sk-ant-aaaaaaaaaaaaaaaa`, "sk-ant-aaaaaaaaaaaaaaaa"},
 		{"bearer header echo", `Authorization: Bearer aaaaaaaaaaaaaaaa`, "aaaaaaaaaaaaaaaa"},
 		{"labeled key", `api_key=aaaaaaaa`, "aaaaaaaa"},
