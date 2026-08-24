@@ -856,6 +856,59 @@ These settled the shape of #125 before any implementation was committed.
   by the author, because the blind spots were in what the author's tools were
   pointed at.
 
+### A-20 · Second independent review, and a pragma that only applied to some connections
+
+- **Question.** A second reviewer, a different tool, the same adversarial
+  brief. What does it find that the first did not?
+- **Result.** Fourteen findings. Two overlapped with A-19; the rest were new,
+  and one of them was not about Forge at all.
+
+  | Finding | Status |
+  | --- | --- |
+  | Run diagnostics quoted provider error bodies | **Fixed.** FORGE.md 8 forbids persisting raw model or tool output, and shape-based redaction is not an answer — it catches things *shaped* like credentials, and a proxy echoing an arbitrary token is not shaped like anything. Diagnostics now classify rather than quote. |
+  | The promised bounded research retry did not exist | **Fixed.** The comment said "bounded retry, then fail clear"; the code returned on the first empty response. The comment described the specification and the code did not implement it, with nothing testing the difference. |
+  | Empty evidence counted as grounding | **Fixed.** A record with no extractable content is not evidence, however well-formed. |
+  | The offline guard banned a vocabulary, not a capability | **Fixed.** `syscall` sockets and `golang.org/x/sys` would have opened a network path while passing every check. |
+  | Migration applied-check outside its transaction | **Fixed**, and it led somewhere else — below. |
+  | `Gate.Apply` composes into a second repair budget | **Flagged, not fixed.** Unused by the pipeline, which deliberately calls `Screen`; removing a tested API is a maintainer call. |
+  | Grounding and similarity are bypassable in the shipped CLI | **Flagged, not fixed.** True and deliberate: explicit flag, warnings before the banner, `NOT RUN` in the run record. What is *not* recorded is on an accepted pack — a product decision about the pack format. |
+
+- **The finding that was not about Forge.** Writing a concurrency test for the
+  migration path produced `database is locked` against a perfectly valid
+  schema. That was the symptom. The cause:
+
+  ```
+  PRAGMA foreign_keys across 8 concurrent connections: [1 1 0 0 0 0 1 1]
+  ```
+
+  `database/sql` is a connection **pool**. `foreign_keys` and `busy_timeout`
+  are **per-connection** settings, and issuing them with `db.Exec` lands them
+  on whichever pooled connection served the call — every connection opened
+  afterwards starts at the driver default. **Foreign keys were enforced on
+  some connections and not others**, in a database whose integrity depends on
+  them, and nothing failed and nothing logged. A violation arriving on the
+  wrong connection was simply accepted.
+
+  This is how the core has opened its database all along. It is not a Forge
+  regression; Forge is only what made someone write a test with more than one
+  connection in it.
+- **What it locked in.** Per-connection pragmas move into the DSN, where the
+  driver applies them as each connection opens. `journal_mode` stays a single
+  `db.Exec`, because WAL is a property of the *file* and setting it
+  per-connection would attempt a mode change on every open — the same
+  distinction, read the other way.
+- **Method note, and it is the one worth keeping.** Both reviews were given
+  the same brief and the same source. The overlap was two findings out of
+  twenty; the rest were disjoint. **Two independent passes were not
+  redundant** — and neither pass found the pragma bug directly. It surfaced
+  because a review finding prompted a *test* that had never been written, and
+  the test failed for a reason nobody had predicted.
+
+  The chain was: reviewer notices a race → test written to reproduce it →
+  test fails on something else entirely → probe explains why. None of the
+  three steps could have been skipped, and the most valuable output was from
+  the step nobody planned.
+
 ---
 
 ## Part B — Provider & model benchmarks
