@@ -1376,6 +1376,27 @@ them was edited to fit.
     unaffordable is not a solution. The gate would issue one call per candidate
     per neighbour, so the per-call cost decides whether the cascade needs
     batching before it is usable.
+- **Amendment, committed after the accuracy arms began and before any
+  throughput measurement.** The first arm reported ~30 s per judgement on the
+  reference host, which makes a naive gate (20 candidates x 5 neighbours x 2
+  orderings) roughly 100 minutes per pack. Latency is therefore the binding
+  question rather than an incidental one, so a **throughput arm** is added and
+  declared here rather than folded into the accuracy arms:
+  - `gemma3:4b` and `llama3.2:3b`, both of which advertise **no thinking
+    capability at all**, against `qwen3.5:4b` which does. The reference
+    profile disables reasoning already (`provider.reasoningOff`, a measured
+    default from B-2), so this asks whether the remaining cost is architectural
+    rather than a reasoning path left switched on.
+  - **This arm asks a different question from the accuracy arms and is not a
+    third attempt at the same one.** Adding a model because the first results
+    displeased would be shopping; adding one to ask "does a faster model hold
+    the accuracy" is a new question. The commitment that keeps that honest:
+    **every model run under this entry is reported, including one that scores
+    badly**, and the pre-registered accuracy criteria are unchanged for all of
+    them.
+  - Arms are run **sequentially, never concurrently** — two models resident on
+    a 4-core CPU-only host would make both latency figures meaningless, and
+    latency is the measurand.
 - **Result.** *(pending — filled by the run this entry pre-registers)*
 - **What it locked in.** *(pending)*
 
