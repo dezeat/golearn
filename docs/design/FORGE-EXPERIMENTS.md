@@ -803,6 +803,59 @@ These settled the shape of #125 before any implementation was committed.
   decoration, and the empty table only means something because `NewGate` is now
   the sole path to a threshold.
 
+### A-19 · Independent review — six defects, three of them guards that could not fail
+
+- **Question.** The branch has extensive mutation evidence and a green gate.
+  What does an independent reviewer, given the binding docs and told to be
+  adversarial, find that the author did not?
+- **Method.** A separate agent session with no access to this session's
+  reasoning, pointed at `AGENTS.md`, `docs/DECISIONS.md`, `FORGE.md` and the
+  diff, and asked six specific questions. It verified every finding by running
+  code, not by reading it, and reverted each probe.
+- **Result. Six defects, all real.** The three worth reading:
+
+  | # | Defect | Why the existing tests could not see it |
+  | --- | --- | --- |
+  | 1 | `Evidence.Title` and `Evidence.URL` reached the prompt **outside** the fence | Only `Content` was `UntrustedText`. The other two are plain strings assigned verbatim from the search response, printed as a readable header *before* the fence opened. Every fence test used `Title: "A"`. |
+  | 2 | `internal/boundary` scanned a third of the code it claimed to | `TestImports` was extracted into a field never read; `XTestImports` was absent from the `go list` template — and core test code is almost all XTest. A probe adding `net/http`, `net/url` and `crypto/tls` to two core test files left the guard **green**. |
+  | 3 | The hash-invariance guard asserted `hash(x) == hash(x)` | `ComputeQuestionHash` takes a slug and a question, not a pack. Both arguments were identical. A regression making the hash depend on pack metadata would change the signature and fail to *compile* rather than fail the test. |
+
+  Also: `Cosine` returned NaN with a nil error (NaN compares false against any
+  threshold, so a NaN-scoring neighbor reads as *clean* and the score
+  comparator becomes inconsistent, making sort order implementation-defined);
+  the D-016 repair-bound test compared repairs to generation *rounds*, a bound
+  that holds only when one candidate is produced per round; and a failed draft
+  save left the run row reporting `succeeded` with no draft attached.
+
+- **What it locked in, and it is a correction to this log's own conclusions.**
+  A-1, A-10, A-12, A-13 and A-15 all describe the apparatus failing to measure.
+  Finding 2 is a **different and worse shape**: the guard ran, was
+  mutation-tested, and scanned the wrong data.
+
+  The mutation runs on `internal/boundary` all mutated *production* files, so
+  every one of them exercised `.Imports` and none could reach the unread
+  `.TestImports` field. **The mutations were real and the blind spot was in
+  what they could reach.** Mutating the system under test cannot reveal a guard
+  that is looking somewhere else entirely — only an independent reader, or a
+  probe aimed at the guard rather than at the code, can.
+
+  Finding 1 is the same shape in prose: the fence was sound and thoroughly
+  tested; the two fields printed beside it were not tested at all, because a
+  header reads as presentation rather than as data.
+
+- **The asymmetry that proves finding 2 was an oversight.**
+  `TestCoreNeverImportsForge` iterates `parts[1:]` and does cover test imports.
+  Two guards, the same `go list` data, different loop bounds. The fix iterates
+  every set the template produces, so adding a set cannot leave one unscanned —
+  the repo's own "prefer recursion to enumerated lists" rule, applied to the
+  guard that enforces the rules.
+
+- **Method note.** This is the strongest argument in the log for an independent
+  pass being a distinct instrument rather than a redundant one. Everything here
+  was reachable from the same source the author had, and none of it was found
+  by the author, because the blind spots were in what the author's tools were
+  pointed at.
+
 ---
 
 ## Part B — Provider & model benchmarks
