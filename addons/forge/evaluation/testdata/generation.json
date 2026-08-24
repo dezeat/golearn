@@ -1,0 +1,88 @@
+{
+  "spec": {
+    "topic": "Go concurrency",
+    "description": "Focus on cancellation and channel ownership.",
+    "count": 2,
+    "difficulty": "hard",
+    "style": "scenario",
+    "language": "en"
+  },
+  "evidence": [
+    {
+      "id": "s1",
+      "url": "https://example.test/go-concurrency",
+      "title": "Go concurrency reference",
+      "retrieved_at": "2026-08-24T01:00:00Z",
+      "content": "The go statement starts a goroutine. An unbuffered channel synchronizes a send with a receive and has no storage for pending values."
+    }
+  ],
+  "provider": {
+    "identity": {"provider": "ollama", "model": "fixture-qwen"},
+    "generate": {
+      "questions": [
+        {
+          "prompt": "Which Go construct starts a goroutine?",
+          "choices": ["a. go", "b. run", "c. spawn", "d. thread"],
+          "correct_choices": [0],
+          "explanation": "The go statement starts a goroutine.",
+          "tags": ["concurrency"],
+          "citations": ["s1"]
+        },
+        {
+          "prompt": "Which properties describe an unbuffered channel send?",
+          "choices": [
+            "a. It never blocks",
+            "b. It synchronizes with a receive",
+            "c. It has no storage for pending values",
+            "d. It always drops values"
+          ],
+          "correct_choices": [1, 2],
+          "explanation": "An unbuffered channel couples the send to a receive and has no pending-value storage.",
+          "tags": ["channels"],
+          "citations": ["s1"]
+        }
+      ]
+    },
+    "verify": [
+      {"correct_choice_ids": ["a"], "reasoning": "The go statement starts a goroutine."},
+      {"correct_choice_ids": ["a"], "reasoning": "This fixture deliberately rejects the first key."},
+      {"correct_choice_ids": ["b", "c"], "reasoning": "The send and receive synchronize and there is no buffer."}
+    ],
+    "critique": [
+      {"grounded": true, "distractors_plausible": true, "single_defensible_answer": true, "problem": ""},
+      {"grounded": true, "distractors_plausible": true, "single_defensible_answer": true, "problem": ""}
+    ],
+    "repair": {
+      "questions": [
+        {
+          "prompt": "Which properties describe an unbuffered channel send?",
+          "choices": [
+            "a. It never blocks",
+            "b. It synchronizes with a receive",
+            "c. It has no storage for pending values",
+            "d. It always drops values"
+          ],
+          "correct_choices": [1, 2],
+          "explanation": "An unbuffered channel couples the send to a receive and has no pending-value storage.",
+          "tags": ["channels"],
+          "citations": ["s1"]
+        }
+      ]
+    }
+  },
+  "expected": {
+    "accepted": 2,
+    "repaired": 1,
+    "rounds": 1,
+    "provider_calls": 7,
+    "pack_version": "0.2.0",
+    "topic_slug": "go-concurrency",
+    "source": "llm:ollama",
+    "confidence": 0.9,
+    "forge_version": "fixture-127",
+    "source_id": "s1",
+    "first_choice_text": "go",
+    "second_type": "multi_select",
+    "second_correct_ids": ["b", "c"]
+  }
+}

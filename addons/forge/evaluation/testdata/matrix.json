@@ -1,0 +1,108 @@
+{
+  "schema_version": "forge-evaluation-0.1.0",
+  "rubric_version": "forge-rubric-0.1.0",
+  "axes": [
+    "topic",
+    "description",
+    "count",
+    "difficulty",
+    "style/mode",
+    "answer format",
+    "source quality",
+    "provider profile",
+    "failure",
+    "near-duplicate"
+  ],
+  "capabilities": [
+    {"id": "inputs", "section": "FORGE.md §11.1"},
+    {"id": "grounding", "section": "FORGE.md §11.2"},
+    {"id": "validation", "section": "FORGE.md §11.3"},
+    {"id": "verification", "section": "FORGE.md §11.4"},
+    {"id": "repair", "section": "FORGE.md §11.5"},
+    {"id": "near-duplicate", "section": "FORGE.md §11.6"},
+    {"id": "draft-lifecycle", "section": "FORGE.md §11.7"},
+    {"id": "run-info", "section": "FORGE.md §11.8"},
+    {"id": "provider-profiles", "section": "FORGE.md §11.9"},
+    {"id": "pack-compatibility", "section": "FORGE.md §11.10"},
+    {"id": "evaluation-harness", "section": "FORGE.md §11.11"}
+  ],
+  "cases": [
+    {
+      "id": "rich-generation-request",
+      "capability": "inputs",
+      "fixture": "generation.json",
+      "contract": "TestGenerationFixtureCoversTheRichRequestAndTrustChain",
+      "falsifier": "the generated draft loses one of the content-shaping inputs"
+    },
+    {
+      "id": "single-and-multi-answer-format",
+      "capability": "validation",
+      "fixture": "validation.json",
+      "contract": "TestValidationFixtureCoversSingleAndMultiSelect",
+      "falsifier": "an invalid answer shape is accepted or a valid shape is rejected"
+    },
+    {
+      "id": "research-response",
+      "capability": "grounding",
+      "fixture": "research.json",
+      "contract": "TestResearchFixtureProducesUnclassifiedEvidence",
+      "falsifier": "fixture content is lost, classified by the adapter, or read from the clock"
+    },
+    {
+      "id": "provider-profile-contract",
+      "capability": "provider-profiles",
+      "fixture": "provider.json",
+      "contract": "TestProviderFixtureCoversAllV1Profiles",
+      "falsifier": "one V1 profile cannot satisfy the shared chat contract"
+    },
+    {
+      "id": "verification-and-repair",
+      "capability": "verification",
+      "fixture": "generation.json",
+      "contract": "TestGenerationFixtureCoversTheRichRequestAndTrustChain",
+      "falsifier": "verification sees the proposed key or repair is spent more than once"
+    },
+    {
+      "id": "bounded-repair",
+      "capability": "repair",
+      "fixture": "generation.json",
+      "contract": "TestGenerationFixtureCoversTheRichRequestAndTrustChain",
+      "falsifier": "a repaired candidate is not re-verified or consumes a second repair"
+    },
+    {
+      "id": "shortfall-failure",
+      "capability": "run-info",
+      "fixture": "failure.json",
+      "contract": "TestFailureFixtureFailsClearWithoutADraft",
+      "falsifier": "a short pack is reported as success or raw provider output is persisted"
+    },
+    {
+      "id": "near-duplicate-failure",
+      "capability": "near-duplicate",
+      "fixture": "near-duplicate.json",
+      "contract": "TestNearDuplicateFixtureFailsClosed",
+      "falsifier": "a candidate marked too similar reaches the draft"
+    },
+    {
+      "id": "provenance-and-draft",
+      "capability": "draft-lifecycle",
+      "fixture": "review-flow.json",
+      "contract": "TestReviewFixtureAcceptsThroughTheImportPort",
+      "falsifier": "acceptance bypasses import or provenance is not carried into the pack"
+    },
+    {
+      "id": "migration-isolation",
+      "capability": "pack-compatibility",
+      "fixture": "migration.json",
+      "contract": "TestMigrationFixtureKeepsForgeAndCoreRegistriesSeparate",
+      "falsifier": "Forge writes the core registry or changes a core table"
+    },
+    {
+      "id": "fixture-gate",
+      "capability": "evaluation-harness",
+      "fixture": "matrix.json",
+      "contract": "TestEvaluationMatrixIsCompleteAndVersioned",
+      "falsifier": "a capability or required axis has no fixture-backed contract"
+    }
+  ]
+}

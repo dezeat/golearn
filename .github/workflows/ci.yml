@@ -61,6 +61,14 @@ jobs:
       - name: Test (forge addon)
         run: cd addons/forge && go test ./... -v -count=1
 
+      # Issue #127: the matrix and contract fixtures are a release gate. Keep
+      # this explicit even though make check also runs the package, so a CI
+      # reader can see that the evaluation harness itself was exercised.
+      - name: Forge evaluation contract gate
+        env:
+          GOWORK: "off"
+        run: make eval
+
       - name: Build both binaries
         run: |
           go build -o ./bin/golearn ./cmd/golearn

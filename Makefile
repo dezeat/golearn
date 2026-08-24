@@ -1,4 +1,4 @@
-.PHONY: build build-core test vet lint fmt check clean run db-reset hooks agents workspace tidy
+.PHONY: build build-core test vet lint fmt check eval clean run db-reset hooks agents workspace tidy
 
 BINARY       := golearn
 FORGE_BINARY := golearn-forge
@@ -85,6 +85,10 @@ lint:
 
 ## check: full CI gate (fmt + vet + lint + test, all modules)
 check: fmt vet lint test
+
+## eval: run the deterministic, network-free Forge evaluation contract gate
+eval:
+	cd $(FORGE_DIR) && $(GOWORK_OFF) go test ./evaluation -count=1 -v
 
 ## agents: link vendor agent config (.claude/skills) to the shared .agents/ tree
 agents:

@@ -911,6 +911,35 @@ These settled the shape of #125 before any implementation was committed.
 
 ---
 
+### A-21 · Mutation test — the evaluation matrix and release contracts
+
+- **Question.** #127 adds a versioned matrix, fixture-backed contracts and
+  explicit Forge migration/release gates. Do the new guards fail when the
+  corresponding policy is deliberately weakened?
+- **Method.** Five semantically valid mutations were applied one at a time,
+  each followed by the focused contract test and an immediate revert. The
+  control suite was run after the reverts. A first attempt to replace the
+  generation metadata with `nil` did not compile because it left an unused
+  local; it was discarded as invalid evidence and rewritten as a partial,
+  compiling `GenerationSpec` before it was counted.
+- **Result.** **All five valid mutations were caught.**
+
+  | Mutation | Guard that fired |
+  | --- | --- |
+  | generation drops description, count, difficulty, style and language from the carried spec | `TestGenerationFixtureCoversTheRichRequestAndTrustChain` |
+  | pipeline ignores a `TooSimilar` verdict | `TestNearDuplicateFixtureFailsClosed` |
+  | research adapter drops the recorded title | `TestResearchFixtureProducesUnclassifiedEvidence` |
+  | Forge migration registry points at the core `schema_migrations` table | `TestMigrationFixtureKeepsForgeAndCoreRegistriesSeparate` |
+  | matrix loses the `near-duplicate` capability entry | `TestEvaluationMatrixIsCompleteAndVersioned` |
+
+- **What it locked in.** The evaluation package is load-bearing: the matrix
+  cannot lose a capability silently, a fixture cannot pass after one of the
+  trust-chain fields disappears, a near-duplicate cannot become an accepted
+  draft, source records cannot be rewritten by the adapter, and Forge cannot
+  claim the core's migration namespace. The non-compiling first mutation is
+  recorded as invalid rather than counted as caught, preserving the same
+  measurement rule established in A-10, A-11 and A-18.
+
 ## Part B — Provider & model benchmarks
 
 **Scope discipline (#130).** These measurements establish *mechanism* —

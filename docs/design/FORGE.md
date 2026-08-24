@@ -281,6 +281,11 @@ Forge **extends the existing golearn SQLite database** — no second database.
   structure/difficulty/source-use/distractors; evaluation cases themselves are
   never embedded in live prompts.
 
+The checked-in matrix, fixture inventory, rubric, and redacted live/manual
+procedure are maintained in [`FORGE-EVALUATION.md`](FORGE-EVALUATION.md).
+`make eval` runs its deterministic contract gate explicitly; `make check`
+continues to run it as part of the Forge module test loop.
+
 ## 11. V1 scope
 
 **Required for trustworthy V1** (the pipeline stages are D-016-mandatory —

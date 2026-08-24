@@ -1,0 +1,36 @@
+{
+  "draft_id": 7,
+  "run_id": 11,
+  "pack": {
+    "pack_version": "0.2.0",
+    "topic": {"slug": "go-concurrency", "name": "Go concurrency"},
+    "generation_spec": {
+      "topic": "Go concurrency",
+      "description": "Cancellation",
+      "count": 1,
+      "difficulty": "medium",
+      "style": "scenario",
+      "language": "en"
+    },
+    "provenance": {
+      "generated_at": "2026-08-24T01:00:00Z",
+      "model": {"provider": "ollama", "model": "fixture-qwen"},
+      "verifier": {"provider": "ollama", "model": "fixture-qwen"},
+      "sources": [{"id": "s1", "url": "https://example.test/go-cancel", "title": "Cancellation"}],
+      "forge_version": "fixture-127"
+    },
+    "questions": [
+      {
+        "type": "single_select",
+        "prompt": "What does a canceled context communicate?",
+        "choices": [{"id": "a", "text": "A stop signal"}, {"id": "b", "text": "A new goroutine"}],
+        "correct_choice_ids": ["a"],
+        "difficulty": "medium",
+        "source": "llm:ollama",
+        "source_ref": "s1",
+        "confidence": 0.9
+      }
+    ]
+  },
+  "expected": {"inserted": 1, "deleted": true, "import_source_contains": "forge draft 7"}
+}
