@@ -19,6 +19,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/dezeat/golearn/addons/forge/internal/adapters/judge"
 	"github.com/dezeat/golearn/addons/forge/internal/adapters/provider"
 	forgeapp "github.com/dezeat/golearn/addons/forge/internal/app"
 	"github.com/dezeat/golearn/addons/forge/internal/domain"
@@ -58,24 +59,34 @@ func (a gateAdapter) Screen(ctx context.Context, _ string, candidates []domain.C
 		}
 		verdicts[finding.CandidateIndex] = pipeline.GateVerdict{
 			TooSimilar: true,
-			Reason:     fmt.Sprintf("%s (score %.3f)", finding.Reason, finding.TopScore),
+			// The relation is what decided; the retrieval score is reported
+			// beside it as the diagnostic it now is (D-023), never as the
+			// reason.
+			Reason: fmt.Sprintf("%s: judged %s (nearest %.3f)",
+				finding.Reason, finding.Relation, finding.TopScore),
 		}
 	}
 	return verdicts, nil
 }
 
-// buildGate wires the similarity gate when the configured profile can support
-// one, and explains itself when it cannot.
+// buildGate wires the similarity cascade when the configured profile can
+// support one, and explains itself when it cannot.
 //
-// Two independent reasons it may be unavailable, and they are different facts:
+// Under D-023 the gate has two halves and each can be missing for its own
+// reason:
 //
-//   - the provider exposes no embeddings API at all (D-018) — Anthropic;
-//   - the embedding model has no committed calibration (D-022), which is the
-//     current state of every model, because calibrating one requires measuring
-//     a real provider.
+//   - the provider exposes no embeddings API at all (D-018) — Anthropic — so
+//     there is nothing to narrow the corpus with;
+//   - no judge is available, so retrieved neighbours could never be
+//     classified.
 //
-// Neither is silently tolerated. The caller reports the reason and records it
-// in the run diagnostic, because a pack that was never screened for
+// The calibration refusal that used to sit here is gone: it existed because
+// the gate scored with a per-model threshold, and two measured models showed
+// no threshold separates the labeled set (FORGE-EXPERIMENTS A-22, A-24). The
+// judge decides instead, and needs no calibration.
+//
+// Neither absence is silently tolerated. The caller reports the reason and
+// records it in the run diagnostic, because a pack that was never screened for
 // near-duplicates must not be indistinguishable from one that passed.
 func buildGate(llm ports.Provider, index ports.SimilarityIndex, library ports.LibraryReader, topicID int64) (gate pipeline.SimilarityGate, unavailable string) {
 	embedder, err := provider.RequireEmbedder(llm)
@@ -83,12 +94,19 @@ func buildGate(llm ports.Provider, index ports.SimilarityIndex, library ports.Li
 		return nil, fmt.Sprintf("similarity gate not run: %v", err)
 	}
 
-	built, err := forgeapp.NewGate(embedder, index, library)
+	// The judge runs on the chat provider that is already configured, so it
+	// adds no credential, no endpoint and no dependency of its own.
+	built, err := forgeapp.NewGate(embedder, index, library, judge.New(llm))
 	if err != nil {
-		if errors.Is(err, domain.ErrUncalibratedEmbeddingModel) {
+		switch {
+		case errors.Is(err, domain.ErrNoEmbeddingCapability):
 			return nil, fmt.Sprintf(
-				"similarity gate not run: %s has no committed calibration, and an uncalibrated threshold would be a number picked by feel (D-022)",
-				embedder.EmbeddingIdentity())
+				"similarity gate not run: %s exposes no embeddings API, so the corpus cannot be narrowed (D-018)",
+				llm.Identity())
+		case errors.Is(err, domain.ErrNoJudgeCapability):
+			return nil, fmt.Sprintf(
+				"similarity gate not run: no duplicate judge is configured for %s (D-023)",
+				llm.Identity())
 		}
 		return nil, fmt.Sprintf("similarity gate not run: %v", err)
 	}

@@ -15,26 +15,24 @@
 package app
 
 import (
-	"github.com/dezeat/golearn/addons/forge/internal/domain"
 	"github.com/dezeat/golearn/addons/forge/internal/ports"
 )
 
-// NewGateWithCalibration builds a gate around a caller-supplied threshold set.
+// NewGateForTest builds a gate without running Preflight.
 //
 // It lives in a _test.go file deliberately: the Go toolchain compiles this
 // file only when testing this package, so no production code can reach it.
-// That is what lets the exported [NewGate] take its thresholds solely from the
-// committed table — closing the path by which a number picked by feel could
-// reach a scoring decision — while the ladder's behavior still gets tested
-// against thresholds a test controls.
 //
-// Preflight still applies to gates built this way, so a fixture or unversioned
-// calibration is refused here exactly as it would be in production.
-func NewGateWithCalibration(
+// Its predecessor existed to hand the gate a threshold a test controlled,
+// because the exported constructor took its numbers from the committed
+// calibration table and nothing else. Under D-023 there is no threshold to
+// supply, so this exists only to let a test assemble a gate with deliberately
+// missing halves and observe how it refuses.
+func NewGateForTest(
 	embedder ports.Embedder,
 	index ports.SimilarityIndex,
 	library ports.LibraryReader,
-	calib domain.Calibration,
+	judge ports.DuplicateJudge,
 ) *Gate {
-	return &Gate{embedder: embedder, index: index, library: library, calib: calib}
+	return &Gate{embedder: embedder, index: index, library: library, judge: judge}
 }

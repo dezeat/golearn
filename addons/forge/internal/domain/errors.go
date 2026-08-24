@@ -99,4 +99,21 @@ var (
 	// point. The gate refuses for the same reason Cosine refuses a dimension
 	// mismatch — a plausible-looking score is worse than no score.
 	ErrUncalibratedEmbeddingModel = errors.New("no calibrated similarity threshold for this embedding model")
+
+	// ErrUnknownRelation reports that a judge answered with a label outside
+	// the committed taxonomy.
+	//
+	// It is refused rather than mapped to "not a duplicate", because a label
+	// nobody defined says nothing about two questions, and treating it as
+	// harmless is how a drifted prompt or a swapped model would switch the
+	// gate off while every test stayed green (D-023).
+	ErrUnknownRelation = errors.New("judge returned a relation outside the committed taxonomy")
+
+	// ErrNoJudgeCapability reports that no duplicate judge was wired, so the
+	// cascade cannot reach a decision.
+	//
+	// Under D-023 the embedding index only narrows candidates; without a judge
+	// there is nothing that decides, and reporting every neighbour as a
+	// duplicate would be worse than refusing.
+	ErrNoJudgeCapability = errors.New("no duplicate judge is configured")
 )

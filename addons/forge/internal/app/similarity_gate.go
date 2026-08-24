@@ -20,6 +20,7 @@ import (
 
 	"github.com/dezeat/golearn/addons/forge/internal/domain"
 	"github.com/dezeat/golearn/addons/forge/internal/ports"
+	coredomain "github.com/dezeat/golearn/internal/domain"
 )
 
 // maxGateAttempts bounds the ladder: one repair, then one replacement, then
@@ -29,10 +30,15 @@ import (
 // a budget with nothing to show.
 const maxGateAttempts = 2
 
-// nearestLimit caps how many library neighbors a probe retrieves. The gate
-// only needs to know whether anything crossed the threshold and what the worst
-// offender was, so a handful is enough to diagnose with and nothing is gained
-// by ranking the whole corpus.
+// nearestLimit caps how many library neighbors the recall stage retrieves, and
+// therefore how many judgements one candidate can cost.
+//
+// Under D-023 this is a *budget*, not a decision: the neighbors it returns are
+// classified by the judge, and a neighbor admitted needlessly costs one
+// provider call while a neighbor missed costs a shipped duplicate. There is
+// deliberately no score cut alongside it — a cut would be a per-model number of
+// exactly the kind A-22 and A-24 showed cannot be carried between models, and
+// re-introducing one here would smuggle back the threshold D-023 removed.
 const nearestLimit = 5
 
 // Decision is the gate's verdict on one candidate.
@@ -96,8 +102,14 @@ type Finding struct {
 	Library []ports.Neighbor
 	// Pack holds the same-pack candidates that crossed it.
 	Pack []PackNeighbor
-	// TopScore is the highest similarity seen, whichever corpus it came from.
+	// TopScore is the highest retrieval similarity seen, whichever corpus it
+	// came from. Under D-023 it is *diagnostic only* — it reports how close
+	// the recall stage thought things were and decides nothing. The verdict is
+	// Relation.
 	TopScore float64
+	// Relation is the judge's classification of the closest offender, empty
+	// when nothing was found to be a duplicate.
+	Relation domain.Relation
 }
 
 // Clean reports whether the candidate may ship as it stands.
@@ -111,8 +123,13 @@ type Report struct {
 	// nothing to compare against" rather than as "nothing was too similar" —
 	// two very different statements that produce identical findings.
 	CorpusSize int
-	Threshold  float64
-	Findings   []Finding
+	// Judge names the model that made the decisions, so a diagnostic says what
+	// screened the pack rather than only that something did.
+	Judge coredomain.ModelIdentity
+	// RecallLimit is how many neighbors each candidate was compared against.
+	// It bounds cost and is not a threshold (D-023).
+	RecallLimit int
+	Findings    []Finding
 }
 
 // CandidateDecision records how one candidate was resolved.
@@ -150,37 +167,42 @@ type Gate struct {
 	embedder ports.Embedder
 	index    ports.SimilarityIndex
 	library  ports.LibraryReader
-	calib    domain.Calibration
+	judge    ports.DuplicateJudge
 }
 
-// NewGate wires the gate, taking its thresholds from the committed
-// calibration table rather than from its caller.
+// NewGate wires the cascade: an embedding index that narrows the corpus, and a
+// judge that decides (D-023).
 //
-// The thresholds are looked up rather than passed in on purpose. A gate that
-// accepted a [domain.Calibration] from its caller would let a number picked by
-// feel reach a scoring decision — the composition root writes
-// `Calibration{Model: realModel, NearDuplicate: 0.85}` and everything works —
-// which is precisely the failure the empty table and
-// [domain.ErrUncalibratedEmbeddingModel] exist to prevent. Refusing in
-// CalibrationFor while leaving a second, unchecked way in would have made that
-// refusal decorative.
+// It no longer looks up a calibration. Two embedding models were measured
+// against the labeled fixture set and both failed the criteria committed
+// before them, for the same structural reason — roughly half the compared text
+// is answer options, so a legitimate non-duplicate sharing an option set is
+// lexically near-identical while a real duplicate phrased differently shares
+// almost nothing (FORGE-EXPERIMENTS A-22, A-24). No threshold separates those,
+// so the gate stopped asking for one.
+//
+// D-022's principle survives intact and is in fact strengthened: there is no
+// threshold picked by feel because there is no scoring threshold at all. The
+// empty calibration table and its guards stay in the tree as the evidence for
+// why this design exists.
 //
 // A nil embedder is the explicit encoding of "this provider profile has no
-// embedding capability". D-018 makes [ports.Embedder] a separate optional
-// interface precisely because Anthropic ships no embeddings API, so the
-// composition root's type assertion either succeeds or does not, and the
-// failure is handed here as nil rather than discovered mid-run.
-func NewGate(embedder ports.Embedder, index ports.SimilarityIndex, library ports.LibraryReader) (*Gate, error) {
-	if embedder == nil {
-		return nil, fmt.Errorf(
-			"similarity gate: %w, so no candidate can be compared for near-duplication",
-			domain.ErrNoEmbeddingCapability)
+// embedding capability" (D-018): the composition root's type assertion either
+// succeeds or does not, and the failure is handed here rather than discovered
+// mid-run. A nil judge is the same kind of fact — without it nothing decides,
+// and reporting every retrieved neighbor as a duplicate would be worse than
+// refusing.
+func NewGate(
+	embedder ports.Embedder,
+	index ports.SimilarityIndex,
+	library ports.LibraryReader,
+	judge ports.DuplicateJudge,
+) (*Gate, error) {
+	g := &Gate{embedder: embedder, index: index, library: library, judge: judge}
+	if err := g.Preflight(); err != nil {
+		return nil, err
 	}
-	calib, err := domain.CalibrationFor(embedder.EmbeddingIdentity())
-	if err != nil {
-		return nil, fmt.Errorf("similarity gate: %w", err)
-	}
-	return &Gate{embedder: embedder, index: index, library: library, calib: calib}, nil
+	return g, nil
 }
 
 // Preflight reports whether the gate can run at all, before a run spends a
@@ -195,29 +217,10 @@ func (g *Gate) Preflight() error {
 			"similarity gate: %w, so no candidate can be compared for near-duplication",
 			domain.ErrNoEmbeddingCapability)
 	}
-
-	// A threshold calibrated for another model is exactly as meaningless as a
-	// vector from another model, and far easier to miss: the numbers still
-	// compare, they just no longer mean anything. Refusing here is the same
-	// refusal the index makes on a mixed-dimension search.
-	if identity := g.embedder.EmbeddingIdentity(); identity != g.calib.Model {
+	if g.judge == nil {
 		return fmt.Errorf(
-			"%w: the gate is calibrated for %s but the profile embeds with %s",
-			domain.ErrUncalibratedEmbeddingModel, g.calib.Model, identity)
-	}
-
-	// A fixture baseline is derived from a deterministic stand-in embedder so
-	// the derivation procedure can be tested offline. It says nothing about a
-	// real model's score distribution, so it must never decide real content.
-	if g.calib.Fixture {
-		return fmt.Errorf(
-			"%w: %s carries a fixture baseline, which is a self-consistency check on the derivation and not a measured threshold",
-			domain.ErrUncalibratedEmbeddingModel, g.calib.Model)
-	}
-	if g.calib.Version == "" {
-		return fmt.Errorf(
-			"%w: the calibration for %s carries no version, so a recalibration could not be told from the original",
-			domain.ErrUncalibratedEmbeddingModel, g.calib.Model)
+			"similarity gate: %w, so retrieved neighbors could be narrowed but never classified",
+			domain.ErrNoJudgeCapability)
 	}
 	return nil
 }
@@ -236,7 +239,8 @@ func (g *Gate) Screen(ctx context.Context, topicID int64, candidates []domain.Ca
 	}
 	model := g.embedder.EmbeddingIdentity()
 
-	if err := g.backfillLibrary(ctx, topicID); err != nil {
+	libraryText, err := g.backfillLibrary(ctx, topicID)
+	if err != nil {
 		return Report{}, err
 	}
 	corpus, err := g.index.Count(ctx, model)
@@ -249,15 +253,22 @@ func (g *Gate) Screen(ctx context.Context, topicID int64, candidates []domain.Ca
 		return Report{}, err
 	}
 
-	report := Report{Model: model, CorpusSize: corpus, Threshold: g.calib.NearDuplicate}
+	report := Report{
+		Model:       model,
+		CorpusSize:  corpus,
+		Judge:       g.judge.JudgeIdentity(),
+		RecallLimit: nearestLimit,
+	}
 	var seen []peer
 	for i := range candidates {
-		finding, err := g.inspect(ctx, i, vectors[i], texts[i], seen)
+		finding, err := g.inspect(ctx, i, vectors[i], texts[i], candidates[i].Question, seen, libraryText)
 		if err != nil {
 			return Report{}, err
 		}
 		report.Findings = append(report.Findings, finding)
-		seen = append(seen, peer{originalIndex: i, vector: vectors[i], text: texts[i]})
+		seen = append(seen, peer{
+			originalIndex: i, vector: vectors[i], text: texts[i], question: candidates[i].Question,
+		})
 	}
 	return report, nil
 }
@@ -277,7 +288,8 @@ func (g *Gate) Apply(ctx context.Context, topicID int64, candidates []domain.Can
 	}
 	model := g.embedder.EmbeddingIdentity()
 
-	if err := g.backfillLibrary(ctx, topicID); err != nil {
+	libraryText, err := g.backfillLibrary(ctx, topicID)
+	if err != nil {
 		return Outcome{}, err
 	}
 	corpus, err := g.index.Count(ctx, model)
@@ -309,7 +321,7 @@ func (g *Gate) Apply(ctx context.Context, topicID int64, candidates []domain.Can
 			if err != nil {
 				return Outcome{}, err
 			}
-			finding, err := g.inspect(ctx, i, vector, text, accepted)
+			finding, err := g.inspect(ctx, i, vector, text, candidate.Question, accepted, libraryText)
 			if err != nil {
 				return Outcome{}, err
 			}
@@ -317,7 +329,9 @@ func (g *Gate) Apply(ctx context.Context, topicID int64, candidates []domain.Can
 
 			if finding.Clean() {
 				outcome.Accepted = append(outcome.Accepted, candidate)
-				accepted = append(accepted, peer{originalIndex: i, vector: vector, text: text})
+				accepted = append(accepted, peer{
+					originalIndex: i, vector: vector, text: text, question: candidate.Question,
+				})
 				resolved = true
 				continue
 			}
@@ -341,11 +355,14 @@ func (g *Gate) Apply(ctx context.Context, topicID int64, candidates []domain.Can
 
 			decision.Attempts++
 			decision.Reason = finding.Reason
-			// Above the reject threshold the two questions are the same
-			// question, so rewording cannot separate them and the repair
-			// attempt would be spent to learn that. The last attempt is always
-			// a replacement for the same reason.
-			if finding.TopScore >= g.calib.Reject || decision.Attempts == maxGateAttempts {
+			// Escalation is by attempt alone. It used to also fire when the
+			// retrieval score crossed a reject threshold, and that threshold
+			// no longer exists (D-023). Nor could the judge's own label
+			// replace it: A-25 measured exact six-way label accuracy at 0.538
+			// while the duplicate/not verdict was perfect, so routing on
+			// "identical versus paraphrase" would rest the ladder on the
+			// weakest part of the measurement. Repair once, then replace.
+			if decision.Attempts == maxGateAttempts {
 				decision.Decision = DecisionReplaced
 				candidate, err = reviser.Replace(ctx, candidate, finding)
 			} else {
@@ -378,15 +395,28 @@ type peer struct {
 	originalIndex int
 	vector        domain.Vector
 	text          string
+	question      coredomain.PackQuestion
 }
 
-// inspect scores one candidate against the library and the given peers.
+// inspect narrows with the index, then decides with the judge.
+//
+// The split is the whole design (D-023). The index answers "which handful of
+// stored questions are worth looking at", which is arithmetic over a corpus;
+// the judge answers "is this the same question", which is a provider call over
+// a pair. Neither can do the other's job: two embedding models failed the
+// second task on the same pair (A-22, A-24), and a judge cannot scan a corpus.
+//
+// Retrieval order is preserved, so the first duplicate the judge confirms is
+// the nearest one — which makes the reported offender the most useful one to
+// show a user without ranking the rest.
 func (g *Gate) inspect(
 	ctx context.Context,
 	index int,
 	vector domain.Vector,
 	text string,
+	candidate coredomain.PackQuestion,
 	peers []peer,
+	libraryText map[domain.LibraryQuestionID]coredomain.PackQuestion,
 ) (Finding, error) {
 	finding := Finding{CandidateIndex: index}
 
@@ -395,12 +425,28 @@ func (g *Gate) inspect(
 		return Finding{}, fmt.Errorf("similarity gate: searching the library for candidate %d: %w", index, err)
 	}
 	for _, n := range neighbors {
-		if n.Score >= g.calib.NearDuplicate {
-			finding.Library = append(finding.Library, n)
-			if n.Score > finding.TopScore {
-				finding.TopScore = n.Score
-				finding.Reason = ReasonLibraryNearDuplicate
-			}
+		if n.Score > finding.TopScore {
+			finding.TopScore = n.Score
+		}
+		stored, ok := libraryText[n.QuestionID]
+		if !ok {
+			// The index holds a vector for a question the topic read did not
+			// return. Skipping is right rather than fatal: the corpus can
+			// legitimately shrink between runs, and a vector outliving its
+			// question is the store's business, not the gate's.
+			continue
+		}
+		relation, err := g.judge.Judge(ctx, candidate, stored)
+		if err != nil {
+			return Finding{}, fmt.Errorf("similarity gate: judging candidate %d against library question %d: %w",
+				index, int64(n.QuestionID), err)
+		}
+		if !relation.IsDuplicate() {
+			continue
+		}
+		finding.Library = append(finding.Library, n)
+		if finding.Reason == ReasonNone {
+			finding.Reason, finding.Relation = ReasonLibraryNearDuplicate, relation
 		}
 	}
 
@@ -408,22 +454,38 @@ func (g *Gate) inspect(
 		if p.originalIndex == index {
 			continue
 		}
-		score, err := domain.Cosine(vector, p.vector)
-		if err != nil {
-			return Finding{}, fmt.Errorf("similarity gate: comparing candidates %d and %d: %w", index, p.originalIndex, err)
-		}
+		// A byte-identical comparison representation needs no provider call to
+		// settle, and buying one would spend a judgement to learn what string
+		// equality already proved.
 		if p.text == text {
-			finding.Reason = ReasonExactDuplicate
+			score, err := domain.Cosine(vector, p.vector)
+			if err != nil {
+				return Finding{}, fmt.Errorf("similarity gate: comparing candidates %d and %d: %w", index, p.originalIndex, err)
+			}
+			finding.Reason, finding.Relation = ReasonExactDuplicate, domain.RelationIdentical
 			finding.TopScore = score
 			finding.Pack = append(finding.Pack, PackNeighbor{CandidateIndex: p.originalIndex, Score: score})
 			return finding, nil
 		}
-		if score >= g.calib.NearDuplicate {
-			finding.Pack = append(finding.Pack, PackNeighbor{CandidateIndex: p.originalIndex, Score: score})
-			if score > finding.TopScore {
-				finding.TopScore = score
-				finding.Reason = ReasonPackNearDuplicate
-			}
+
+		score, err := domain.Cosine(vector, p.vector)
+		if err != nil {
+			return Finding{}, fmt.Errorf("similarity gate: comparing candidates %d and %d: %w", index, p.originalIndex, err)
+		}
+		if score > finding.TopScore {
+			finding.TopScore = score
+		}
+		relation, err := g.judge.Judge(ctx, candidate, p.question)
+		if err != nil {
+			return Finding{}, fmt.Errorf("similarity gate: judging candidates %d and %d: %w",
+				index, p.originalIndex, err)
+		}
+		if !relation.IsDuplicate() {
+			continue
+		}
+		finding.Pack = append(finding.Pack, PackNeighbor{CandidateIndex: p.originalIndex, Score: score})
+		if finding.Reason == ReasonNone {
+			finding.Reason, finding.Relation = ReasonPackNearDuplicate, relation
 		}
 	}
 	return finding, nil
@@ -437,47 +499,53 @@ func (g *Gate) inspect(
 // library is read here and never written — ports.LibraryReader offers no way
 // to write it, which is how FORGE.md 7's "existing content is never modified"
 // stays true by construction rather than by discipline.
-func (g *Gate) backfillLibrary(ctx context.Context, topicID int64) error {
+func (g *Gate) backfillLibrary(ctx context.Context, topicID int64) (map[domain.LibraryQuestionID]coredomain.PackQuestion, error) {
 	questions, err := g.library.QuestionsByTopic(ctx, topicID)
 	if err != nil {
-		return fmt.Errorf("similarity gate: reading topic %d: %w", topicID, err)
+		return nil, fmt.Errorf("similarity gate: reading topic %d: %w", topicID, err)
 	}
 	if len(questions) == 0 {
-		return nil
+		return nil, nil
 	}
 
 	model := g.embedder.EmbeddingIdentity()
-	byID := make(map[domain.LibraryQuestionID]string, len(questions))
+	// The projected questions are kept and handed back rather than discarded
+	// after embedding: the judge needs the stored question's text, and reading
+	// the topic a second time to get what this pass already holds would double
+	// the database work for nothing.
+	byID := make(map[domain.LibraryQuestionID]coredomain.PackQuestion, len(questions))
+	canonical := make(map[domain.LibraryQuestionID]string, len(questions))
 	ids := make([]domain.LibraryQuestionID, 0, len(questions))
 	for _, q := range questions {
 		id := domain.LibraryQuestionID(q.ID)
 		projected := domain.AsPackQuestion(q)
-		byID[id] = domain.CanonicalText(&projected)
+		byID[id] = projected
+		canonical[id] = domain.CanonicalText(&projected)
 		ids = append(ids, id)
 	}
 
 	missing, err := g.index.Missing(ctx, model, ids)
 	if err != nil {
-		return fmt.Errorf("similarity gate: %w", err)
+		return nil, fmt.Errorf("similarity gate: %w", err)
 	}
 	if len(missing) == 0 {
-		return nil
+		return byID, nil
 	}
 
 	texts := make([]string, len(missing))
 	for i, id := range missing {
-		texts[i] = byID[id]
+		texts[i] = canonical[id]
 	}
 	vectors, err := g.embed(ctx, texts)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	for i, id := range missing {
 		if err := g.index.Put(ctx, id, model, vectors[i]); err != nil {
-			return fmt.Errorf("similarity gate: %w", err)
+			return nil, fmt.Errorf("similarity gate: %w", err)
 		}
 	}
-	return nil
+	return byID, nil
 }
 
 func (g *Gate) embedCandidates(ctx context.Context, candidates []domain.Candidate) ([]domain.Vector, []string, error) {
