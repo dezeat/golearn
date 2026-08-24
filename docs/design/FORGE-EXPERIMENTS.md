@@ -940,6 +940,67 @@ These settled the shape of #125 before any implementation was committed.
   recorded as invalid rather than counted as caught, preserving the same
   measurement rule established in A-10, A-11 and A-18.
 
+### A-22 · Does a real embedding model separate the fixture set a lexical one could not?
+
+**Pre-registered. This entry was committed before the model was contacted; the
+Result section below is empty on purpose and is filled by the run it
+describes.**
+
+- **Question.** A-16 established that the deterministic lexical stand-in cannot
+  calibrate the gate: its two disjoint-vocabulary duplicates score *below*
+  three negatives the gate must let through, so no threshold separates them,
+  and D-022 therefore ships the calibration table empty. That is a statement
+  about a lexical scorer, not about the fixture set. Does a real embedding
+  model separate the same thirteen pairs under the same committed criteria?
+- **Hypothesis (committed before the run).** A semantic model lifts the two
+  `semantic` pairs above the negatives, so the full set calibrates and the
+  table can be seeded. The named falsifier is specific: the criteria allow at
+  most **one** false negative out of seven positives (recall floor 0.80 over
+  7 positives requires ≥ 6 caught), so the run **fails** if the model leaves
+  *both* semantic pairs below the highest negative plus the margin. The
+  negatives most likely to defeat it are `same option set, different question`
+  and `shared stem, unrelated concepts`, which share most of their tokens with
+  their partners and score high under any model that attends to surface form.
+- **Selection rule — already committed, not invented for this run.** The
+  threshold is whatever `domain.Calibrate` returns under
+  `domain.V1CalibrationCriteria` (no false positives, recall ≥ 0.80, margin ≥
+  0.02): take the highest-scoring negative, add the margin, round up to two
+  decimals. It is the lowest cut with no false positive, so exactly one
+  threshold is derivable and there is nothing to choose between. The reject
+  threshold is the same procedure over the same scores with only the
+  `identical` pairs counted as positives. Both were committed in
+  `addons/forge/internal/domain/calibration.go` before any measurement
+  described here existed, which is what makes them criteria rather than a
+  description of the outcome.
+- **Method.**
+  - The fixture set is `addons/forge/internal/app/testdata/similarity_pairs.json`
+    unchanged — the same thirteen pairs, the same labels, assigned to the
+    *questions* before any score existed. **No pair is relabelled, added or
+    dropped after the run**, and the `withoutSemanticPairs` subsetting A-16
+    used for its offline baseline is not available here: it was legitimate for
+    a self-consistency check on the derivation and would be laundering for a
+    production threshold.
+  - `addons/forge/cmd/calibrate` reads that file, projects each question
+    through `domain.CanonicalText` — the exact string the gate embeds, with no
+    task prefix, because a threshold derived under text the gate never sends is
+    a threshold for a different measurement — embeds all 26 texts in one batch,
+    and scores each pair with `domain.Cosine`.
+  - The endpoint is supplied at runtime through `FORGE_LIVE_ENDPOINT` and is
+    never printed. The model identifier is recorded; the deployment that served
+    it is not (Part B, Privacy).
+  - Two probes run alongside, because the regression fixture depends on both:
+    **determinism** (the same text embedded twice, checked for bit-identical
+    output) and **batch independence** (two texts embedded singly and compared
+    against their batched vectors, because `embedOne` and `embedCandidates`
+    take different paths through the same endpoint).
+  - The scores are **independently recomputed** by a separate implementation
+    that reads the fixture file itself, re-derives the canonical text, calls
+    the endpoint itself and computes cosine and the selection rule in its own
+    arithmetic. It proves it embedded the same strings by matching the
+    SHA-256 digests the runner publishes, so the two paths share no code.
+- **Result.** *(pending — filled by the run this entry pre-registers)*
+- **What it locked in.** *(pending)*
+
 ## Part B — Provider & model benchmarks
 
 **Scope discipline (#130).** These measurements establish *mechanism* —
