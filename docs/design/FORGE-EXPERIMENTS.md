@@ -1043,6 +1043,52 @@ B-2.1-derived expectation of roughly one minute.
   depended on speed: choice ids are arbitrary internal labels, and having the
   model invent them adds a degree of freedom that can only go wrong.
 
+#### B-2.5 · A complete run, and what the first successful pack revealed
+
+- **Question.** Does the chain produce an acceptable draft at count=1, the
+  scale B-2.3 says this hardware supports?
+- **Result. Yes.** `1 accepted, 0 rejected, 1 repaired, 1 round`, **6 m 56 s**,
+  6 provider attempts. Draft saved, not library content, resolvable through
+  `golearn-forge drafts`.
+
+  The run diagnostic reads, in full:
+
+  ```
+  1 accepted, 0 rejected, 1 repaired, 1 round(s); NOT RUN: grounding, similarity
+  ```
+
+  which is the shape the whole session was aiming for: it ran, and it says
+  what it did not do.
+
+- **The defect the artifact exposed, which no measurement would have.** The
+  accepted question's stored choice text was `* b. To enable...`, rendering as
+  `* B) * b. To enable...` — the label applied twice and the answer marked
+  twice, **in data rather than in presentation**. D-008 makes labels a
+  render-time concern and `AGENTS.md` lists baked-in correctness prefixes as an
+  anti-pattern by name.
+
+  The cause is a feedback loop the pipeline creates itself: the repair stage
+  renders the question **to** the model with a correctness marker, and the
+  model copies the marker back into the content it returns. Every KPI in
+  Part B-1 was satisfied — the output was schema-valid, verified and
+  critiqued — and the pack was still wrong in a way only reading it shows.
+- **What it locked in.** Model-supplied labels are stripped, **position-aware**:
+  only the label a given choice would actually carry is removable, so position
+  0 may shed `a`, `A` or `1` and nothing else.
+
+  The first attempt was a general "strip any short leading token" regex, and
+  the conservative test caught it turning `Go. The keyword` into
+  `The keyword`, `3.14 approximately` into `14 approximately`, and `x := 5`
+  into `= 5`. **Silently changing what a question asks is far worse than an
+  untidy label**, and a cleanup rule that can damage content is not a cleanup
+  rule. A bullet is stripped only when whitespace follows it, which separates
+  `- buffered channels` from `-1 is invalid`.
+- **Method note.** Structured-output validity is necessary and nowhere near
+  sufficient. The pipeline's gates check that a question is well-formed,
+  answerable and defensible; none of them checks that the *content* is content
+  rather than presentation, because that is not a property a model can be asked
+  about — it is a property of the contract between two of our own stages.
+
 ---
 
 ## Part C — Application benchmarks
