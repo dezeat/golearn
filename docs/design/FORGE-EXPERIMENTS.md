@@ -1098,7 +1098,9 @@ them was edited to fit.
   timeout, classified and reverted. The harness carries A-18's lesson: a
   mutation that fails to apply, is a no-op, fails to compile, or times out is
   reported as **INCONCLUSIVE** and never scored as survived.
-- **Result. Ten applied, ten caught. No survivors.**
+- **Result. Ten applied, ten caught. No survivors** — but see A-24: these
+  ten were scored by a harness whose no-op detection was later found broken,
+  and all of them were rerun under the corrected one with the same outcome.
 
   | # | Mutation | Guard that fired |
   | --- | --- | --- |
@@ -1186,6 +1188,127 @@ them was edited to fit.
     history reports no leaks. The finding was about a local artifact, not about
     the branch, and only checking it against CI — the environment the claim was
     about — separated the two.
+
+### A-24 · A second embedding model, and why the failure is the representation rather than the model
+
+- **Question.** A-22 measured `nomic-embed-text` and it failed the committed
+  criteria by a hair: six of seven duplicates outranked every negative, and the
+  narrowest winning gap was 0.00414 against a required 0.02. That reads like a
+  near miss, and a near miss invites the conclusion that a stronger model
+  clears it. Does one?
+- **Hypothesis (committed before the run).** A larger model trained explicitly
+  for semantic similarity widens the gap past 0.02 and the table can be seeded.
+  `bge-m3` was chosen precisely because it is the harder test of that
+  hypothesis rather than the flattering one — different architecture, different
+  training objective, 1024 dimensions against 768.
+- **Method.** Identical to A-22 in every respect that could be varied: same
+  thirteen labeled pairs, same labels, same `domain.CanonicalText` projection,
+  same `domain.Calibrate` under `domain.V1CalibrationCriteria`, same runner.
+  Only the model changed. No pair was relabelled, added or dropped, and no
+  subsetting was applied.
+- **Result. The hypothesis is falsified, and the model is *worse where it
+  counts*.**
+
+  | Pair | Relation | A-22 nomic (768) | **A-24 bge-m3 (1024)** |
+  | --- | --- | --- | --- |
+  | verbatim repeat | identical (dup) | 1.0000 | 1.0000 |
+  | different choice-id scheme and order | identical (dup) | 1.0000 | 1.0000 |
+  | reordered options, reworded stem | paraphrase (dup) | 0.9898 | 0.9921 |
+  | paraphrase with filler words | paraphrase (dup) | 0.9809 | 0.9674 |
+  | paraphrase of a channel question | paraphrase (dup) | 0.9311 | 0.9301 |
+  | same fact, opposite direction | **semantic (dup)** | 0.8478 | **0.7343** |
+  | **same option set, different question** | **concept (negative)** | 0.8436 | **0.7914** |
+  | same assessment, disjoint vocabulary | **semantic (dup)** | 0.7614 | **0.6220** |
+  | same concept, different competency | competency (negative) | 0.6875 | 0.6285 |
+  | same topic and stem, different concept | concept (negative) | 0.6795 | 0.5897 |
+  | shared stem, unrelated concepts | concept (negative) | 0.6363 | 0.6197 |
+  | different topics entirely | unrelated (negative) | 0.5296 | 0.3442 |
+  | same difficulty and tag, different subject | unrelated (negative) | 0.4815 | 0.4028 |
+
+  - Threshold 0.82, 0 false positives, **recall 0.714** — the identical figure
+    A-22 produced, and the same verdict: **fails**.
+  - The reject rung fails the same way and for the same reason: the highest
+    non-identical pair is a paraphrase at 0.9921, so the procedure cuts at
+    **1.02**, above the maximum cosine can return.
+  - Independently recomputed by the same separate implementation used in A-22:
+    maximum absolute divergence **1.4e-09**, same verdicts, canonical-text
+    digests matching. Bit-deterministic, batch-independent.
+- **The two failures are opposite, which is what makes the pair of runs
+  informative.**
+
+  | | nomic-embed-text | bge-m3 |
+  | --- | --- | --- |
+  | Duplicates above every negative | 6 of 7 | **5 of 7** |
+  | Narrowest winning gap | **0.00414** | 0.1387 |
+  | Failure mode | ordered correctly, **lost on the margin** | **never separated at all** |
+
+  nomic ranked the classes right and missed the robustness bar. bge-m3 clears
+  the margin comfortably for everything it ranks correctly — and still fails,
+  because it never lifts the two disjoint-vocabulary duplicates above the
+  negatives in the first place. **A wider margin would not have saved it, and a
+  third model is not obviously the answer to either failure.**
+- **What it locked in. The blocker is the representation, not the model.** Both
+  models fail on the same pair, and inspecting it explains why:
+
+  ```
+  NEGATIVE, must be let through:
+    a: "What is the zero value of a slice?"  [+ nil, - an empty slice, - undefined, - zero]
+    b: "What is the zero value of a map?"    [+ nil, - an empty map,   - undefined, - zero]
+        one word differs in the stem, one option of four
+
+  DUPLICATE, must be caught:
+    a: "Which keyword starts a goroutine?"                [+ go, - run,   - spawn, - thread]
+    b: "What launches a concurrently executing function?" [+ go, - async, - fork,  - parallel]
+        almost no shared vocabulary
+  ```
+
+  Roughly half of the embedded string is answer options, so the negative is
+  lexically ~95% identical to its partner while the duplicate is ~5%. Ranking
+  the second above the first is not a threshold problem and not a capacity
+  problem: **cosine over a single whole-question embedding is being asked to
+  call the near-identical pair different and the disjoint pair the same.** Two
+  independent architectures decline in the same place.
+
+  And the fixture set is not at fault. "Zero value of a slice" versus "of a map"
+  *must* be let through — they are two legitimately different questions, and a
+  gate that rejected the second would be worse than no gate. The label is
+  right; the method is what cannot deliver it.
+
+  Consequences:
+
+  1. **D-022 stands and the calibration table stays empty**, now on two
+     measurements rather than one. `bge-m3` joins `nomic-embed-text` as refused
+     with `ErrUncalibratedEmbeddingModel`, and both refusals are pinned offline.
+  2. **Measuring a third model is not the indicated next step.** The failure is
+     shared, structural and explained; another bi-encoder would be a third
+     sample of the same limit. A-25 pre-registers the alternative that is
+     indicated instead.
+  3. **This does not condemn embeddings, only their use as the *final*
+     judgement.** The standard remedy in the retrieval literature is a cascade
+     — a cheap bi-encoder for recall, a joint-encoding judge for the decision —
+     and a recall filter needs no calibrated threshold, which is what makes it
+     compatible with D-022 rather than an evasion of it.
+- **A seventh apparatus error, and this one corrupted evidence before it was
+  caught.** The A-23 harness detected "did the mutation change anything" with
+  `git diff` and reverted with `git checkout`. Both silently break for a file
+  that is newly staged: a stray `git add -A`, run while an earlier failed
+  revert had left a mutation in the tree, made the index agree with the mutated
+  worktree. Real mutations were then reported as **no-ops**, and the revert
+  restored the mutation rather than the measurement. The stored bge-m3 score
+  file briefly carried a mutated value.
+
+  The fix is that the harness no longer consults git at all: it snapshots the
+  bytes itself, compares SHA-256 before and after, restores from its own
+  snapshot, and **verifies the restore by re-hashing**. The score file was
+  regenerated from the measurement output and byte-compared against it. All
+  fourteen mutations — the ten from A-23 included, because they had been scored
+  by the suspect apparatus — were then rerun under the corrected harness:
+  **fourteen applied, fourteen caught, no survivors.**
+
+  A-1, A-10, A-12, A-18, A-23 and now this: every one is the measurement
+  apparatus quietly not measuring, and the only reason this one did not become
+  a false "the guards do not bite" was that its own no-op classification looked
+  implausible next to a mutation that *was* caught on the same run.
 
 ## Part B — Provider & model benchmarks
 
