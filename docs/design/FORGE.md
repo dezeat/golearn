@@ -256,6 +256,11 @@ Forge **extends the existing golearn SQLite database** — no second database.
     partial reproduction.
   - **Provenance** — generation time, provider/model identity, source
     references.
+  - **Trust summary** — `trust.similarity: passed|skipped` plus
+    `trust.calibration` for `passed`; `passed` carries a model-specific
+    calibration identity, while `skipped` is valid explicit
+    metadata when similarity is disabled or unavailable. It never carries
+    vectors, scores, prompts, endpoints, or credentials.
 - Per-question evidence keeps the existing `source` / `source_ref` /
   `confidence` fields; generated questions carry `confidence < 1.0`
   (hand-authored content keeps the manual default of 1.0). The finer

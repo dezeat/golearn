@@ -525,6 +525,13 @@ New pack-level fields split into:
   language;
 - durable provenance — generation time, provider/model identity, source
   references.
+- an acceptance-level `trust` summary, also outside the per-question hash:
+  - `trust.similarity: passed` only when the near-duplicate gate ran with a
+    valid model-specific calibration;
+  - `trust.similarity: skipped` when similarity was explicitly disabled or
+    unavailable because capability or calibration was missing;
+  - `trust.calibration` is present only for `passed` and names the
+    safe calibration identity, never an endpoint or credential.
 
 Excluded from packs categorically: secrets, raw prompts and raw model/tool
 output, retry/repair counters, and provider request mechanics — those live
@@ -540,6 +547,13 @@ pack-level metadata never feeds the per-question content hash.
   taxonomy that must be evaluation-gated before it freezes.
 - Dedup behaviour is identical across `0.1.x` and `0.2.0` imports because the
   hash inputs do not change.
+- Consumers can distinguish a screened pack from one accepted with similarity
+  skipped; `skipped` is explicit metadata, never a trust pass.
+- Similarity remains an optional product capability. D-022 still applies when
+  it is enabled: an uncalibrated model is refused rather than assigned a
+  default threshold.
+- The trust summary records status, not vectors, scores, prompts, or provider
+  mechanics, and has no effect on question hashes.
 
 ### D-018 — Embedding is an optional provider capability, not a `Provider` method
 
