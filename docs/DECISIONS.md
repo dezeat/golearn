@@ -525,13 +525,6 @@ New pack-level fields split into:
   language;
 - durable provenance — generation time, provider/model identity, source
   references.
-- an acceptance-level `trust` summary, also outside the per-question hash:
-  - `trust.similarity: passed` only when the near-duplicate gate ran with a
-    valid model-specific calibration;
-  - `trust.similarity: skipped` when similarity was explicitly disabled or
-    unavailable because capability or calibration was missing;
-  - `trust.calibration` is present only for `passed` and names the
-    safe calibration identity, never an endpoint or credential.
 
 Excluded from packs categorically: secrets, raw prompts and raw model/tool
 output, retry/repair counters, and provider request mechanics — those live
@@ -547,13 +540,6 @@ pack-level metadata never feeds the per-question content hash.
   taxonomy that must be evaluation-gated before it freezes.
 - Dedup behaviour is identical across `0.1.x` and `0.2.0` imports because the
   hash inputs do not change.
-- Consumers can distinguish a screened pack from one accepted with similarity
-  skipped; `skipped` is explicit metadata, never a trust pass.
-- Similarity remains an optional product capability. D-022 still applies when
-  it is enabled: an uncalibrated model is refused rather than assigned a
-  default threshold.
-- The trust summary records status, not vectors, scores, prompts, or provider
-  mechanics, and has no effect on question hashes.
 
 ### D-018 — Embedding is an optional provider capability, not a `Provider` method
 
@@ -818,3 +804,147 @@ absent from it is **refused** with `domain.ErrUncalibratedEmbeddingModel`.
 - The fixture set stays valuable regardless: it is what a real model gets
   measured *against*, and its semantic pairs are the cases that distinguish a
   semantic backend from a lexical one.
+
+### D-023 — Near-duplicate gating is a cascade: embeddings for recall, an LLM judge for the decision
+
+**Status:** accepted · **Date:** 2026-08-24 · **Amends:** D-022
+
+**Context.** D-022 refused to ship a similarity threshold nobody had measured,
+and required a real embedding model to be measured before the gate could score
+anything. That has now happened twice, and both runs failed the criteria
+committed before them (`docs/design/FORGE-EXPERIMENTS.md` A-22, A-24):
+
+| | `nomic-embed-text` (768d) | `bge-m3` (1024d) |
+| --- | --- | --- |
+| False positives | 0 | 0 |
+| Recall (floor 0.80) | 0.714 | 0.714 |
+| Duplicates above every negative | 6 of 7 | 5 of 7 |
+| Failure mode | lost on the margin (0.00414 vs 0.02) | never separated |
+
+The two failures are opposite, and that is what makes them conclusive rather
+than discouraging. **The blocker is the representation, not the model.** Around
+half of `domain.CanonicalText` is answer options, so the hard negative — *"zero
+value of a slice?"* against *"of a map?"*, three of four options identical — is
+lexically ~95% identical to its partner, while a true duplicate phrased in
+disjoint vocabulary shares ~5%. Cosine over one whole-question embedding is
+being asked to call the near-identical pair *different* and the disjoint pair
+*the same*. Two independent architectures decline at the same pair, so a third
+bi-encoder is a third sample of one limit rather than a new attempt.
+
+The fixture set is not at fault. Those two *are* legitimately different
+questions and a gate that rejected the second would be worse than no gate.
+
+A-25 then measured a judge that sees both questions at once, against the *same*
+thirteen pairs and the *same* pre-registered criteria: **0 false positives,
+recall 7/7, position consistency 13/13** — catching both pairs the embedders
+missed and correctly letting the hard negative through. This is also the
+standard shape in the retrieval literature, where a bi-encoder retrieves and a
+joint-encoding model decides.
+
+**Decision.** The gate becomes a **cascade**.
+
+- **Embeddings are retained as a recall filter**, not as the decision. D-020's
+  float32 BLOBs, Go-side cosine, model scoping and `Missing` backfill all
+  stand; only their role narrows.
+- **A judge over the existing `ports.Provider` makes the decision.** No
+  reranker model, no embeddings-only path, and **no new dependency** — Ollama
+  exposes no rerank endpoint, and the provider port already carries structured
+  generation.
+- **The recall filter needs no calibrated threshold.** A generous cut is
+  enough, because a neighbour admitted too many costs one judge call while a
+  neighbour missed costs a duplicate. **D-022's principle is upheld and in fact
+  strengthened: there is now no threshold picked by feel because there is no
+  scoring threshold at all.** What is retired is the mechanism — the
+  calibration table and `ErrUncalibratedEmbeddingModel` stop gating real
+  content.
+- **The ladder routes on the verdict, not on the fine-grained label.** A-25
+  measured exact six-way label accuracy at 0.538 while the duplicate/not
+  verdict was perfect, so any routing that depends on telling `paraphrase` from
+  `identical` would be built on the weakest part of the measurement.
+- Rejected: relaxing the 0.02 margin to make A-22 pass. A threshold of 0.85
+  would have scored 0 false positives and 0.857 recall and looked entirely
+  respectable; it is refused because the margin predates the data. That
+  criterion may well be wrong for compressed cosine ranges — changing it is a
+  future entry argued on grounds *independent* of these runs, followed by a
+  fresh measurement, never a re-grading of these.
+- Also rejected: a reranker model through Ollama (no rerank endpoint; the
+  CausalLM workaround returns text rather than logits, losing the graded
+  score), FTS5 as the recall filter (lexical, so it would miss exactly the
+  disjoint-vocabulary duplicates the judge exists to catch), and an agentic
+  loop (D-016 requires bounded attempts).
+
+**Consequences.**
+
+- The gate can run against a real provider for the first time, and #124's
+  unreachable acceptance criterion is replaced by one that was measured.
+- **The gate stops being arithmetic and becomes a provider cost.** A-25
+  measured ~6–10 s per judgement warm on the CPU-only reference host, and
+  generation rather than prefill is the bottleneck, so the lever is fewer
+  output tokens rather than a faster model. On hosted or GPU inference the cost
+  is negligible. The wall-clock a user pays must be measured and stated, not
+  estimated.
+- The decision boundary moves from a committed, versioned number into model
+  weights and a prompt, where it cannot be inspected. **That is a real loss of
+  inspectability**, and the labeled fixture set is what replaces it: the judge
+  is measured against the same thirteen pairs under the same criteria, and that
+  measurement is the artifact a reader checks instead of a threshold.
+- `Gate.Apply` currently promises that "the same pack screened twice must
+  resolve the same way". A judge holds that at temperature 0 but does not
+  guarantee it across model versions. **That promise must be explicitly
+  re-stated or withdrawn in the implementing change**, never silently broken.
+- Anthropic still has no embedder (D-018), but a judge does not require one, so
+  a small library can be screened without a recall filter. Whether that path is
+  offered is the implementation's call.
+- The empty calibration table and its guards remain as evidence of why this
+  design exists. They are not deleted to tidy up; A-22 and A-24 are the reason
+  the cascade is not merely a preference.
+
+### D-024 — Packs carry an acceptance-level trust summary; similarity is an optional capability
+
+**Status:** accepted · **Date:** 2026-08-24 · **Amends:** D-017
+
+**Relocation note.** The substance of this entry was first written *into* D-017
+after that entry had been accepted. `DECISIONS.md` states at the top that
+entries are never edited after acceptance and that a changed mind gets a new
+entry, so the text was moved here unchanged rather than left where it silently
+rewrote an accepted decision. **No wording was altered and nothing was decided
+in the move** — only its location, so that a reader of D-017 sees what D-017
+actually decided on 2026-07-26.
+
+**Context.** D-017 fixed which pack-level metadata schema 0.2.0 carries and
+what stays out of it. It did not say how a consumer tells a pack that passed
+the near-duplicate gate from one accepted while the gate never ran. An
+unscreened pack being indistinguishable from a screened one was raised as an
+open product question on PR #133, and the similarity gate has in fact never run
+for any real provider (D-022, and the measurements in FORGE-EXPERIMENTS A-22
+and A-24).
+
+**Decision.** Packs carry an acceptance-level `trust` summary, outside the
+per-question hash:
+
+- `trust.similarity: passed` only when the near-duplicate gate actually ran and
+  reached a verdict;
+- `trust.similarity: skipped` when similarity was explicitly disabled or
+  unavailable;
+- `trust.calibration` is present only for `passed` and names the safe
+  calibration identity, never an endpoint or credential.
+
+Similarity is an **optional product capability**. Where it is enabled, the
+refusal to score without a measured basis still holds.
+
+**Consequences.**
+
+- Consumers can distinguish a screened pack from one accepted with similarity
+  skipped; `skipped` is explicit metadata, never a trust pass.
+- The trust summary records status, not vectors, scores, prompts, or provider
+  mechanics, and has no effect on question hashes.
+- **This is in tension with D-016 and that tension is not resolved here.**
+  D-016 moved trust from human inspection to the pipeline and states that
+  cutting those stages for scope reopens that decision. Making similarity
+  optional is such a cut. Whether V1 may ship with `trust.similarity: skipped`
+  as a normal outcome is a release-scope decision that belongs to the
+  maintainer, and it is recorded as open rather than settled by this entry.
+- D-023 supersedes the calibration mechanism this entry refers to: under the
+  cascade there is no calibration identity to name, because there is no scoring
+  threshold. `trust.calibration` therefore needs re-reading against D-023 when
+  the cascade lands (#138).

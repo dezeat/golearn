@@ -1313,7 +1313,7 @@ them was edited to fit.
 ### A-25 · Can an LLM judge classify the pairs that cosine could not?
 
 **Pre-registered.** Everything above the Result was committed before any model
-was contacted; the measured numbers were appended afterwards and nothing above
+was contacted (the throughput arm before any throughput measurement); the measured numbers were appended afterwards and nothing above
 them was edited to fit.
 
 - **Question.** A-22 and A-24 located the blocker in the representation rather
@@ -1397,8 +1397,114 @@ them was edited to fit.
   - Arms are run **sequentially, never concurrently** — two models resident on
     a 4-core CPU-only host would make both latency figures meaningless, and
     latency is the measurand.
-- **Result.** *(pending — filled by the run this entry pre-registers)*
-- **What it locked in.** *(pending)*
+- **Result. The primary arm passes; both throughput arms fail, and they fail on
+  the criterion that was added from the literature rather than from an observed
+  problem.**
+
+  | Model | False positives | Recall (7 positives) | Position consistency | Exact 6-way label | s/call | Verdict |
+  | --- | --- | --- | --- | --- | --- | --- |
+  | `qwen3.5:4b` | 0 | **1.000** (7/7) | **1.000** (13/13) | 0.538 | 28.1 † | **PASSES** |
+  | `gemma3:4b` | 0 | 1.000 (7/7) | **0.769** (10/13) | 0.615 | 46.2 | FAILS |
+  | `llama3.2:3b` | 0 | 1.000 (7/7) | **0.769** (10/13) | 0.615 | **9.6** | FAILS |
+
+  † This figure is contaminated and is an upper bound, not a measurement — see
+  the apparatus note below.
+
+  - **The named falsifier did not fire.** `same option set, different question`
+    — the pair that defeated both embedding models — is classified `concept`
+    by all three judges in both orderings, and correctly let through. Both
+    disjoint-vocabulary duplicates are caught. `llama3.2:3b` even labels `same
+    assessment, disjoint vocabulary` exactly right (`semantic`), which no
+    embedding model came close to.
+  - **Accuracy does not separate these models; stability does.** All three
+    reach 0 false positives and 7/7 recall. Two of the three then flip 3 of 13
+    verdicts when the two questions are swapped.
+  - **Exact six-way labelling is poor everywhere** (0.538–0.615) while the
+    duplicate/not verdict is perfect. The models confuse `identical` with
+    `paraphrase` and `semantic` with `concept` — neighbouring rungs that share
+    a verdict. **Any ladder that routes on the fine-grained label would be
+    built on the weakest part of this measurement**, so routing must use the
+    verdict.
+  - Throughput, measured separately and warm: prefill 55–234 tok/s, generation
+    **1.5–3.1 tok/s**. Generation dominates by a factor of 40–150, so the lever
+    is fewer output tokens rather than a faster model — and the model with the
+    fastest prefill (`gemma3:4b`, 234 tok/s) has the slowest generation and is
+    the slowest overall. A single headline throughput number would have
+    selected exactly the wrong model.
+- **What it locked in.**
+
+  1. **D-023.** Near-duplicate gating becomes a cascade: the embedding index
+     narrows, a judge decides. The judge runs on the provider that is already
+     configured, so it costs no new dependency, no reranker model and no
+     endpoint.
+  2. **Position consistency earns its place as a standing criterion.** It was
+     added because pairwise LLM judging is documented to move with ordering,
+     not because anything had been seen to move. On the primary arm it was
+     13/13 and looked like ceremony. It is the only criterion that
+     discriminates between the three models, and without it two unstable
+     models would have been reported as equivalent to a stable one.
+  3. **The mitigation is asymmetric confirmation, not doubled cost.** A
+     duplicate verdict is re-asked in the reverse ordering and disagreement
+     resolves toward permitting; a permit is not re-asked. Most pairs are not
+     duplicates, so this costs far less than judging every pair twice, and it
+     fails in the direction FORGE.md 7 prefers — a false positive discards a
+     good question, a false negative meets D-007's hash downstream.
+  4. **"It works on weak hardware, so it works everywhere" needs one
+     qualification.** The constraint is the model, not the host:
+     `gemma3:4b` and `qwen3.5:4b` are the same size class on the same machine,
+     and one is unusable for this task. A frontier model will very likely do
+     better; *any* small model will not.
+- **The statistical caveat, which limits every number above.** Seven positives
+  and six negatives cannot support a claim about behaviour on real packs.
+  Wilson 95% intervals:
+
+  | Measurement | Point estimate | 95% CI |
+  | --- | --- | --- |
+  | Judge recall | 7/7 = 1.000 | **[0.646, 1.000]** |
+  | Embedding recall (A-22, A-24) | 5/7 = 0.714 | [0.359, 0.918] |
+  | False-positive rate | 0/6 = 0.000 | **[0.000, 0.390]** |
+
+  Every one of these intervals contains the 0.80 floor, and a true
+  false-positive rate as high as 39% is compatible with observing none. Perfect
+  recall would need **20 positives** before the interval clears 0.80.
+
+  The distinction that has to be made explicitly, because it has been blurred:
+  **as an acceptance test against a fixed pre-registered set these results are
+  exact** — 5/7 < 0.80 is a fact, A-22 fails and A-25 passes — **while as an
+  estimate of real-world behaviour they support nothing.** The fixture set is
+  currently both the acceptance gate and the evidence about the world, and at
+  thirteen pairs it cannot be both. #139 carries the fix: grow toward ~100
+  stratified pairs, split dev from held-out, and report intervals rather than
+  point estimates.
+
+  What survives untouched is the *mechanistic* argument, which never rested on
+  the point estimate: two embedding architectures fail on the same pair, and
+  the cause is understood. D-023 stands on that, not on "recall 1.0".
+- **Overfitting already present, and disclosed rather than hidden.** The judge
+  prompt written for the follow-up implementation ends with a paragraph naming
+  the exact confusion this fixture set tests — that two questions sharing
+  answer options can assess different facts. That sentence was written by the
+  author *after* seeing why the embedders failed. It is prompt overfitting to
+  the evaluation set, introduced before any iteration loop existed, and it is
+  recorded here because the alternative is that it silently inflates every
+  future run. The literature is direct about the mechanism: generic prompt
+  additions are not monotonic, and one measured case moved a compliance metric
+  from 86.7% to 30% while improving another task under the same change.
+- **A fourth apparatus error, and the one that cost real evidence.** The
+  mutation harness used `git diff` to detect whether a mutation changed
+  anything and `git checkout` to revert it. Both break for a newly staged file:
+  a stray `git add -A`, run while an earlier failed revert had left a mutation
+  in the tree, made the index agree with the mutated worktree. Real mutations
+  were then scored **no-op**, and the revert restored the mutation instead of
+  the measurement — the stored `bge-m3` score file briefly carried a mutated
+  value. The harness now snapshots bytes, compares SHA-256, and verifies its
+  own restore; all fourteen mutations were rerun under it. Separately, the
+  latency figure for the primary arm was measured while model pulls, a full
+  gate run and security scans were competing for the same four cores, which is
+  why it reads 28.1 s/call against 6–10 s warm and undisturbed. **The accuracy
+  numbers are unaffected — temperature is pinned to zero and the runs are
+  reproducible — but the latency figure is an upper bound under load and is
+  marked as such rather than quietly corrected.**
 
 ## Part B — Provider & model benchmarks
 
