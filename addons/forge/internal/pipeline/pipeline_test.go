@@ -17,6 +17,7 @@ package pipeline_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -176,21 +177,47 @@ func TestAShortfallFailsClearlyRatherThanEmittingASmallerPack(t *testing.T) {
 // D-016 permits "exactly one targeted repair and re-verification". The bound
 // is per candidate and spans the whole chain — one per gate would quietly turn
 // one repair into four.
-func TestExactlyOneRepairIsSpentPerCandidate(t *testing.T) {
-	provider := newFakeProvider().
-		reply(stageGenerate, batch(goodQuestion("Q1"))).
-		reply(stageVerify, failingVerify()).
-		reply(stageCritique, passingCritique()).
-		reply(stageRepair, batch(goodQuestion("Q1 repaired")))
-	h := newHarness(t, provider)
+//
+// The assertion is repairs <= candidates assessed. An earlier version compared
+// repairs to *generation rounds*, which is only the bound when exactly one
+// candidate is produced per round — true of a one-question fixture and of
+// nothing else. An independent review probe ran it with two candidates per
+// round and it failed against unmodified code, reporting six repairs for six
+// candidates: exactly the invariant it was named for. The assertion was a
+// coincidence of the fixture, and it would have passed equally under the
+// weaker rule "one repair per round".
+func TestAtMostOneRepairIsSpentPerCandidate(t *testing.T) {
+	for _, count := range []int{1, 2, 3} {
+		t.Run(fmt.Sprintf("count=%d", count), func(t *testing.T) {
+			questions := make([]map[string]any, 0, count)
+			for i := 0; i < count; i++ {
+				questions = append(questions, goodQuestion(fmt.Sprintf("Q%d", i)))
+			}
+			provider := newFakeProvider().
+				reply(stageGenerate, batch(questions...)).
+				reply(stageVerify, failingVerify()).
+				reply(stageCritique, passingCritique()).
+				reply(stageRepair, batch(goodQuestion("repaired")))
+			h := newHarness(t, provider)
 
-	_, _ = h.pipeline.Generate(context.Background(), testSpec(1))
+			_, _ = h.pipeline.Generate(context.Background(), testSpec(count))
 
-	repairs := provider.countFor(stageRepair)
-	generations := provider.countFor(stageGenerate)
-	if repairs != generations {
-		t.Errorf("want exactly one repair per generated candidate: %d repairs across %d generation rounds",
-			repairs, generations)
+			repairs := provider.countFor(stageRepair)
+			// Every generated candidate is assessed, so the number assessed is
+			// the number the generator produced across all rounds.
+			assessed := 0
+			for _, c := range provider.callsFor(stageGenerate) {
+				_ = c
+				assessed += count
+			}
+			if repairs > assessed {
+				t.Errorf("%d repairs for %d candidates assessed: the per-candidate bound was exceeded",
+					repairs, assessed)
+			}
+			if repairs == 0 {
+				t.Error("no repair was attempted, so the bound is not being exercised")
+			}
+		})
 	}
 }
 
@@ -830,5 +857,47 @@ func TestAGroundedPackCarriesTheCitationItActuallyUsed(t *testing.T) {
 	pack := h.drafts.saved[0].Pack
 	if got := pack.Questions[0].SourceRef; got != "s1" {
 		t.Errorf("source_ref = %q, want the evidence id the question cited", got)
+	}
+}
+
+// The run is marked succeeded before the draft is saved, because the store
+// refuses a draft from a run that has not succeeded. That ordering leaves a
+// window: a failed save would leave a run row saying "succeeded" with no draft
+// attached, so the run history reports a success the user cannot act on and
+// nothing reconciles it.
+func TestAFailedDraftSaveCorrectsTheRunRatherThanLeavingItSucceeded(t *testing.T) {
+	provider := newFakeProvider().
+		reply(stageGenerate, batch(goodQuestion("Q1"))).
+		reply(stageVerify, passingVerify()).
+		reply(stageCritique, passingCritique())
+
+	runs := &fakeRunStore{}
+	drafts := &fakeDraftStore{err: errors.New("database is locked")}
+	h := newHarness(t, provider)
+	p, err := pipeline.New(pipeline.Deps{
+		Provider: provider, Research: h.research, Gate: h.gate,
+		Runs: runs, Drafts: drafts, Now: fixedNow, ForgeVersion: "test",
+	}, pipeline.DefaultBudgets())
+	if err != nil {
+		t.Fatalf("pipeline.New: %v", err)
+	}
+
+	if _, err := p.Generate(context.Background(), testSpec(1)); err == nil {
+		t.Fatal("a failed draft save must be reported")
+	}
+
+	if len(runs.finishedAs) == 0 {
+		t.Fatal("no terminal state recorded")
+	}
+	final := runs.finishedAs[len(runs.finishedAs)-1]
+	if final == domain.RunSucceeded {
+		t.Error("the run still reports succeeded with no draft attached")
+	}
+	if final != domain.RunFailed {
+		t.Errorf("final status = %q, want %q", final, domain.RunFailed)
+	}
+	if !strings.Contains(runs.diagnostic[len(runs.diagnostic)-1], "could not be saved") {
+		t.Errorf("the diagnostic should say what happened, got: %s",
+			runs.diagnostic[len(runs.diagnostic)-1])
 	}
 }

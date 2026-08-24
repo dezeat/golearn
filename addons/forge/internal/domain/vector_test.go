@@ -184,3 +184,55 @@ func TestCanonicalTextIgnoresChoiceIdSchemes(t *testing.T) {
 		t.Error("choice id scheme must not affect the comparison representation")
 	}
 }
+
+// A NaN must be an error, not a score. Every comparison against NaN is false,
+// so a NaN-scoring neighbor reads as below any threshold: the similarity gate
+// would wave a duplicate through, and a duplicate missing from the results is
+// indistinguishable from no duplicate at all. It also makes a score comparator
+// inconsistent, which turns sorting into implementation-defined order.
+//
+// The path is real rather than theoretical: the BLOB decoder accepts any
+// four-byte group, and several of them are NaN bit patterns, so a corrupted
+// stored embedding produces one.
+func TestCosineRefusesNonFiniteComponentsRatherThanScoringThem(t *testing.T) {
+	nan := float32(math.NaN())
+	inf := float32(math.Inf(1))
+
+	cases := []struct {
+		name string
+		a, b domain.Vector
+	}{
+		{"NaN in the probe", domain.Vector{nan, 1}, domain.Vector{1, 1}},
+		{"NaN in the stored vector", domain.Vector{1, 1}, domain.Vector{nan, 1}},
+		{"infinity", domain.Vector{inf, 1}, domain.Vector{1, 1}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			score, err := domain.Cosine(tc.a, tc.b)
+			if err == nil {
+				t.Fatalf("want an error, got score %v", score)
+			}
+			if !math.IsNaN(score) && score != 0 {
+				t.Errorf("a refused comparison must not return a usable score, got %v", score)
+			}
+			if !strings.Contains(err.Error(), "corrupt") {
+				t.Errorf("the error should say the stored embedding is corrupt, got: %v", err)
+			}
+		})
+	}
+}
+
+// A corrupted BLOB decodes without complaint — the decoder cannot tell a NaN
+// bit pattern from a number — so the refusal has to happen at comparison time.
+func TestACorruptedBlobDecodesButCannotBeScored(t *testing.T) {
+	// The IEEE-754 quiet-NaN bit pattern, little-endian.
+	corrupt := []byte{0x00, 0x00, 0xC0, 0x7F, 0x00, 0x00, 0x80, 0x3F}
+
+	v, err := domain.UnmarshalVector(corrupt)
+	if err != nil {
+		t.Fatalf("the decoder accepts any 4-byte group: %v", err)
+	}
+	if _, err := domain.Cosine(v, domain.Vector{1, 1}); err == nil {
+		t.Error("a corrupt embedding must be refused at comparison time")
+	}
+}

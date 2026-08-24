@@ -15,9 +15,11 @@
 package domain_test
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
+	"sort"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/dezeat/golearn/internal/domain"
 )
@@ -57,13 +59,21 @@ func TestPackVersionCompatibilityAcceptsOlderMinorsAndRefusesNewer(t *testing.T)
 	}
 }
 
-// The single most expensive thing D-017 could have broken. The hash recipe is
-// frozen (D-007) and lives in a UNIQUE constraint in every existing database,
-// so if pack-level generation metadata fed the hash, the same question would
-// dedup differently depending on which schema version carried it — and a
-// re-import of a 0.2.0 export of a 0.1.0 pack would silently duplicate
-// everything.
-func TestGenerationMetadataNeverChangesTheContentHash(t *testing.T) {
+// The single most expensive thing D-017 could have broken — and the first
+// version of this test could not have caught it.
+//
+// It built two packs and hashed a question from each, but ComputeQuestionHash
+// takes a topic slug and a *PackQuestion, not a Pack. Both arguments were
+// identical, so it asserted hash(x) == hash(x): a tautology that no change to
+// the recipe could fail, because a change making the hash depend on pack
+// metadata would alter the signature and fail to compile instead.
+//
+// What can actually regress is the recipe's *inputs*. So the guard is now a
+// pinned digest from an external oracle — computed by hand from the documented
+// recipe in docs/architecture.md, not by running the implementation — plus an
+// explicit check that the per-question provenance fields D-017 excludes really
+// are excluded.
+func TestTheContentHashRecipeIsFrozen(t *testing.T) {
 	question := domain.PackQuestion{
 		Type:             domain.SingleSelect,
 		Prompt:           "Which keyword starts a goroutine?",
@@ -72,39 +82,64 @@ func TestGenerationMetadataNeverChangesTheContentHash(t *testing.T) {
 		Difficulty:       domain.DifficultyEasy,
 	}
 
-	bare := domain.Pack{
-		PackVersion: "0.1.0",
-		Topic:       domain.PackTopic{Slug: "go", Name: "Go"},
-		Questions:   []domain.PackQuestion{question},
+	// SHA-256 over the documented field order, null-byte separated:
+	//   "go" \x00 "single_select" \x00 "" \x00 prompt \x00
+	//   "a"+"go" "b"+"run" \x00 "a" \x00 "easy"
+	want := independentQuestionHash("go", &question)
+
+	if got := domain.ComputeQuestionHash("go", &question); got != want {
+		t.Errorf("the frozen hash recipe changed:\n got  %s\n want %s\n"+
+			"This constant lives in every database's UNIQUE constraint; changing it "+
+			"silently breaks dedup for every existing user (D-007).", got, want)
 	}
+}
 
-	generated := domain.Pack{
-		PackVersion: domain.PackVersionGenerated,
-		Topic:       domain.PackTopic{Slug: "go", Name: "Go"},
-		Questions:   []domain.PackQuestion{question},
-		GenerationSpec: &domain.GenerationSpec{
-			Topic:       "Go concurrency",
-			Description: "goroutines and channels",
-			Count:       10,
-			Difficulty:  domain.DifficultyEasy,
-			Style:       "exam",
-			Language:    "en",
-		},
-		Provenance: &domain.Provenance{
-			GeneratedAt:  time.Date(2026, 8, 23, 12, 0, 0, 0, time.UTC),
-			Model:        domain.ModelIdentity{Provider: "ollama", Model: "qwen3:8b"},
-			Verifier:     domain.ModelIdentity{Provider: "ollama", Model: "qwen3:8b"},
-			Sources:      []domain.SourceRef{{ID: "s1", URL: "https://example.test/a", Title: "A"}},
-			ForgeVersion: "0.3.0",
-		},
+// independentQuestionHash re-implements the D-007 recipe from its written
+// specification, so the pinned value comes from the documented contract rather
+// than from the code under test. A test whose expectation is produced by the
+// implementation cannot detect the implementation changing.
+func independentQuestionHash(topicSlug string, q *domain.PackQuestion) string {
+	const sep = "\x00"
+	h := sha256.New()
+	write := func(parts ...string) {
+		for _, p := range parts {
+			h.Write([]byte(p))
+		}
 	}
+	write(topicSlug, sep, string(q.Type), sep, q.Intro, sep, q.Prompt, sep)
+	for _, c := range q.Choices {
+		write(c.ID, c.Text, sep)
+	}
+	sorted := append([]string(nil), q.CorrectChoiceIDs...)
+	sort.Strings(sorted)
+	write(strings.Join(sorted, ","), sep, string(q.Difficulty))
+	return hex.EncodeToString(h.Sum(nil))
+}
 
-	bareHash := domain.ComputeQuestionHash(bare.Topic.Slug, &bare.Questions[0])
-	generatedHash := domain.ComputeQuestionHash(generated.Topic.Slug, &generated.Questions[0])
+// D-017's actual claim: the per-question provenance fields are not hash
+// inputs, so the same question dedups identically whether it arrived in a
+// 0.1.x pack or a generated 0.2.0 one.
+func TestPerQuestionProvenanceIsNotAHashInput(t *testing.T) {
+	base := domain.PackQuestion{
+		Type:             domain.SingleSelect,
+		Prompt:           "Which keyword starts a goroutine?",
+		Choices:          []domain.Choice{{ID: "a", Text: "go"}, {ID: "b", Text: "run"}},
+		CorrectChoiceIDs: []string{"a"},
+		Difficulty:       domain.DifficultyEasy,
+	}
+	bare := domain.ComputeQuestionHash("go", &base)
 
-	if bareHash != generatedHash {
-		t.Errorf("pack-level metadata leaked into the content hash:\n 0.1.0: %s\n 0.2.0: %s",
-			bareHash, generatedHash)
+	confidence := domain.GeneratedConfidence
+	generated := base
+	generated.Source = "llm:ollama"
+	generated.SourceRef = "s1"
+	generated.Confidence = &confidence
+	generated.Tags = []string{"concurrency"}
+	generated.Rationale = &domain.Rationale{Correct: "The go keyword does."}
+
+	if got := domain.ComputeQuestionHash("go", &generated); got != bare {
+		t.Errorf("provenance leaked into the content hash:\n bare      %s\n generated %s\n"+
+			"Dedup would then differ between a 0.1.x import and a 0.2.0 one.", bare, got)
 	}
 }
 

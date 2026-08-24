@@ -14,7 +14,10 @@
 
 package domain
 
-import "time"
+import (
+	"strings"
+	"time"
+)
 
 // SourceCategory classifies a source for the source-authority policy.
 //
@@ -70,6 +73,36 @@ type Evidence struct {
 	Content UntrustedText
 	// Quality carries the source-authority verdict.
 	Quality SourceQuality
+}
+
+// Descriptor renders the record's provenance fields as untrusted text.
+//
+// Title, URL and Publisher arrive from the same response body as Content and
+// are equally attacker-controlled — a page title is whatever the page says it
+// is. They were originally printed beside the fence as a readable header,
+// which put them into the prompt outside any quoted region, so the entire
+// type-level defense applied to two thirds of what came off the wire and none
+// of the rest. Returning them as [UntrustedText] means a caller cannot render
+// them except through a fence.
+//
+// The evidence id is deliberately excluded: Forge assigns it, so it is the one
+// field here that is not attacker-controlled and the one a fence needs as a
+// key.
+func (e Evidence) Descriptor() UntrustedText {
+	var b strings.Builder
+	if e.Title != "" {
+		b.WriteString("title: " + e.Title + "\n")
+	}
+	if e.Publisher != "" {
+		b.WriteString("publisher: " + e.Publisher + "\n")
+	}
+	if e.URL != "" {
+		b.WriteString("url: " + e.URL + "\n")
+	}
+	if !e.RetrievedAt.IsZero() {
+		b.WriteString("retrieved: " + e.RetrievedAt.UTC().Format(time.RFC3339) + "\n")
+	}
+	return Untrusted(strings.TrimRight(b.String(), "\n"))
 }
 
 // Ref reduces an Evidence record to what a pack may carry.

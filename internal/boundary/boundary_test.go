@@ -176,25 +176,40 @@ func TestCoreModuleStaysAtFourRuntimeDeps(t *testing.T) {
 // the graph-level check cannot: first-party code reaching for net when a
 // transitive dependency has already put it in the graph.
 func TestFirstPartyCodeImportsNoNetwork(t *testing.T) {
-	pkgs := goList(t, "list", "-f", "{{.ImportPath}}|{{join .Imports \",\"}}|{{join .TestImports \",\"}}", "./...")
+	// All three import sets, not just .Imports.
+	//
+	// This guard previously extracted .TestImports into a field it never read,
+	// and omitted .XTestImports from the template entirely — and core test code
+	// is almost all XTest. An independent review probe added net/http, net/url
+	// and crypto/tls to two core test files and the guard stayed green. It was
+	// scanning a third of the code it claimed to cover.
+	//
+	// Test code is in scope on purpose: a test that dials is still a core
+	// package reaching for the network, and it is the likeliest place for one
+	// to appear, since "it is only a test" is exactly the reasoning that
+	// precedes it.
+	pkgs := goList(t, "list", "-f",
+		"{{.ImportPath}}|{{join .Imports \",\"}}|{{join .TestImports \",\"}}|{{join .XTestImports \",\"}}", "./...")
 
 	banned := make(map[string]bool, len(forbiddenFirstPartyImports))
 	for _, b := range forbiddenFirstPartyImports {
 		banned[b] = true
 	}
 
+	const importSets = 3
 	for _, line := range pkgs {
-		parts := strings.SplitN(line, "|", 3)
+		parts := strings.SplitN(line, "|", importSets+1)
 		if len(parts) < 2 {
 			continue
 		}
 		pkg := parts[0]
-		// The boundary guard itself shells out to `go list`; it imports no
-		// network package, but keep the scan honest by naming the exemption
-		// rather than silently skipping unmatched packages.
-		for _, imp := range strings.Split(parts[1], ",") {
-			if banned[strings.TrimSpace(imp)] {
-				t.Errorf("first-party package %s imports %q directly: the core has no network path (D-015)", pkg, imp)
+		// Iterate every set the template produced rather than an enumerated
+		// pair, so adding a set to the template cannot leave it unscanned.
+		for _, set := range parts[1:] {
+			for _, imp := range strings.Split(set, ",") {
+				if banned[strings.TrimSpace(imp)] {
+					t.Errorf("first-party package %s imports %q directly: the core has no network path (D-015)", pkg, imp)
+				}
 			}
 		}
 	}

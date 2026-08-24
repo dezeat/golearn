@@ -64,7 +64,21 @@ func Cosine(a, b Vector) (float64, error) {
 	if normA == 0 || normB == 0 {
 		return 0, fmt.Errorf("cosine: zero-magnitude vector")
 	}
-	return dot / (math.Sqrt(normA) * math.Sqrt(normB)), nil
+
+	score := dot / (math.Sqrt(normA) * math.Sqrt(normB))
+	// NaN must be an error, not a score. Every comparison against NaN is
+	// false, so a NaN-scoring neighbor reads as *below* any threshold — the
+	// similarity gate would silently wave a duplicate through, and a duplicate
+	// missing from the results is indistinguishable from no duplicate at all.
+	// It also makes a score comparator inconsistent (NaN != NaN), which turns
+	// sorting into implementation-defined order and breaks the determinism law.
+	//
+	// A NaN reaches here from a corrupted or truncated BLOB: the decoder
+	// accepts any four-byte group, and several of them are NaN bit patterns.
+	if math.IsNaN(score) || math.IsInf(score, 0) {
+		return 0, fmt.Errorf("cosine: vectors contain a non-finite component; the stored embedding is corrupt")
+	}
+	return score, nil
 }
 
 // MarshalVector encodes a vector for BLOB storage as little-endian float32.

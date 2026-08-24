@@ -237,10 +237,18 @@ func (p *Pipeline) Generate(ctx context.Context, spec domain.GenerationSpec) (Re
 	// The draft is saved only after the run is marked succeeded, because the
 	// store refuses a draft from a run that has not succeeded — the no-junk
 	// rule enforced at the boundary rather than trusted here.
+	//
+	// That ordering leaves a window, and it needs compensating rather than
+	// commenting away: if the save fails, the run row already says succeeded
+	// and no draft exists, so the run history reports a success the user
+	// cannot act on and nothing reconciles it. The run is therefore corrected
+	// to failed before the error is returned.
 	draftID, err := p.deps.Drafts.SaveDraft(ctx, domain.Draft{
 		RunID: runID, Pack: result.Draft.Pack, CreatedAt: p.deps.Now(),
 	})
 	if err != nil {
+		p.finish(ctx, runID, domain.RunFailed, sources, cost,
+			"generation succeeded but the draft could not be saved: "+diagnose(err))
 		return Result{}, fmt.Errorf("save draft: %w", err)
 	}
 	result.Draft.ID = draftID
