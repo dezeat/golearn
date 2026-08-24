@@ -929,6 +929,67 @@ B-2.1-derived expectation of roughly one minute.
   another cause that must be found rather than assumed.
 - **Result.** *Pending the measuring run.*
 
+#### B-2.3 · The bounded pipeline end to end against a live model
+
+- **Question.** Does the D-016 stage chain execute end to end against a real
+  model, and does fail-clear actually fire when the bar is not met?
+- **Method.** `golearn-forge generate --topic "Go goroutines and channels"
+  --count 2 --difficulty easy --allow-ungrounded`, against the reference host,
+  `qwen3.5:4b`, reasoning off. Stage timings read from the inference host's own
+  request log rather than from the client, so the numbers are the server's.
+- **Result. The chain ran; the bar was not met; the pipeline refused.**
+
+  ```
+  error: could not produce the requested number of valid questions:
+  produced 1 of 2 after 3 round(s); 3 candidate(s) were rejected by
+  validation, verification, critique or the similarity gate
+  ```
+
+  | Stage | Wall clock |
+  | --- | --- |
+  | generate (2 candidates) | 4 m 04 s |
+  | verify (candidate 1) | 46.8 s |
+  | critique (candidate 1) | 42.1 s |
+
+  16 provider attempts across 3 rounds. **No draft was written**, the run was
+  recorded `failed`, and the diagnostic carries the counts.
+- **What it locked in.** Fail-clear is real, not aspirational: one candidate
+  survived the full chain and the pipeline still refused to emit a pack of one
+  when two were asked for. That is D-016's rule working under exactly the
+  pressure it exists for — a pack of one would have looked complete to
+  everything downstream.
+- **The product consequence, stated rather than discovered later.** At ~2
+  minutes per question generated plus ~90 s per candidate to verify and
+  critique, and with candidates being rejected, **question count is the
+  parameter that gives on this hardware**. A three-question pack through the
+  complete chain is a real result; a twenty-question pack is an unattended
+  overnight job. That is a hardware statement, not a pipeline one, and it is
+  why the count bound exists.
+- **Withheld claim.** One model on one CPU host. Nothing here is evidence about
+  pack quality, about any other model, or about any other provider.
+
+#### B-2.4 · Was the schema-shape hypothesis right?
+
+**Reporting against the criterion committed in B-2.2, which was ≥25% reduction.**
+
+- **Result so far: not supported.** The nested-schema run generated one
+  candidate in **52 s**; the simplified-schema run generated two in **4 m 04 s**,
+  or ~122 s per question. On its face that is *worse*, not 25% better.
+- **But the comparison is confounded and must not be reported as a
+  refutation.** The two runs differ in requested count, in prompt (the second
+  carries the "these already exist" list), and in output length, which the
+  model chooses. Neither run was designed as an A/B; they are two observations
+  of different workloads, which is precisely the error B-2.2 was written to
+  call out — and repeating it while claiming to have corrected it would be
+  worse than the original.
+- **Honest conclusion:** the pre-registered criterion is **not met**, and the
+  hypothesis that schema shape dominates generation cost is **unsupported by
+  this evidence**. A clean A/B — identical prompt, identical requested content,
+  one variable — is the measurement that would settle it, and it has not been
+  run. The schema change stays regardless, because its justification never
+  depended on speed: choice ids are arbitrary internal labels, and having the
+  model invent them adds a degree of freedom that can only go wrong.
+
 ---
 
 ## Part C — Application benchmarks
