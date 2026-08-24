@@ -2,7 +2,7 @@ module github.com/dezeat/golearn
 
 go 1.25.0
 
-toolchain go1.25.10
+toolchain go1.25.14
 
 require (
 	github.com/charmbracelet/bubbletea v1.3.10

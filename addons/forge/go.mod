@@ -2,7 +2,7 @@ module github.com/dezeat/golearn/addons/forge
 
 go 1.25.0
 
-toolchain go1.25.10
+toolchain go1.25.14
 
 require github.com/dezeat/golearn v0.0.0
 
