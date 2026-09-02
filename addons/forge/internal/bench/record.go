@@ -112,6 +112,8 @@ type Record struct {
 	Timestamp     string                `json:"timestamp"`
 	Provider      string                `json:"provider"`
 	Model         string                `json:"model"`
+	JudgeProvider string                `json:"judge_provider,omitempty"`
+	JudgeModel    string                `json:"judge_model,omitempty"`
 	PromptHash    string                `json:"prompt_hash"`
 	SchemaVariant string                `json:"schema_variant"`
 	Sampling      string                `json:"sampling"`
