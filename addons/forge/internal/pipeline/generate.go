@@ -33,11 +33,13 @@ import (
 // silently change what the model is asked for.
 const candidateSchema = `{
   "type": "object",
+  "additionalProperties": false,
   "properties": {
     "questions": {
       "type": "array",
       "items": {
         "type": "object",
+        "additionalProperties": false,
         "properties": {
           "prompt": {"type": "string"},
           "choices": {"type": "array", "items": {"type": "string"}},
@@ -46,7 +48,7 @@ const candidateSchema = `{
           "tags": {"type": "array", "items": {"type": "string"}},
           "citations": {"type": "array", "items": {"type": "string"}}
         },
-        "required": ["prompt", "choices", "correct_choices", "explanation", "citations"]
+        "required": ["prompt", "choices", "correct_choices", "explanation", "tags", "citations"]
       }
     }
   },

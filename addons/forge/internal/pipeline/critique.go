@@ -26,6 +26,7 @@ import (
 
 const critiqueSchema = `{
   "type": "object",
+  "additionalProperties": false,
   "properties": {
     "grounded": {"type": "boolean"},
     "distractors_plausible": {"type": "boolean"},
@@ -71,6 +72,7 @@ Reply with JSON only.`
 
 const ungroundedCritiqueSchema = `{
   "type": "object",
+  "additionalProperties": false,
   "properties": {
     "distractors_plausible": {"type": "boolean"},
     "single_defensible_answer": {"type": "boolean"},

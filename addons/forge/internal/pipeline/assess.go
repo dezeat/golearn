@@ -178,6 +178,7 @@ func (p *Pipeline) checkCitations(candidate domain.Candidate, evidence []domain.
 
 const verifierSchema = `{
   "type": "object",
+  "additionalProperties": false,
   "properties": {
     "correct_choice_ids": {"type": "array", "items": {"type": "string"}},
     "reasoning": {"type": "string"}
