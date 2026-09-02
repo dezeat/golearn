@@ -405,7 +405,7 @@ func main() {
 				SingleDefensibleAnswer bool   `json:"single_defensible_answer"`
 				Problem                string `json:"problem"`
 			}
-			ok := probe(critiqueSystem, prompt+"\n\n"+choices, critiqueProbeSchema, &cr)
+			ok := probe(critiqueSystem, verifyContext+prompt+"\n\n"+choices, critiqueProbeSchema, &cr)
 			mu.Lock()
 			defer mu.Unlock()
 			if ok {

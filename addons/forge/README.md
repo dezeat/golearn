@@ -41,11 +41,13 @@ the live campaign is tracked in
 One finding is universal and worth knowing before you trust any generated
 pack: **a strong judge picks the right answer from the choices alone far
 above chance, on every model's questions.** Answer keys check out
-(answer-blind verification passes across the field). How much of that is
-distractor style leaking the answer versus the correct option simply being
-the only true statement is exactly what the harness is being refined to
-separate — a pre-registered prompt fix moved the number by zero, which
-retired the naive probe rather than the question.
+(answer-blind verification passes across the field). Measured on a knowledge-free
+fictional domain — where style is the only possible cue — guessability falls
+to chance: the effect is the correct option being the only true statement,
+not sloppy distractor style. A property of factual MCQs and their
+knowledgeable readers, not an item defect for the learner who doesn't yet
+know the fact. Two pre-registered iterations built that instrument; the raw
+records ship in `evaluation/records/`.
 
 Three honest caveats, because they are the point:
 
