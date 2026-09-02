@@ -115,6 +115,7 @@ type Record struct {
 	JudgeProvider string                `json:"judge_provider,omitempty"`
 	JudgeModel    string                `json:"judge_model,omitempty"`
 	PromptHash    string                `json:"prompt_hash"`
+	PromptVariant string                `json:"prompt_variant,omitempty"`
 	SchemaVariant string                `json:"schema_variant"`
 	Sampling      string                `json:"sampling"`
 	Tally         Tally                 `json:"tally"`

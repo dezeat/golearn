@@ -18,7 +18,7 @@
 // a release build, and spends real money on hosted providers — the request
 // count is capped and paced for exactly that reason.
 //
-// Usage: bench <profile> <model> [n] [base|minmax] [jsonl-path] [judge-profile judge-model]
+// Usage: bench <profile> <model> [n] [base|minmax] [jsonl-path] [judge-profile judge-model] [prompt-variant]
 //
 // The judge probes (guessability, verify, critique) run on a separate judge
 // client when one is given. Judging with the generator model is the
@@ -71,6 +71,19 @@ If either is false, state the single most serious problem in one sentence. If bo
 Reply with JSON only.`
 
 const systemMsg = "You write multiple-choice questions. Reply with JSON only."
+
+// systemMsgParallel is the anti-leak variant (#141 H2): the campaign measured
+// that every model's options leak the answer — the correct answer is written
+// carefully while distractors are short, absolute, or absurd. The variant
+// names the craft rules the item-writing literature prescribes.
+const systemMsgParallel = `You write multiple-choice questions. Reply with JSON only.
+
+Distractor rules, all mandatory:
+- Every wrong choice must match the correct answer in length, specificity and tone.
+- Every wrong choice must be a plausible misconception a real learner holds, never an absurdity.
+- Do not use absolute qualifiers (always, never, automatically) in a wrong choice unless the correct answer also carries one.
+- A reader must not be able to pick the correct answer by style alone.`
+
 const userMsg = "Write one multiple-choice question about Go goroutines with exactly 4 choices."
 
 // pace keeps the runner under entry-tier RPM caps (the #141 lane measured 10
@@ -167,6 +180,14 @@ func main() {
 	if len(os.Args) > 7 {
 		judgeProfileID, judgeModel = os.Args[6], os.Args[7]
 	}
+	promptVariant := "base"
+	if len(os.Args) > 8 {
+		promptVariant = os.Args[8]
+	}
+	system := systemMsg
+	if promptVariant == "parallel" {
+		system = systemMsgParallel
+	}
 	schema := schemaBase
 	if variant == "minmax" {
 		schema = schemaMinMax
@@ -211,7 +232,7 @@ func main() {
 		judgeNote = ""
 	}
 
-	promptHash := sha256.Sum256([]byte(systemMsg + "\x00" + userMsg + "\x00" + schema))
+	promptHash := sha256.Sum256([]byte(system + "\x00" + userMsg + "\x00" + schema))
 	rec := bench.Record{
 		Timestamp:     time.Now().UTC().Format(time.RFC3339),
 		Provider:      profileID,
@@ -220,6 +241,7 @@ func main() {
 		JudgeModel:    judgeModel,
 		Notes:         judgeNote,
 		PromptHash:    fmt.Sprintf("%x", promptHash[:8]),
+		PromptVariant: promptVariant,
 		SchemaVariant: variant,
 		Sampling:      "provider-default",
 		Metrics:       map[string]bench.Proportion{},
@@ -235,7 +257,7 @@ func main() {
 		ctx, cancel := context.WithTimeout(context.Background(), perCallDeadline)
 		start := time.Now()
 		var q quiz
-		gerr := client.Generate(ctx, ports.Request{System: systemMsg, User: userMsg, Schema: []byte(schema)}, &q)
+		gerr := client.Generate(ctx, ports.Request{System: system, User: userMsg, Schema: []byte(schema)}, &q)
 		cancel()
 		elapsed := time.Since(start).Seconds()
 		class := classify(gerr)
