@@ -120,6 +120,7 @@ type Record struct {
 	Sampling      string                `json:"sampling"`
 	TopicVariant  string                `json:"topic_variant,omitempty"`
 	Tally         Tally                 `json:"tally"`
+	ProbeTally    Tally                 `json:"probe_tally,omitempty"`
 	Metrics       map[string]Proportion `json:"metrics"`
 	Verdicts      map[string]Verdict    `json:"verdicts"`
 	MeanLatencyS  float64               `json:"mean_latency_s"`

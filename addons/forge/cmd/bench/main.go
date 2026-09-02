@@ -348,10 +348,18 @@ func main() {
 	verified, vN := 0, 0
 	critiqued, cN := 0, 0
 	limit := min(len(questions), 8)
+	// A lost probe call shrinks a denominator invisibly unless it is counted:
+	// the H3 arms lost half their guess probes to judge errors before this
+	// tally existed. Failed-but-executed calls (a judge reply that does not
+	// parse) stay visible here too.
 	probe := func(system, user, schema string, out any) bool {
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 		defer cancel()
-		return judge.Generate(ctx, ports.Request{System: system, User: user, Schema: []byte(schema)}, out) == nil
+		err := judge.Generate(ctx, ports.Request{System: system, User: user, Schema: []byte(schema)}, out)
+		mu.Lock()
+		rec.ProbeTally.Add(classify(err))
+		mu.Unlock()
+		return err == nil
 	}
 	var probeTasks []func()
 	for qi, q := range questions[:limit] {
@@ -432,7 +440,7 @@ func main() {
 		rec.Metrics["verify_pass"].Lo, rec.Metrics["verify_pass"].Hi, rec.Verdicts["verify_pass"])
 	fmt.Printf("CRITIQUE %d/%d [%.3f, %.3f]\n", critiqued, cN,
 		rec.Metrics["critique_pass"].Lo, rec.Metrics["critique_pass"].Hi)
-	fmt.Printf("TALLY    %v mean_latency=%.2fs\n", rec.Tally.Counts, rec.MeanLatencyS)
+	fmt.Printf("TALLY    gen=%v probes=%v mean_latency=%.2fs\n", rec.Tally.Counts, rec.ProbeTally.Counts, rec.MeanLatencyS)
 
 	line, err := rec.JSONL()
 	if err != nil {
