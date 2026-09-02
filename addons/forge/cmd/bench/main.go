@@ -74,8 +74,18 @@ const userMsg = "Write one multiple-choice question about Go goroutines with exa
 
 // pace keeps the runner under entry-tier RPM caps (the #141 lane measured 10
 // requests/min on a fresh OpenAI account); bursting past the cap turns the
-// run into a measurement of admission control.
-const pace = 7 * time.Second
+// run into a measurement of admission control. BENCH_PACE_SECONDS overrides
+// it for providers with roomier limits — inter-call idle is not a measured
+// quantity, so the override cannot bias a metric.
+var pace = 7 * time.Second
+
+func init() {
+	if v := os.Getenv("BENCH_PACE_SECONDS"); v != "" {
+		if secs, err := strconv.Atoi(v); err == nil && secs >= 0 {
+			pace = time.Duration(secs) * time.Second
+		}
+	}
+}
 
 const perCallDeadline = 3 * time.Minute
 
