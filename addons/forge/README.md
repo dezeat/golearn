@@ -30,11 +30,20 @@ percentages. The full lab notebook lives in
 the live campaign is tracked in
 [#141](https://github.com/dezeat/golearn/issues/141).
 
-| Model · provider | Structured output | Latency / call | Cost / call |
-| --- | --- | --- | --- |
-| `gpt-5-nano` · OpenAI | **20/20 valid** (CI 0.84–1.00) | ~8–11 s | fractions of a cent |
-| `deepseek-v4-flash-0731` · OpenRouter | 17/20 with schema-enforced choice count (CI 0.64–0.95); every failure a routing timeout, not a format error | ~2–10 s, occasional multi-minute outliers | **$0.0001 measured** (provider-reported) |
-| `qwen3.5:4b` · Ollama (CPU-only N100) | valid | ~50–70 s | $0 — your hardware |
+| Model · provider | Structured output | Question craft (judge-scored) | Latency / call | Cost / call |
+| --- | --- | --- | --- | --- |
+| `gpt-5.6-luna` · OpenAI | **20/20** (CI 0.84–1.00) | best in field — critique clean under two judges | **~3 s** | fractions of a cent |
+| `gpt-5-nano` · OpenAI | 15/15 | clean critique; slow (hidden reasoning) | ~8–14 s | fractions of a cent |
+| `deepseek-v4-flash-0731` · OpenRouter | 20/20 (CI 0.84–1.00) | solid; occasional routing timeouts | ~2–10 s | **$0.0001 measured** |
+| `z-ai/glm-5.3-flash` · OpenRouter | 20/20 (CI 0.84–1.00) | **weakest** — 2 judges flag implausible distractors, 2 answer-key defects | ~3–19 s | ~$0.0001 |
+| `qwen3.5:4b` · Ollama (CPU-only N100) | valid | not yet judge-scored | ~50–70 s | $0 — your hardware |
+
+One finding is universal and worth knowing before you trust any generated
+pack: **every model's questions leak the answer through the options** to some
+degree — a strong judge picks the right answer from the choices alone far
+above chance. Answer keys check out (answer-blind verification passes across
+the field); the craft gap is distractor writing, it is measured, and it is
+the generation pipeline's first tuning target.
 
 Three honest caveats, because they are the point:
 
