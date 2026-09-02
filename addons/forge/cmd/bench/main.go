@@ -35,6 +35,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/dezeat/golearn/addons/forge/internal/adapters/provider"
@@ -79,12 +80,45 @@ const userMsg = "Write one multiple-choice question about Go goroutines with exa
 // quantity, so the override cannot bias a metric.
 var pace = 7 * time.Second
 
+// workers is per-lane call concurrency (BENCH_CONCURRENCY, default 1 — the
+// sequential behaviour). Pacing applies per worker, so effective request rate
+// is workers/pace: size both to the provider's RPM budget, because past it
+// the run measures admission control instead of the model.
+var workers = 1
+
 func init() {
 	if v := os.Getenv("BENCH_PACE_SECONDS"); v != "" {
 		if secs, err := strconv.Atoi(v); err == nil && secs >= 0 {
 			pace = time.Duration(secs) * time.Second
 		}
 	}
+	if v := os.Getenv("BENCH_CONCURRENCY"); v != "" {
+		if c, err := strconv.Atoi(v); err == nil && c >= 1 {
+			workers = c
+		}
+	}
+}
+
+// runPool executes tasks with the configured worker count, each worker
+// sleeping one pace between its tasks.
+func runPool(tasks []func(), workers int) {
+	var wg sync.WaitGroup
+	queue := make(chan func())
+	for w := 0; w < workers; w++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for task := range queue {
+				task()
+				time.Sleep(pace)
+			}
+		}()
+	}
+	for _, t := range tasks {
+		queue <- t
+	}
+	close(queue)
+	wg.Wait()
 }
 
 const perCallDeadline = 3 * time.Minute
@@ -195,20 +229,24 @@ func main() {
 	parseOK, contractOK := 0, 0
 	var latencySum float64
 	var questions []quiz
-	for attempt := 0; rec.Tally.Executed() < n && attempt < 2*n; attempt++ {
+	var mu sync.Mutex
+
+	generateOne := func(label int) {
 		ctx, cancel := context.WithTimeout(context.Background(), perCallDeadline)
 		start := time.Now()
 		var q quiz
 		gerr := client.Generate(ctx, ports.Request{System: systemMsg, User: userMsg, Schema: []byte(schema)}, &q)
 		cancel()
+		elapsed := time.Since(start).Seconds()
 		class := classify(gerr)
+		mu.Lock()
+		defer mu.Unlock()
 		rec.Tally.Add(class)
 		if class != bench.ClassExecuted {
-			fmt.Printf("GEN %02d %s (excluded) err=%v\n", attempt+1, class, gerr)
-			time.Sleep(pace)
-			continue
+			fmt.Printf("GEN %02d %s (excluded) err=%v\n", label, class, gerr)
+			return
 		}
-		latencySum += time.Since(start).Seconds()
+		latencySum += elapsed
 		pv := gerr == nil
 		cv := pv && q.Prompt != "" && len(q.Choices) == 4 && q.Correct >= 0 && q.Correct < 4
 		if pv {
@@ -219,8 +257,25 @@ func main() {
 			questions = append(questions, q)
 		}
 		fmt.Printf("GEN %02d parse=%v contract=%v latency=%.2fs choices=%d err=%v\n",
-			attempt+1, pv, cv, time.Since(start).Seconds(), len(q.Choices), gerr)
-		time.Sleep(pace)
+			label, pv, cv, elapsed, len(q.Choices), gerr)
+	}
+
+	// Two batches rather than a retry loop: the first asks for n, the second
+	// tops up whatever admission control ate, and the 2n attempt cap from the
+	// sequential runner still holds.
+	attempts := 0
+	for batch := 0; batch < 2 && rec.Tally.Executed() < n && attempts < 2*n; batch++ {
+		want := n - rec.Tally.Executed()
+		if attempts+want > 2*n {
+			want = 2*n - attempts
+		}
+		tasks := make([]func(), 0, want)
+		for i := 0; i < want; i++ {
+			label := attempts + i + 1
+			tasks = append(tasks, func() { generateOne(label) })
+		}
+		runPool(tasks, workers)
+		attempts += want
 	}
 	executed := rec.Tally.Executed()
 	if executed > 0 {
@@ -246,6 +301,12 @@ func main() {
 	verified, vN := 0, 0
 	critiqued, cN := 0, 0
 	limit := min(len(questions), 8)
+	probe := func(system, user, schema string, out any) bool {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+		defer cancel()
+		return judge.Generate(ctx, ports.Request{System: system, User: user, Schema: []byte(schema)}, out) == nil
+	}
+	var probeTasks []func()
 	for qi, q := range questions[:limit] {
 		perm := bench.Permutation(len(q.Choices), int64(qi)+1)
 		shuffledCorrect := -1
@@ -256,64 +317,55 @@ func main() {
 				shuffledCorrect = pos
 			}
 		}
+		choices, correct, prompt := choicesList.String(), shuffledCorrect, q.Prompt
 
-		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
-		var g struct {
-			ChoiceIndex int `json:"choice_index"`
-		}
-		gerr := judge.Generate(ctx, ports.Request{
-			System: "You are given only the answer choices of a hidden multiple-choice question. Pick the index most likely to be the correct answer.",
-			User:   choicesList.String(),
-			Schema: []byte(guessSchema),
-		}, &g)
-		cancel()
-		if gerr == nil {
-			gN++
-			if g.ChoiceIndex == shuffledCorrect {
-				guessed++
+		probeTasks = append(probeTasks, func() {
+			var g struct {
+				ChoiceIndex int `json:"choice_index"`
 			}
-		}
-		time.Sleep(pace)
-
-		ctx, cancel = context.WithTimeout(context.Background(), 2*time.Minute)
-		var v struct {
-			ChoiceIndex int    `json:"choice_index"`
-			Reasoning   string `json:"reasoning"`
-		}
-		verr := judge.Generate(ctx, ports.Request{
-			System: "You are answering a multiple-choice question. Choose the correct answer. Reply with the choice index and one sentence of reasoning, as JSON only.",
-			User:   q.Prompt + "\n\n" + choicesList.String(),
-			Schema: []byte(verifySchema),
-		}, &v)
-		cancel()
-		if verr == nil {
-			vN++
-			if v.ChoiceIndex == shuffledCorrect {
-				verified++
+			ok := probe("You are given only the answer choices of a hidden multiple-choice question. Pick the index most likely to be the correct answer.",
+				choices, guessSchema, &g)
+			mu.Lock()
+			defer mu.Unlock()
+			if ok {
+				gN++
+				if g.ChoiceIndex == correct {
+					guessed++
+				}
 			}
-		}
-		time.Sleep(pace)
-
-		ctx, cancel = context.WithTimeout(context.Background(), 2*time.Minute)
-		var cr struct {
-			DistractorsPlausible   bool   `json:"distractors_plausible"`
-			SingleDefensibleAnswer bool   `json:"single_defensible_answer"`
-			Problem                string `json:"problem"`
-		}
-		cerr := judge.Generate(ctx, ports.Request{
-			System: critiqueSystem,
-			User:   q.Prompt + "\n\n" + choicesList.String(),
-			Schema: []byte(critiqueProbeSchema),
-		}, &cr)
-		cancel()
-		if cerr == nil {
-			cN++
-			if cr.DistractorsPlausible && cr.SingleDefensibleAnswer {
-				critiqued++
+		}, func() {
+			var v struct {
+				ChoiceIndex int    `json:"choice_index"`
+				Reasoning   string `json:"reasoning"`
 			}
-		}
-		time.Sleep(pace)
+			ok := probe("You are answering a multiple-choice question. Choose the correct answer. Reply with the choice index and one sentence of reasoning, as JSON only.",
+				prompt+"\n\n"+choices, verifySchema, &v)
+			mu.Lock()
+			defer mu.Unlock()
+			if ok {
+				vN++
+				if v.ChoiceIndex == correct {
+					verified++
+				}
+			}
+		}, func() {
+			var cr struct {
+				DistractorsPlausible   bool   `json:"distractors_plausible"`
+				SingleDefensibleAnswer bool   `json:"single_defensible_answer"`
+				Problem                string `json:"problem"`
+			}
+			ok := probe(critiqueSystem, prompt+"\n\n"+choices, critiqueProbeSchema, &cr)
+			mu.Lock()
+			defer mu.Unlock()
+			if ok {
+				cN++
+				if cr.DistractorsPlausible && cr.SingleDefensibleAnswer {
+					critiqued++
+				}
+			}
+		})
 	}
+	runPool(probeTasks, workers)
 	rec.Metrics["guessability"] = bench.NewProportion(guessed, gN)
 	rec.Metrics["verify_pass"] = bench.NewProportion(verified, vN)
 	rec.Metrics["critique_pass"] = bench.NewProportion(critiqued, cN)
