@@ -118,11 +118,24 @@ type Record struct {
 	PromptVariant string                `json:"prompt_variant,omitempty"`
 	SchemaVariant string                `json:"schema_variant"`
 	Sampling      string                `json:"sampling"`
+	TopicVariant  string                `json:"topic_variant,omitempty"`
 	Tally         Tally                 `json:"tally"`
 	Metrics       map[string]Proportion `json:"metrics"`
 	Verdicts      map[string]Verdict    `json:"verdicts"`
 	MeanLatencyS  float64               `json:"mean_latency_s"`
 	Notes         string                `json:"notes,omitempty"`
+	// Questions preserves what was actually judged, so a later arm can
+	// re-judge identical items — without it, every judge comparison is
+	// confounded with regeneration sampling.
+	Questions []StoredQuestion `json:"questions,omitempty"`
+}
+
+// StoredQuestion is one generated item as the probes saw it.
+type StoredQuestion struct {
+	Prompt      string   `json:"prompt"`
+	Choices     []string `json:"choices"`
+	Correct     int      `json:"correct_index"`
+	ShuffleSeed int64    `json:"shuffle_seed"`
 }
 
 // JSONL renders the record as one line, the harness's on-disk format: append-

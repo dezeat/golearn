@@ -86,6 +86,20 @@ Distractor rules, all mandatory:
 
 const userMsg = "Write one multiple-choice question about Go goroutines with exactly 4 choices."
 
+// The fictional domain exists because guessability is only interpretable
+// where the judge has no parametric knowledge (#141 H2 refutation): on an
+// invented specification, options-only success above chance can come only
+// from style or elimination cues. The verify probe receives the spec; the
+// guess probe never does.
+const fictionalSpec = `The Zorvian Reckoning is a fictional calendar. Its rules, complete and exhaustive:
+- A year has 14 months. Odd months have 23 days, even months have 24, except month 7 (Quillmarch), which has 30.
+- A week has 6 days; the third day is called Restmark.
+- Every 5th year is a Veil Year: one extra day, Veilday, is appended to month 14 and belongs to no week.
+- The year begins at dawn on the 1st of month 1 (Firstreach).
+- Public rest days are every Restmark and the last day of every even month.`
+
+const userMsgFictional = "Using ONLY the following fictional specification, write one multiple-choice question with exactly 4 choices. Do not use any outside knowledge.\n\n" + fictionalSpec
+
 // pace keeps the runner under entry-tier RPM caps (the #141 lane measured 10
 // requests/min on a fresh OpenAI account); bursting past the cap turns the
 // run into a measurement of admission control. BENCH_PACE_SECONDS overrides
@@ -188,6 +202,16 @@ func main() {
 	if promptVariant == "parallel" {
 		system = systemMsgParallel
 	}
+	topicVariant := os.Getenv("BENCH_TOPIC")
+	if topicVariant == "" {
+		topicVariant = "go"
+	}
+	user := userMsg
+	verifyContext := ""
+	if topicVariant == "fictional" {
+		user = userMsgFictional
+		verifyContext = fictionalSpec + "\n\n"
+	}
 	schema := schemaBase
 	if variant == "minmax" {
 		schema = schemaMinMax
@@ -232,7 +256,7 @@ func main() {
 		judgeNote = ""
 	}
 
-	promptHash := sha256.Sum256([]byte(system + "\x00" + userMsg + "\x00" + schema))
+	promptHash := sha256.Sum256([]byte(system + "\x00" + user + "\x00" + schema))
 	rec := bench.Record{
 		Timestamp:     time.Now().UTC().Format(time.RFC3339),
 		Provider:      profileID,
@@ -243,6 +267,7 @@ func main() {
 		PromptHash:    fmt.Sprintf("%x", promptHash[:8]),
 		PromptVariant: promptVariant,
 		SchemaVariant: variant,
+		TopicVariant:  topicVariant,
 		Sampling:      "provider-default",
 		Metrics:       map[string]bench.Proportion{},
 		Verdicts:      map[string]bench.Verdict{},
@@ -257,7 +282,7 @@ func main() {
 		ctx, cancel := context.WithTimeout(context.Background(), perCallDeadline)
 		start := time.Now()
 		var q quiz
-		gerr := client.Generate(ctx, ports.Request{System: system, User: userMsg, Schema: []byte(schema)}, &q)
+		gerr := client.Generate(ctx, ports.Request{System: system, User: user, Schema: []byte(schema)}, &q)
 		cancel()
 		elapsed := time.Since(start).Seconds()
 		class := classify(gerr)
@@ -330,7 +355,8 @@ func main() {
 	}
 	var probeTasks []func()
 	for qi, q := range questions[:limit] {
-		perm := bench.Permutation(len(q.Choices), int64(qi)+1)
+		seed := int64(qi) + 1
+		perm := bench.Permutation(len(q.Choices), seed)
 		shuffledCorrect := -1
 		var choicesList strings.Builder
 		for pos, orig := range perm {
@@ -340,6 +366,9 @@ func main() {
 			}
 		}
 		choices, correct, prompt := choicesList.String(), shuffledCorrect, q.Prompt
+		rec.Questions = append(rec.Questions, bench.StoredQuestion{
+			Prompt: q.Prompt, Choices: q.Choices, Correct: q.Correct, ShuffleSeed: seed,
+		})
 
 		probeTasks = append(probeTasks, func() {
 			var g struct {
@@ -361,7 +390,7 @@ func main() {
 				Reasoning   string `json:"reasoning"`
 			}
 			ok := probe("You are answering a multiple-choice question. Choose the correct answer. Reply with the choice index and one sentence of reasoning, as JSON only.",
-				prompt+"\n\n"+choices, verifySchema, &v)
+				verifyContext+prompt+"\n\n"+choices, verifySchema, &v)
 			mu.Lock()
 			defer mu.Unlock()
 			if ok {
