@@ -39,11 +39,13 @@ the live campaign is tracked in
 | `qwen3.5:4b` · Ollama (CPU-only N100) | valid | not yet judge-scored | ~50–70 s | $0 — your hardware |
 
 One finding is universal and worth knowing before you trust any generated
-pack: **every model's questions leak the answer through the options** to some
-degree — a strong judge picks the right answer from the choices alone far
-above chance. Answer keys check out (answer-blind verification passes across
-the field); the craft gap is distractor writing, it is measured, and it is
-the generation pipeline's first tuning target.
+pack: **a strong judge picks the right answer from the choices alone far
+above chance, on every model's questions.** Answer keys check out
+(answer-blind verification passes across the field). How much of that is
+distractor style leaking the answer versus the correct option simply being
+the only true statement is exactly what the harness is being refined to
+separate — a pre-registered prompt fix moved the number by zero, which
+retired the naive probe rather than the question.
 
 Three honest caveats, because they are the point:
 
