@@ -1761,3 +1761,52 @@ Go-side cosine over a vector backend rests on the corpus being small enough
 that brute force is irrelevant to the user. That argument is only as good as
 the benchmark that tests it, so the benchmark is written to *look for* the
 corpus size at which it stops being true.
+
+## Part D — The hosted-provider campaign, and what it did to our own KPIs
+
+One evening, three pre-registered iterations, eleven run records
+(`addons/forge/evaluation/records/2026-09-02-hosted-campaign.jsonl`), full
+evidence chain on [#141](https://github.com/dezeat/golearn/issues/141). The
+compact record; the issue carries every table.
+
+### D-1 · Tier-1 mechanism, OpenAI and OpenRouter
+
+- **Result.** OpenAI `gpt-5-nano`: structured output 20/20, Wilson [0.839, 1],
+  **PASS**; timeout and cancel clean. OpenRouter `deepseek-v4-flash`: fails
+  the floor on the base schema (11/20 contract), **passes 20/20** once the
+  four-choice contract moves into the schema (`minItems`/`maxItems`) — H1
+  accepted on its second arm. The e2e CLI run against OpenAI found all four
+  provider-facing schemas violating strict-mode rules (HTTP 400 on every
+  call, invisible to fixtures); fixed and pinned by test on `feat/forge`.
+- **What it locked in.** Wire contracts belong in the schema, not the prompt;
+  live lanes catch what fixtures cannot (the A-12 lesson, provider edition).
+
+### D-2 · The guessability corrections (H2 refuted, H3 built the instrument)
+
+- **Question.** Every model's questions were "guessable from options alone"
+  far above chance, under two judges. Distractor craft, or something else?
+- **Method.** Pre-registered anti-leak prompt (H2): guessability moved by
+  exactly zero — the probe could not register craft. H3 rebuilt it on a
+  **knowledge-free fictional domain** (invented calendar spec; verify probe
+  receives the spec, guess probe never does).
+- **Result.** On the clean instrument, guessing falls to chance-compatible
+  (3/8 [.137,.694] vs [.676,1] on Go questions). The "leak" was **knowledge
+  dominance** — a knowledgeable rater picks the only true statement, stem or
+  no stem. Withdrawn as a craft finding; harmless for the learner who does
+  not yet know the fact.
+- **What it locked in.** Choices-only guessability is uninterpretable on
+  domains the judge knows (the KDA distinction, learned empirically). The
+  fictional-domain contrast is the style-leak KPI. Judge strength moves
+  knowledge-route probes (sol vs deepseek) — judges must qualify before
+  their verdicts count, and probes need the same failure taxonomy as
+  generation: the H3 arms lost half their guess calls silently before the
+  probe tally existed.
+
+### D-3 · The field, one line each
+
+Judged cross-model, n=8 probes, records carry all axes: `gpt-5.6-luna`
+fastest and cleanest (2.8 s, critique 8/8 under both judges); `gpt-5-nano`
+sound but reasoning-slow (10.6 s, no reasoning control sent — #149);
+`deepseek-v4-flash` solid mid-field; `z-ai/glm-5.3-flash` weakest author
+(critique 3/8 and 2/8 under two judges, two answer-key defects found by the
+stronger one). Campaign spend: under a dollar.

@@ -30,11 +30,24 @@ percentages. The full lab notebook lives in
 the live campaign is tracked in
 [#141](https://github.com/dezeat/golearn/issues/141).
 
-| Model · provider | Structured output | Latency / call | Cost / call |
-| --- | --- | --- | --- |
-| `gpt-5-nano` · OpenAI | **20/20 valid** (CI 0.84–1.00) | ~8–11 s | fractions of a cent |
-| `deepseek-v4-flash-0731` · OpenRouter | 17/20 with schema-enforced choice count (CI 0.64–0.95); every failure a routing timeout, not a format error | ~2–10 s, occasional multi-minute outliers | **$0.0001 measured** (provider-reported) |
-| `qwen3.5:4b` · Ollama (CPU-only N100) | valid | ~50–70 s | $0 — your hardware |
+| Model · provider | Structured output | Question craft (judge-scored) | Latency / call | Cost / call |
+| --- | --- | --- | --- | --- |
+| `gpt-5.6-luna` · OpenAI | **20/20** (CI 0.84–1.00) | best in field — critique clean under two judges | **~3 s** | fractions of a cent |
+| `gpt-5-nano` · OpenAI | 15/15 | clean critique; slow (hidden reasoning) | ~8–14 s | fractions of a cent |
+| `deepseek-v4-flash-0731` · OpenRouter | 20/20 (CI 0.84–1.00) | solid; occasional routing timeouts | ~2–10 s | **$0.0001 measured** |
+| `z-ai/glm-5.3-flash` · OpenRouter | 20/20 (CI 0.84–1.00) | **weakest** — 2 judges flag implausible distractors, 2 answer-key defects | ~3–19 s | ~$0.0001 |
+| `qwen3.5:4b` · Ollama (CPU-only N100) | valid | not yet judge-scored | ~50–70 s | $0 — your hardware |
+
+One finding is universal and worth knowing before you trust any generated
+pack: **a strong judge picks the right answer from the choices alone far
+above chance, on every model's questions.** Answer keys check out
+(answer-blind verification passes across the field). Measured on a knowledge-free
+fictional domain — where style is the only possible cue — guessability falls
+to chance: the effect is the correct option being the only true statement,
+not sloppy distractor style. A property of factual MCQs and their
+knowledgeable readers, not an item defect for the learner who doesn't yet
+know the fact. Two pre-registered iterations built that instrument; the raw
+records ship in `evaluation/records/`.
 
 Three honest caveats, because they are the point:
 
