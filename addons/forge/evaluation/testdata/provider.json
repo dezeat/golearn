@@ -1,0 +1,9 @@
+{
+  "test_key": "sk-evaluation-fixture-not-a-secret",
+  "profiles": {
+    "openai": {"choices": [{"message": {"role": "assistant", "content": "{\"answer\":\"42\"}"}}]},
+    "openrouter": {"choices": [{"message": {"role": "assistant", "content": "{\"answer\":\"42\"}"}}]},
+    "anthropic": {"content": [{"type": "text", "text": "{\"answer\":\"42\"}"}], "stop_reason": "end_turn"},
+    "ollama": {"message": {"role": "assistant", "content": "{\"answer\":\"42\"}"}, "done": true}
+  }
+}

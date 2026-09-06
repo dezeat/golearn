@@ -70,8 +70,16 @@ func ValidatePackVersion(version string) string {
 	if err != nil {
 		return err.Error()
 	}
-	if major != SupportedPackMajor || minor != SupportedPackMinor {
-		return fmt.Sprintf("unsupported version %q (supported: %d.%d.x)", version, SupportedPackMajor, SupportedPackMinor)
+	if major != SupportedPackMajor {
+		return fmt.Sprintf("unsupported version %q (supported: %d.0.x through %d.%d.x)",
+			version, SupportedPackMajor, SupportedPackMajor, MaxSupportedPackMinor)
+	}
+	// Minors are additive within a major (D-017), so an older one is readable
+	// and a newer one is not: it may carry fields this binary would silently
+	// drop, and silently dropping content is how a re-export loses data.
+	if minor > MaxSupportedPackMinor {
+		return fmt.Sprintf("unsupported version %q (this golearn reads up to %d.%d.x; upgrade to read it)",
+			version, SupportedPackMajor, MaxSupportedPackMinor)
 	}
 	return ""
 }

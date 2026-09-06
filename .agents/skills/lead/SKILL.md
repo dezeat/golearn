@@ -68,4 +68,4 @@ machine, and unrecorded state is the dominant multi-agent failure mode.
 - **Never let the board lag the work.** A stale column is worse than no board,
   because it is believed.
 - **Report deviations rather than absorbing them.** Anything done that wasn't
-  asked, and anything asked that wasn't done, belongs in the completion report.
+  asked, and anything asked that wasn't done, is stated when you report.

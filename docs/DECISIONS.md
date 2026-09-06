@@ -540,3 +540,411 @@ pack-level metadata never feeds the per-question content hash.
   taxonomy that must be evaluation-gated before it freezes.
 - Dedup behaviour is identical across `0.1.x` and `0.2.0` imports because the
   hash inputs do not change.
+
+### D-018 — Embedding is an optional provider capability, not a `Provider` method
+
+**Status:** accepted · **Date:** 2026-08-23
+
+**Context.** Forge's similarity gate needs embeddings, and FORGE.md §7 leaves
+the source open: "the recommendation must state the embedding source per
+provider profile, the behaviour when none is available". The behaviour-when-
+none case is not hypothetical or transitional — **Anthropic ships no
+embeddings API at all**, so one of the four mandated V1 profiles can never
+produce a vector however it is configured. The obvious shape, an `Embed`
+method on the single provider port with a sentinel error for the profiles
+that cannot honour it, makes a permanent product fact look like a runtime
+failure and defers discovering it to the moment a user asks for a pack.
+
+**Decision.** Model embedding as a **separate, optional interface**
+(`ports.Embedder`) that a provider adapter either implements or does not.
+
+- `ports.Provider` carries chat/structured generation only. All four V1
+  profiles satisfy it.
+- `ports.Embedder` is satisfied only by profiles that actually expose an
+  embeddings endpoint. The Anthropic adapter does not implement it, so its
+  absence is a **compile-time fact** rather than a runtime branch.
+- `domain.ErrNoEmbeddingCapability` is the typed form for the pipeline's
+  fail-clear path, checked *before* a strategy is chosen rather than
+  discovered mid-run.
+- Rejected: a `Capabilities` struct alongside the interface. Two sources of
+  truth for the same fact can disagree, and the flag is the one that would
+  drift.
+
+**Consequences.**
+
+- The similarity gate must decide its behaviour for a no-embedding profile
+  explicitly, because it cannot obtain an `Embedder` to call in the first
+  place.
+- #123's acceptance wording — "all four profiles satisfy one port contract" —
+  needs reading with care and is recorded as such: **Anthropic satisfies the
+  chat contract, not the embedding one.** That is the design, not a gap in it.
+- The cost is two interfaces where one looks simpler, and a type assertion at
+  the seam that binds them.
+- A test asserting the Anthropic adapter does *not* satisfy `Embedder` fails
+  the moment someone bolts on a stub that pretends otherwise.
+
+### D-019 — Forge resolves secrets from the environment first; the OS keychain is a desktop addition
+
+**Status:** accepted · **Date:** 2026-08-23
+
+**Context.** FORGE.md §6.2 states the direction as "keys live in the **OS
+keychain**; environment variables override for automation", gated on spike
+#106. #106 has not reported. Meanwhile the environments golearn is actually
+developed, tested and run in for this work — containers, headless Linux, CI,
+SSH sessions — are precisely the ones where no Secret Service exists, which
+#106's own scope calls out as the risk. A keychain-first policy would make
+the fallback the common path and the primary path the exception, and every
+keychain library that could implement it is a **new dependency** in a repo
+whose minimal-footprint rule requires one to be justified rather than
+assumed.
+
+**Decision.** Invert the emphasis: **the environment is the primary
+resolution path**, and an OS keychain is a desktop convenience layered on
+later.
+
+- Precedence is environment → keychain → none, expressed in the resolver
+  implementation where it can be tested, not in the interface.
+- `domain.SecretOrigin` records which source supplied the active credential,
+  so a user can ask "where is my key coming from?" and get an answer that is
+  not the key.
+- No keychain library is adopted. The `OriginKeychain` constant exists so the
+  precedence rule is written and tested against the full order rather than
+  retrofitted, but no adapter supplies it; the library choice stays #106's
+  deliverable.
+- This is recorded as an **explicit, documented deviation from FORGE.md
+  §6.2**, not a silent flip. FORGE.md's §6.2 wording is superseded by this
+  entry under the precedence rule (DECISIONS.md wins over FORGE.md).
+
+**Consequences.**
+
+- Forge works identically headless and on a desktop, and the path every test
+  exercises is the path most runs take.
+- Zero new dependencies for V1 secret handling.
+- The cost is that desktop users get no keychain integration at V1 and must
+  supply credentials through the environment, which is a weaker convenience
+  story than §6.2 promised.
+- Credentials are never persisted to SQLite, packs, drafts, logs or
+  diagnostics. `domain.Secret` refuses to render its value under **every**
+  formatting verb, `internal/config`'s shape-based guard covers output that
+  never passes through that type, and neither is a substitute for the other.
+
+### D-020 — Similarity uses float32 embedding BLOBs in the existing database with Go-side cosine
+
+**Status:** accepted · **Date:** 2026-08-23
+
+**Context.** FORGE.md §7 sets a backend priority order — a vector path in the
+pure-Go SQLite stack, then a native-Go alternative, then Go-side scoring —
+under hard constraints: no CGo, no native SQLite extensions (`sqlite-vec` is
+off the table under D-001), no vector database or server, no per-platform
+shared libraries. The constraints eliminate the first two rungs in practice,
+and D-012 makes performance an explicit non-goal at golearn's scale (single
+user, hundreds to low-thousands of questions per topic).
+
+**Decision.** Store embeddings as **little-endian IEEE-754 float32 BLOBs in
+the existing golearn SQLite database** and compute cosine similarity in Go.
+
+- No vector database, no ANN index, no second database, and **no new
+  dependency** — cosine is arithmetic.
+- `float32` rather than `float64`: embedding models emit float32, so float64
+  would store converted precision that never existed, at twice the bytes in a
+  user's database. Accumulation inside the cosine is float64, because summing
+  several hundred float32 products in float32 loses enough precision to move a
+  score across a threshold.
+- Byte order is explicit little-endian, because a database file is a portable
+  artifact and a user moving one between architectures must not read their
+  embeddings back as noise.
+- Vectors from different embedding models are not comparable, so the model
+  identity is stored with every vector and a mixed search is refused rather
+  than scored.
+- The backend sits behind `ports.SimilarityIndex`, which exchanges **vectors,
+  never providers**: the index must not know how a vector was produced, and
+  the embedding source must not know what it will be compared against.
+
+**Consequences.**
+
+- The similarity gate adds no operational surface: no server to run, no index
+  to rebuild, no platform-specific artifact, and the CGo-free cross-compile
+  matrix is untouched.
+- The argument rests entirely on the corpus staying small, so it is benchmarked
+  **adversarially** — the benchmark in `docs/design/FORGE-EXPERIMENTS.md`
+  Part C looks for the corpus size at which brute force stops being
+  irrelevant, rather than confirming that it is.
+- The cost is a linear scan whose cost grows with the corpus; the swap to an
+  indexed backend is a port implementation, not a change to pipeline logic.
+- A future large-corpus use case reopens this as a new entry, exactly as D-012
+  anticipates.
+
+### D-021 — D-020's scan-cost arithmetic is wrong by 30x; the decision survives inside D-012's stated scale
+
+**Status:** accepted · **Date:** 2026-08-24 · **Amends:** D-020
+
+**Context.** D-020 chose Go-side cosine over BLOB vectors and justified
+rejecting an ANN index with a specific number: "A personal MCQ library at
+10,000 questions × 768 dims × float32 is ~30 MB, and a full cosine scan is
+single-digit milliseconds in pure Go." D-020 also required that claim to be
+benchmarked adversarially rather than assumed. It now has been
+(`docs/design/FORGE-EXPERIMENTS.md` A-17), and the number is wrong.
+
+Measured on the development machine, 768 dimensions, warm page cache:
+
+| Corpus | One scan | One pack (20 candidates) |
+| --- | --- | --- |
+| 1,000 | ~8 ms | 0.16 s |
+| 10,000 | **79.5 ms** | **1.6–1.9 s** |
+| 100,000 | ~800 ms | 17–18 s |
+
+The single-scan figure is 10–20x above the estimate. The figure that reaches a
+user is worse again, because the gate scans the corpus **once per candidate**:
+a pack of twenty pays twenty scans. Benchmarking one scan would have reported
+the flattering number and hidden that factor.
+
+**Decision.** Record the arithmetic as **falsified** and D-020's decision as
+**standing, within a scale that is now stated rather than implied.**
+
+- D-012 puts the expected scale at "hundreds to low-thousands of questions per
+  topic". At 1,000–2,000 vectors a pack pass costs 0.16–0.31 s, which is
+  invisible beside the provider latency of the generation it follows. Inside
+  D-012's envelope the design argument holds, and holds comfortably.
+- Against a one-second budget for the whole pack pass, **the knee is near
+  6,000 questions in one topic.** Above that the gate becomes a visible
+  contributor to the wait rather than a background stage.
+- Cost is linear in corpus size with no superlinear term, and the cold-cache
+  measurement lands within noise of the warm one: the work is BLOB decode and
+  arithmetic, not disk. So the knee moves with dimensionality and pack size,
+  not with the user's storage.
+- No index, cache, or second backend is added now. D-012 forbids optimising a
+  cost that does not bite at realistic scale, and 6,000 questions in a single
+  topic is outside the scale this product is for. The swap remains a
+  `ports.SimilarityIndex` implementation, exactly as D-020 says.
+- **The trigger is named rather than left to judgement:** a topic corpus past
+  ~5,000 vectors reopens this. Cheap moves exist before an ANN index — scan
+  once for the whole pack instead of once per candidate, or narrow candidates
+  with FTS5 first — and they are implementation changes, not decision changes.
+
+**Also recorded here: the similarity port moved.** `ports/similarity.go` was
+frozen with the rest of the Wave 0 contracts, and this work amended it:
+
+- `Neighbor.QuestionID` was documented as "a core question id **or** a
+  draft-local index, depending on which method you called" — two id spaces in
+  one `int64`, told apart by a doc comment. It is now
+  `domain.LibraryQuestionID`, and the index addresses library content only.
+  Intra-pack collisions never enter the index at all, because a candidate may
+  be repaired, replaced or rejected and never reach the library; persisting its
+  vector would leave every later search scoring against content no user can
+  practice.
+- `SimilarityIndex.Missing` was added, so the gate embeds only library
+  questions that lack a vector. Without it every run re-embeds the whole topic
+  at the configured provider's expense (D-018).
+
+**Consequences.**
+
+- A reader meeting D-020's "single-digit milliseconds" now finds the measured
+  figure and the scale it holds within, instead of reconciling a 30x gap alone.
+- The similarity gate sends existing library questions to the embedding
+  provider the first time a topic is screened. That follows from D-020 plus
+  D-018's "follow the chat provider" and is the cost #75 asked to have named;
+  `Missing` keeps it a one-off per question rather than a per-run charge.
+- The benchmark states what it holds constant — dimensionality, pack size,
+  cache warmth, process count — because a benchmark whose conditions are
+  implicit is the same class of evidence failure as a gate that skips a module.
+
+### D-022 — An uncalibrated embedding model is refused, not scored with a default threshold
+
+**Status:** accepted · **Date:** 2026-08-24
+
+**Context.** #124 requires "a calibrated, versioned threshold". A similarity
+threshold is a property of an embedding model, not of the gate: the same pair
+of questions scores differently under different models, so a number derived
+under one is a guess under another — the same non-portability D-020 already
+recognised for the vectors themselves. That leaves a question the gate cannot
+avoid: what does it do when asked to score under a model no one has measured?
+
+The obvious answer is a conservative default, high enough to be safe against
+false positives. It is also how a threshold silently becomes "whatever seemed
+reasonable", which this branch's own discipline exists to prevent.
+
+Calibration needs a labeled fixture set, and the set built for this work
+(`addons/forge/internal/app/testdata/similarity_pairs.json`) contains hard
+negatives and two duplicates phrased with **disjoint vocabulary**. The
+deterministic lexical stand-in used to keep `make check` offline scores those
+two *below three of the negatives* — no threshold separates them. That is not
+a tuning problem; it is the difference between lexical overlap and semantic
+similarity, and it means no offline fixture can stand in for a measurement
+against a real embedding model.
+
+**Decision.** The committed calibration table ships **empty**, and a model
+absent from it is **refused** with `domain.ErrUncalibratedEmbeddingModel`.
+
+- Refusing follows the precedent already set across this codebase: `Cosine`
+  refuses a dimension mismatch rather than returning 0, the index refuses a
+  mixed-model search rather than returning a plausible score, and D-014 refuses
+  an unrecognised schema rather than guessing. A threshold is the same kind of
+  claim.
+- `app.NewGate` takes its thresholds **from the table only**. An earlier shape
+  let the caller pass a `Calibration` in, which meant the refusal could be
+  walked around by constructing one — a refusal that can be bypassed is
+  decoration. The test seam that supplies thresholds to the ladder's tests
+  lives in `export_test.go`, which the toolchain compiles only under test.
+- A fixture baseline and an unversioned threshold are both refused at
+  preflight, so neither can decide real content.
+- The derivation procedure and its pass criteria (no false positives, recall
+  floor 0.80, margin 0.02) are committed and testable, and were committed in an
+  earlier commit than any measured number.
+
+**Consequences.**
+
+- **The similarity gate cannot run against a real provider until a calibration
+  entry exists.** This is deliberate and visible rather than silent, but it is
+  a real gap in the pipeline and it belongs to the live provider lane (#130),
+  which is the only lane that can measure a real embedding model. Seeding the
+  table is then a one-line change plus the evidence for it.
+- The maintainer may prefer a named, uncalibrated default that lets the
+  pipeline run degraded. That is a legitimate different call; it is recorded
+  here as refused so that changing it is a decision rather than a drift.
+- The fixture set stays valuable regardless: it is what a real model gets
+  measured *against*, and its semantic pairs are the cases that distinguish a
+  semantic backend from a lexical one.
+
+### D-023 — Near-duplicate gating is a cascade: embeddings for recall, an LLM judge for the decision
+
+**Status:** accepted · **Date:** 2026-08-24 · **Amends:** D-022
+
+**Context.** D-022 refused to ship a similarity threshold nobody had measured,
+and required a real embedding model to be measured before the gate could score
+anything. That has now happened twice, and both runs failed the criteria
+committed before them (`docs/design/FORGE-EXPERIMENTS.md` A-22, A-24):
+
+| | `nomic-embed-text` (768d) | `bge-m3` (1024d) |
+| --- | --- | --- |
+| False positives | 0 | 0 |
+| Recall (floor 0.80) | 0.714 | 0.714 |
+| Duplicates above every negative | 6 of 7 | 5 of 7 |
+| Failure mode | lost on the margin (0.00414 vs 0.02) | never separated |
+
+The two failures are opposite, and that is what makes them conclusive rather
+than discouraging. **The blocker is the representation, not the model.** Around
+half of `domain.CanonicalText` is answer options, so the hard negative — *"zero
+value of a slice?"* against *"of a map?"*, three of four options identical — is
+lexically ~95% identical to its partner, while a true duplicate phrased in
+disjoint vocabulary shares ~5%. Cosine over one whole-question embedding is
+being asked to call the near-identical pair *different* and the disjoint pair
+*the same*. Two independent architectures decline at the same pair, so a third
+bi-encoder is a third sample of one limit rather than a new attempt.
+
+The fixture set is not at fault. Those two *are* legitimately different
+questions and a gate that rejected the second would be worse than no gate.
+
+A-25 then measured a judge that sees both questions at once, against the *same*
+thirteen pairs and the *same* pre-registered criteria: **0 false positives,
+recall 7/7, position consistency 13/13** — catching both pairs the embedders
+missed and correctly letting the hard negative through. This is also the
+standard shape in the retrieval literature, where a bi-encoder retrieves and a
+joint-encoding model decides.
+
+**Decision.** The gate becomes a **cascade**.
+
+- **Embeddings are retained as a recall filter**, not as the decision. D-020's
+  float32 BLOBs, Go-side cosine, model scoping and `Missing` backfill all
+  stand; only their role narrows.
+- **A judge over the existing `ports.Provider` makes the decision.** No
+  reranker model, no embeddings-only path, and **no new dependency** — Ollama
+  exposes no rerank endpoint, and the provider port already carries structured
+  generation.
+- **The recall filter needs no calibrated threshold.** A generous cut is
+  enough, because a neighbour admitted too many costs one judge call while a
+  neighbour missed costs a duplicate. **D-022's principle is upheld and in fact
+  strengthened: there is now no threshold picked by feel because there is no
+  scoring threshold at all.** What is retired is the mechanism — the
+  calibration table and `ErrUncalibratedEmbeddingModel` stop gating real
+  content.
+- **The ladder routes on the verdict, not on the fine-grained label.** A-25
+  measured exact six-way label accuracy at 0.538 while the duplicate/not
+  verdict was perfect, so any routing that depends on telling `paraphrase` from
+  `identical` would be built on the weakest part of the measurement.
+- Rejected: relaxing the 0.02 margin to make A-22 pass. A threshold of 0.85
+  would have scored 0 false positives and 0.857 recall and looked entirely
+  respectable; it is refused because the margin predates the data. That
+  criterion may well be wrong for compressed cosine ranges — changing it is a
+  future entry argued on grounds *independent* of these runs, followed by a
+  fresh measurement, never a re-grading of these.
+- Also rejected: a reranker model through Ollama (no rerank endpoint; the
+  CausalLM workaround returns text rather than logits, losing the graded
+  score), FTS5 as the recall filter (lexical, so it would miss exactly the
+  disjoint-vocabulary duplicates the judge exists to catch), and an agentic
+  loop (D-016 requires bounded attempts).
+
+**Consequences.**
+
+- The gate can run against a real provider for the first time, and #124's
+  unreachable acceptance criterion is replaced by one that was measured.
+- **The gate stops being arithmetic and becomes a provider cost.** A-25
+  measured ~6–10 s per judgement warm on the CPU-only reference host, and
+  generation rather than prefill is the bottleneck, so the lever is fewer
+  output tokens rather than a faster model. On hosted or GPU inference the cost
+  is negligible. The wall-clock a user pays must be measured and stated, not
+  estimated.
+- The decision boundary moves from a committed, versioned number into model
+  weights and a prompt, where it cannot be inspected. **That is a real loss of
+  inspectability**, and the labeled fixture set is what replaces it: the judge
+  is measured against the same thirteen pairs under the same criteria, and that
+  measurement is the artifact a reader checks instead of a threshold.
+- `Gate.Apply` currently promises that "the same pack screened twice must
+  resolve the same way". A judge holds that at temperature 0 but does not
+  guarantee it across model versions. **That promise must be explicitly
+  re-stated or withdrawn in the implementing change**, never silently broken.
+- Anthropic still has no embedder (D-018), but a judge does not require one, so
+  a small library can be screened without a recall filter. Whether that path is
+  offered is the implementation's call.
+- The empty calibration table and its guards remain as evidence of why this
+  design exists. They are not deleted to tidy up; A-22 and A-24 are the reason
+  the cascade is not merely a preference.
+
+### D-024 — Packs carry an acceptance-level trust summary; similarity is an optional capability
+
+**Status:** accepted · **Date:** 2026-08-24 · **Amends:** D-017
+
+**Relocation note.** The substance of this entry was first written *into* D-017
+after that entry had been accepted. `DECISIONS.md` states at the top that
+entries are never edited after acceptance and that a changed mind gets a new
+entry, so the text was moved here unchanged rather than left where it silently
+rewrote an accepted decision. **No wording was altered and nothing was decided
+in the move** — only its location, so that a reader of D-017 sees what D-017
+actually decided on 2026-07-26.
+
+**Context.** D-017 fixed which pack-level metadata schema 0.2.0 carries and
+what stays out of it. It did not say how a consumer tells a pack that passed
+the near-duplicate gate from one accepted while the gate never ran. An
+unscreened pack being indistinguishable from a screened one was raised as an
+open product question on PR #133, and the similarity gate has in fact never run
+for any real provider (D-022, and the measurements in FORGE-EXPERIMENTS A-22
+and A-24).
+
+**Decision.** Packs carry an acceptance-level `trust` summary, outside the
+per-question hash:
+
+- `trust.similarity: passed` only when the near-duplicate gate actually ran and
+  reached a verdict;
+- `trust.similarity: skipped` when similarity was explicitly disabled or
+  unavailable;
+- `trust.calibration` is present only for `passed` and names the safe
+  calibration identity, never an endpoint or credential.
+
+Similarity is an **optional product capability**. Where it is enabled, the
+refusal to score without a measured basis still holds.
+
+**Consequences.**
+
+- Consumers can distinguish a screened pack from one accepted with similarity
+  skipped; `skipped` is explicit metadata, never a trust pass.
+- The trust summary records status, not vectors, scores, prompts, or provider
+  mechanics, and has no effect on question hashes.
+- **This is in tension with D-016 and that tension is not resolved here.**
+  D-016 moved trust from human inspection to the pipeline and states that
+  cutting those stages for scope reopens that decision. Making similarity
+  optional is such a cut. Whether V1 may ship with `trust.similarity: skipped`
+  as a normal outcome is a release-scope decision that belongs to the
+  maintainer, and it is recorded as open rather than settled by this entry.
+- D-023 supersedes the calibration mechanism this entry refers to: under the
+  cascade there is no calibration identity to name, because there is no scoring
+  threshold. `trust.calibration` therefore needs re-reading against D-023 when
+  the cascade lands (#138).

@@ -1,0 +1,34 @@
+{
+  "spec": {"topic": "Go concurrency", "count": 2, "difficulty": "easy", "language": "en"},
+  "evidence": [
+    {
+      "id": "s1",
+      "url": "https://example.test/go-concurrency",
+      "title": "Go concurrency",
+      "retrieved_at": "2026-08-24T01:00:00Z",
+      "content": "The go statement starts a goroutine."
+    }
+  ],
+  "provider": {
+    "identity": {"provider": "ollama", "model": "fixture-qwen"},
+    "generate": {
+      "questions": [
+        {
+          "prompt": "Which keyword starts a goroutine?",
+          "choices": ["go", "run", "spawn", "thread"],
+          "correct_choices": [0],
+          "explanation": "The go statement starts a goroutine.",
+          "citations": ["s1"]
+        }
+      ]
+    },
+    "verify": [{"correct_choice_ids": ["a"], "reasoning": "go starts it"}],
+    "critique": [{"grounded": true, "distractors_plausible": true, "single_defensible_answer": true, "problem": ""}]
+  },
+  "expected": {
+    "error_contains": "of 2",
+    "run_status": "failed",
+    "draft_count": 0,
+    "diagnostic_contains": "of 2"
+  }
+}

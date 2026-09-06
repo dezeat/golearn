@@ -135,6 +135,19 @@ func (s *ImportService) ImportFromFS(fsys fs.FS) (*ImportResult, error) {
 	return result, nil
 }
 
+// ImportPack imports an already-parsed pack through the standard pipeline:
+// normalize, validate all-or-nothing (D-004), upsert the topic, insert with
+// hash dedup (D-007).
+//
+// It exists so a caller holding a pack in memory — Forge accepting a draft —
+// runs the *same* path a file takes, rather than a parallel one that would
+// drift out of step with the validation every imported question is subject to.
+// sourceName is used only for error context.
+func (s *ImportService) ImportPack(pack *domain.Pack, sourceName string) (*ImportResult, error) {
+	result := &ImportResult{FilesProcessed: 1}
+	return s.processPack(pack, sourceName, result)
+}
+
 func (s *ImportService) processPack(pack *domain.Pack, sourceName string, result *ImportResult) (*ImportResult, error) {
 	// Normalise before validation and hashing.
 	domain.NormalizePack(pack)
