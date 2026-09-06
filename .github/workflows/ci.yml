@@ -19,7 +19,30 @@ jobs:
     name: Lint
     runs-on: ubuntu-latest
     steps:
+      # Full history: the identity guard below walks every commit in the PR.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      # Public repo: every commit's author and committer email must be a
+      # GitHub noreply address. A personal address in history is a privacy
+      # leak that only a coordinated history rewrite can undo (agent
+      # instructions -> Secrets and privacy). Checks the PR's commits, or
+      # HEAD on a push.
+      - name: Commit identity guard
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            range="origin/${{ github.base_ref }}..HEAD"
+          else
+            range="-1 HEAD"
+          fi
+          # shellcheck disable=SC2086
+          bad="$(git log --format='%h %ae %ce' $range | awk '{ for (i = 2; i <= 3; i++) if ($i !~ /@users\.noreply\.github\.com$/ && $i != "noreply@github.com") { print; break } }')"
+          if [ -n "$bad" ]; then
+            echo "Commits with a non-noreply author or committer email:"
+            echo "$bad"
+            exit 1
+          fi
 
       - uses: ./.github/actions/setup
 
