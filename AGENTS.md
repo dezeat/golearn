@@ -136,7 +136,10 @@ The project's classic failure modes. Don't:
 **Public repo — every commit is world-readable.** Never commit secrets, real
 keys, or personal paths; bundled packs are synthetic educational content.
 Redact anything sensitive in the same change you notice it. The project needs
-no secrets by design — treat any that appear as a bug.
+no secrets by design — treat any that appear as a bug. **Commit identity is
+part of this:** author and committer email must be the GitHub noreply address,
+never a personal one; the CI Lint job rejects any other address, and a
+personal address already in history is a coordinated rewrite, not a quiet fix.
 
 ### Commits
 
