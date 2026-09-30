@@ -1,24 +1,28 @@
 # golearn Forge — Design Spec
 
-**Status: design intent, not current state.** This document is the plan of
+**Status: design intent, partially implemented.** This document is the plan of
 record for `golearn-forge`, the assisted-authoring addon (epic #66). It
 consolidates what previously lived only in issue comments and session
 handovers into one reviewable place. Three rules govern it:
 
-1. **Precedence.** `docs/DECISIONS.md` (binding rationale, here D-015–D-017,
-   landing via PR #107) and `docs/architecture.md` (implemented current
-   state) win over this file on any conflict. Issues and the Project board carry work units and status,
-   never design truth.
-2. **Not yet 100% defined.** Two research spikes gate the last open design
-   surface — OS-keychain secret storage (#106) and the similarity backend +
-   embedding source (plan on #75). Sections depending on them are marked
-   **⏳ spike-gated** and may change when the spikes land.
-3. **Graduation.** When Forge implementation completes, the then-true parts of
-   this spec move into `docs/architecture.md` (which today correctly still
-   says "no network path" — no Forge code exists yet), `AGENTS.md`'s offline
-   principle and network anti-pattern are amended per D-015, and this file is
-   reduced to a pointer. This spec describes the road; `architecture.md`
-   describes the destination once reached.
+1. **Precedence.** `docs/DECISIONS.md` (binding rationale — D-015–D-017 for the
+   product frame, D-018–D-020 for the surfaces settled during implementation)
+   and `docs/architecture.md` (implemented current state) win over this file on
+   any conflict. Issues and the Project board carry work units and status, never
+   design truth. `docs/design/FORGE-EXPERIMENTS.md` carries what was *measured*.
+2. **The spike gates are closed.** The two surfaces this file once marked
+   **⏳ spike-gated** — secret storage and the similarity backend/embedding
+   source — are decided in D-018–D-020, and those sections now say so. What
+   remains open is listed in §12, and one item there is easy to misread: a
+   self-hosted SearXNG is the *development and verification* adapter, **not**
+   the shipped V1 choice, which is still a maintainer call.
+3. **Graduation, in progress.** The module topology (§2) has landed and has
+   already graduated: `docs/architecture.md` carries the **Authoring boundary**
+   section, and `AGENTS.md`'s core principle and anti-patterns are amended for
+   the binary-scoped offline law per D-015. The remaining sections graduate as
+   their stories land, after which this file reduces to a pointer. This spec
+   describes the road; `architecture.md` describes the destination once
+   reached.
 
 ---
 
@@ -163,13 +167,19 @@ vendor/model is globally forced.
 - OAuth/PKCE is deferred to provider-specific follow-on work; a login or
   subscription in another product is never treated as API authorization.
 
-### 6.2 Secrets (**⏳ spike-gated: #106**)
+### 6.2 Secrets (**decided — D-019 supersedes this section's original direction**)
 
-- Direction: keys live in the **OS keychain**; environment variables override
-  for automation. Never in SQLite, packs, logs, or the repo.
-- Spike #106 validates the library choice, the platform matrix (macOS /
-  Windows / Linux Secret Service), the **headless/WSL/container fallback**,
-  and env-vs-keychain precedence before the provider/config story is frozen.
+- **The environment is the primary source**; the OS keychain is a desktop
+  addition on top of it. Never in SQLite, packs, logs, drafts, diagnostics, or
+  the repo.
+- This **inverts** the direction originally recorded here (keychain-primary,
+  env for automation). The maintainer ruled headless/container-first, on the
+  grounds that the environment path is the one actually used in practice. The
+  inversion is deliberate and documented, not a drift — see D-019.
+- Spike #106 is no longer a gate. What it still owes is narrower: the keychain
+  library choice under the CGo-free constraint, the platform matrix, and
+  whether the keychain path earns its dependency at all now that the primary
+  path does not depend on it.
 
 ## 7. Similarity & near-duplicate gate
 
@@ -183,7 +193,14 @@ vendor/model is globally forced.
   share source language and cause false positives).
 - Exact content-hash dedup (D-007) is separate and unchanged; semantic
   similarity is additional behaviour, never a hash replacement.
-- **Backend (⏳ spike-gated; ticket to mint, plan on #75):** priority order —
+- **Backend (decided — D-020):** float32 embedding BLOBs in the existing
+  database, cosine computed in Go. D-012 settles it: performance is an explicit
+  non-goal at this corpus size, so an index or an embedded vector store would
+  be complexity spent on a problem that does not exist, and a second
+  persistence surface is an explicit non-goal of the storage story. The spike
+  ticket FORGE.md §12 once called for was never minted, because the rulings
+  answered what it existed to decide. The original priority order, kept for the
+  record:
   (1) can a compatible upgrade of the pure-Go SQLite stack expose a usable
   vector path; (2) a mature native-Go/CGo-free alternative; (3) fallback:
   Go-side similarity scoring, optionally with FTS5 lexical candidate
@@ -192,7 +209,12 @@ vendor/model is globally forced.
   constraints: no CGo, no native SQLite extensions (`sqlite-vec`/`sqlite-vss`
   are off the table under D-001), no vector DB/server, per-platform shared
   libraries forbidden.
-- The spike must also decide the **embedding source**: pure-Go offline
+- **Embedding source (decided — D-018):** follow the chat provider, and
+  **fail clear where the provider has none**. Anthropic ships no embeddings
+  API, so embedding is modelled as an *optional capability a provider
+  advertises*, not a method every provider must implement — the absence is
+  typed and testable rather than a runtime surprise. Background, kept because
+  it explains the shape: pure-Go offline
   inference is effectively unavailable (ONNX runtimes need CGo); provider-API
   embeddings are legitimate inside Forge but tie similarity quality to the
   configured provider (Ollama exposes `/api/embeddings`, coverage varies by
@@ -234,6 +256,11 @@ Forge **extends the existing golearn SQLite database** — no second database.
     partial reproduction.
   - **Provenance** — generation time, provider/model identity, source
     references.
+  - **Trust summary** — `trust.similarity: passed|skipped` plus
+    `trust.calibration` for `passed`; `passed` carries a model-specific
+    calibration identity, while `skipped` is valid explicit
+    metadata when similarity is disabled or unavailable. It never carries
+    vectors, scores, prompts, endpoints, or credentials.
 - Per-question evidence keeps the existing `source` / `source_ref` /
   `confidence` fields; generated questions carry `confidence < 1.0`
   (hand-authored content keeps the manual default of 1.0). The finer
@@ -259,12 +286,17 @@ Forge **extends the existing golearn SQLite database** — no second database.
   structure/difficulty/source-use/distractors; evaluation cases themselves are
   never embedded in live prompts.
 
+The checked-in matrix, fixture inventory, rubric, and redacted live/manual
+procedure are maintained in [`FORGE-EVALUATION.md`](FORGE-EVALUATION.md).
+`make eval` runs its deterministic contract gate explicitly; `make check`
+continues to run it as part of the Forge module test loop.
+
 ## 11. V1 scope
 
 **Required for trustworthy V1** (the pipeline stages are D-016-mandatory —
 they replaced the per-question human gate and cannot be cut without reopening
 that decision). Items 1, 2, 6, and 9 name required *capabilities* whose
-*mechanisms* are still spike-gated — see §12:
+*mechanisms* were spike-gated; most are now settled — see §12:
 
 1. Inputs: topic, description, count, difficulty, style/mode controls.
 2. Automatic grounding/research with source references (one adapter).
@@ -287,14 +319,17 @@ research orchestration.
 
 ## 12. Open items gating "100% defined"
 
-| Item | Home | Blocks |
+| Item | Home | Status |
 | --- | --- | --- |
-| OS-keychain feasibility | spike #106 | provider/secret-config story |
-| Similarity backend + embedding source | spike to mint; plan on #75 | similarity story |
-| First research-adapter selection & hardening | spike to mint (§5) | research story |
-| multi-select ≥2-vs-≥1 confirmation | #77 comment | generator validation rules |
-| Source-authority policy spec | to author with the research story | research policy |
-| Style/mode intent enum | spike #105 (after pipeline exists) | `generation_spec` freeze |
+| Similarity backend | D-020 | **decided** — float32 BLOBs + Go-side cosine |
+| Embedding source | D-018 | **decided** — follow the chat provider, fail clear where absent |
+| Secret resolution order | D-019 | **decided** — environment first, keychain a desktop addition |
+| OS-keychain library & platform matrix | spike #106 | open, no longer a gate |
+| V1 research adapter selection | spike #120 | open — a self-hosted SearXNG is the *development* adapter only; the shipped V1 choice is a separate, maintainer-owned call |
+| Page fetch + content extraction | spike #120 | open — §5 describes the port as search/fetch/evidence-build, but the landed adapter does **search only**. Extraction semantics are #120's to define, and Go's stdlib has no HTML parser, so building it would mean inventing the policy *and* spending dependency budget. Evidence is currently snippet-derived; the discriminating axis between V1 candidates is snippets-vs-extracted-content, not price |
+| multi-select ≥2-vs-≥1 confirmation | #77 comment | open |
+| Source-authority policy spec | with the research story | open |
+| Style/mode intent enum | spike #105 (after pipeline exists) | open |
 
 Everything else in this spec is settled at the product/architecture level
 (D-015–D-017) and ready for the implementation-ticket hierarchy.

@@ -1,0 +1,10 @@
+{
+  "forge_registry": "forge_schema_migrations",
+  "forge_tables": ["forge_runs", "forge_drafts", "forge_embeddings"],
+  "core_registry": "schema_migrations",
+  "core_tables_untouched": ["questions", "topics", "users", "sessions", "attempts"],
+  "pack_versions": {
+    "accepted": ["0.1.0", "0.2.0"],
+    "refused": ["0.3.0", "1.0.0"]
+  }
+}

@@ -1,0 +1,24 @@
+{
+  "query": "Go concurrency cancellation",
+  "results": [
+    {
+      "url": "https://example.test/go-cancel",
+      "title": "Cancellation with contexts",
+      "content": "A context carries cancellation signals across API boundaries.",
+      "engine": "fixture"
+    },
+    {
+      "url": "https://example.test/go-channels",
+      "title": "Channel ownership",
+      "content": "A channel send can synchronize with a receiver.",
+      "engine": "fixture"
+    }
+  ],
+  "expected": {
+    "count": 2,
+    "first_id": "src-39896b7c20d7",
+    "first_title": "Cancellation with contexts",
+    "first_url": "https://example.test/go-cancel",
+    "first_content": "A context carries cancellation signals across API boundaries."
+  }
+}

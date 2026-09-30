@@ -1,0 +1,243 @@
+{
+  "_comment": [
+    "Labeled calibration set for the near-duplicate gate (#124, FORGE.md 7).",
+    "Labels are editorial judgements about the QUESTIONS, made before any score",
+    "was computed. Nothing here is derived from a model's output, which is what",
+    "keeps the calibration from being circular.",
+    "",
+    "'relation' follows the decision matrix on issue #75:",
+    "  identical   - same assessment, same wording",
+    "  paraphrase  - same assessment, reworded, overlapping vocabulary",
+    "  semantic    - same assessment, reworded with DISJOINT vocabulary",
+    "  competency  - same concept, different competency tested (permit)",
+    "  concept     - same topic, different concept (permit)",
+    "  unrelated   - different topic (permit)",
+    "",
+    "duplicate=true means the gate is supposed to catch it.",
+    "'semantic' pairs are the ones only a real embedding model can catch; a",
+    "lexical scorer sees almost no overlap. They are in the set deliberately."
+  ],
+  "pairs": [
+    {
+      "name": "verbatim repeat",
+      "relation": "identical",
+      "duplicate": true,
+      "a": {
+        "prompt": "Which keyword starts a goroutine?",
+        "choices": [["a", "go"], ["b", "run"], ["c", "spawn"], ["d", "thread"]],
+        "correct": ["a"],
+        "tags": ["concurrency"]
+      },
+      "b": {
+        "prompt": "Which keyword starts a goroutine?",
+        "choices": [["a", "go"], ["b", "run"], ["c", "spawn"], ["d", "thread"]],
+        "correct": ["a"],
+        "tags": ["concurrency"]
+      }
+    },
+    {
+      "name": "same question, different choice id scheme and order",
+      "relation": "identical",
+      "duplicate": true,
+      "a": {
+        "prompt": "Which keyword starts a goroutine?",
+        "choices": [["a", "go"], ["b", "run"], ["c", "spawn"], ["d", "thread"]],
+        "correct": ["a"],
+        "tags": ["concurrency"]
+      },
+      "b": {
+        "prompt": "Which keyword starts a goroutine?",
+        "choices": [["4", "thread"], ["3", "spawn"], ["2", "run"], ["1", "go"]],
+        "correct": ["1"],
+        "tags": ["concurrency"]
+      }
+    },
+    {
+      "name": "paraphrase with filler words",
+      "relation": "paraphrase",
+      "duplicate": true,
+      "a": {
+        "prompt": "Which keyword starts a goroutine?",
+        "choices": [["a", "go"], ["b", "run"], ["c", "spawn"], ["d", "thread"]],
+        "correct": ["a"],
+        "tags": ["concurrency"]
+      },
+      "b": {
+        "prompt": "Which keyword is used to start a goroutine in Go?",
+        "choices": [["a", "go"], ["b", "run"], ["c", "spawn"], ["d", "thread"]],
+        "correct": ["a"],
+        "tags": ["concurrency"]
+      }
+    },
+    {
+      "name": "paraphrase of a channel question",
+      "relation": "paraphrase",
+      "duplicate": true,
+      "a": {
+        "prompt": "What is the zero value of a channel?",
+        "choices": [["a", "nil"], ["b", "an empty channel"], ["c", "zero"], ["d", "a closed channel"]],
+        "correct": ["a"],
+        "tags": ["channels"]
+      },
+      "b": {
+        "prompt": "What is the zero value of a channel in Go?",
+        "choices": [["a", "nil"], ["b", "an empty channel"], ["c", "zero"], ["d", "a closed channel"]],
+        "correct": ["a"],
+        "tags": ["channels"]
+      }
+    },
+    {
+      "name": "same assessment, reordered options and reworded stem",
+      "relation": "paraphrase",
+      "duplicate": true,
+      "a": {
+        "prompt": "What does the defer statement do?",
+        "choices": [["a", "runs a call when the function returns"], ["b", "runs a call immediately"], ["c", "cancels a call"], ["d", "retries a call"]],
+        "correct": ["a"],
+        "tags": ["defer"]
+      },
+      "b": {
+        "prompt": "What does a defer statement do in a function?",
+        "choices": [["b", "runs a call immediately"], ["a", "runs a call when the function returns"], ["d", "retries a call"], ["c", "cancels a call"]],
+        "correct": ["a"],
+        "tags": ["defer"]
+      }
+    },
+    {
+      "name": "same assessment, disjoint vocabulary",
+      "relation": "semantic",
+      "duplicate": true,
+      "a": {
+        "prompt": "Which keyword starts a goroutine?",
+        "choices": [["a", "go"], ["b", "run"], ["c", "spawn"], ["d", "thread"]],
+        "correct": ["a"],
+        "tags": ["concurrency"]
+      },
+      "b": {
+        "prompt": "What launches a concurrently executing function?",
+        "choices": [["a", "go"], ["b", "async"], ["c", "fork"], ["d", "parallel"]],
+        "correct": ["a"],
+        "tags": ["concurrency"]
+      }
+    },
+    {
+      "name": "same fact asked from the opposite direction",
+      "relation": "semantic",
+      "duplicate": true,
+      "a": {
+        "prompt": "What is the zero value of a slice?",
+        "choices": [["a", "nil"], ["b", "an empty slice"], ["c", "zero"], ["d", "undefined"]],
+        "correct": ["a"],
+        "tags": ["slices"]
+      },
+      "b": {
+        "prompt": "An uninitialized slice evaluates to which value?",
+        "choices": [["a", "nil"], ["b", "the empty literal"], ["c", "0"], ["d", "it panics"]],
+        "correct": ["a"],
+        "tags": ["slices"]
+      }
+    },
+    {
+      "name": "same concept, different competency",
+      "relation": "competency",
+      "duplicate": false,
+      "a": {
+        "prompt": "Which keyword starts a goroutine?",
+        "choices": [["a", "go"], ["b", "run"], ["c", "spawn"], ["d", "thread"]],
+        "correct": ["a"],
+        "tags": ["concurrency"]
+      },
+      "b": {
+        "prompt": "How many goroutines does this loop start over ten items?",
+        "choices": [["a", "ten"], ["b", "one"], ["c", "none"], ["d", "eleven"]],
+        "correct": ["a"],
+        "tags": ["concurrency"]
+      }
+    },
+    {
+      "name": "same topic and stem, different concept",
+      "relation": "concept",
+      "duplicate": false,
+      "a": {
+        "prompt": "Which keyword starts a goroutine?",
+        "choices": [["a", "go"], ["b", "run"], ["c", "spawn"], ["d", "thread"]],
+        "correct": ["a"],
+        "tags": ["concurrency"]
+      },
+      "b": {
+        "prompt": "Which keyword releases a mutex?",
+        "choices": [["a", "Unlock"], ["b", "go"], ["c", "release"], ["d", "free"]],
+        "correct": ["a"],
+        "tags": ["concurrency"]
+      }
+    },
+    {
+      "name": "shared stem, unrelated concepts",
+      "relation": "concept",
+      "duplicate": false,
+      "a": {
+        "prompt": "What is the zero value of a channel?",
+        "choices": [["a", "nil"], ["b", "an empty channel"], ["c", "zero"], ["d", "a closed channel"]],
+        "correct": ["a"],
+        "tags": ["channels"]
+      },
+      "b": {
+        "prompt": "What is the capacity of a buffered channel made with make(chan int, 4)?",
+        "choices": [["a", "four"], ["b", "zero"], ["c", "one"], ["d", "unbounded"]],
+        "correct": ["a"],
+        "tags": ["channels"]
+      }
+    },
+    {
+      "name": "same option set, different question",
+      "relation": "concept",
+      "duplicate": false,
+      "a": {
+        "prompt": "What is the zero value of a slice?",
+        "choices": [["a", "nil"], ["b", "an empty slice"], ["c", "zero"], ["d", "undefined"]],
+        "correct": ["a"],
+        "tags": ["slices"]
+      },
+      "b": {
+        "prompt": "What is the zero value of a map?",
+        "choices": [["a", "nil"], ["b", "an empty map"], ["c", "zero"], ["d", "undefined"]],
+        "correct": ["a"],
+        "tags": ["maps"]
+      }
+    },
+    {
+      "name": "different topics entirely",
+      "relation": "unrelated",
+      "duplicate": false,
+      "a": {
+        "prompt": "Which keyword starts a goroutine?",
+        "choices": [["a", "go"], ["b", "run"], ["c", "spawn"], ["d", "thread"]],
+        "correct": ["a"],
+        "tags": ["concurrency"]
+      },
+      "b": {
+        "prompt": "Which HTTP status code indicates a permanent redirect?",
+        "choices": [["a", "308"], ["b", "200"], ["c", "404"], ["d", "500"]],
+        "correct": ["a"],
+        "tags": ["http"]
+      }
+    },
+    {
+      "name": "same difficulty and tag, different subject",
+      "relation": "unrelated",
+      "duplicate": false,
+      "a": {
+        "prompt": "What does the defer statement do?",
+        "choices": [["a", "runs a call when the function returns"], ["b", "runs a call immediately"], ["c", "cancels a call"], ["d", "retries a call"]],
+        "correct": ["a"],
+        "tags": ["defer"]
+      },
+      "b": {
+        "prompt": "Which SQL clause filters rows after grouping?",
+        "choices": [["a", "HAVING"], ["b", "WHERE"], ["c", "ORDER BY"], ["d", "LIMIT"]],
+        "correct": ["a"],
+        "tags": ["sql"]
+      }
+    }
+  ]
+}

@@ -1,0 +1,138 @@
+{
+  "_comment": [
+    "Measured similarity scores for the A-24 calibration run (#124, D-022).",
+    "",
+    "Second model measured against the same labeled set, under the same",
+    "committed criteria, after nomic-embed-text failed in A-22. It fails too,",
+    "and it fails DIFFERENTLY: nomic separated by rank and lost on the margin,",
+    "this model does not separate the two semantic pairs at all.",
+    "",
+    "Scores only. No vectors, no raw model output, no endpoint.",
+    "",
+    "Regenerate with:",
+    "  FORGE_LIVE_ENDPOINT=<endpoint> go run ./cmd/calibrate bge-m3"
+  ],
+  "provenance": {
+    "model": {
+      "provider": "ollama",
+      "model": "bge-m3"
+    },
+    "model_artifact_digest": "sha256:7907646426070047a77226ac3e684fbbe8410524f7b4a74d02837e43f2146bab",
+    "quantization": "F16",
+    "dimension": 1024,
+    "fixture_file": "similarity_pairs.json",
+    "fixture_sha256": "0ac6b3bc19c30aee1fe253d038475575459f75d5fd85203842e564e80b0fb206",
+    "canonical_text_sha256": [
+      "a1ed114ea1b8e38bceb3a95f80d7339065c7cf0e9d4eae345de3ef34a4fea3cf",
+      "a1ed114ea1b8e38bceb3a95f80d7339065c7cf0e9d4eae345de3ef34a4fea3cf",
+      "a1ed114ea1b8e38bceb3a95f80d7339065c7cf0e9d4eae345de3ef34a4fea3cf",
+      "a1ed114ea1b8e38bceb3a95f80d7339065c7cf0e9d4eae345de3ef34a4fea3cf",
+      "a1ed114ea1b8e38bceb3a95f80d7339065c7cf0e9d4eae345de3ef34a4fea3cf",
+      "c62e4a4126bc109ad63b45ba1e9e0d538627437ae644aaef79ad8fab73ebc9cb",
+      "653908707f8dd0aaa2335dc8163504057f83bb9e9fdef846a11010b7d7ea19fb",
+      "99a7d895c3cd9943f28ade3d6f2ca974876646d81fb3d9b7ccd120215c8a2f9a",
+      "fda063a826af5db626e89685674f7b1c79c68c6e9caa0302175b65336d8fc34d",
+      "7d6f109c3d69ae0d244556448c926ce8d4aab8001e39c020227f6bc71f2168ed",
+      "a1ed114ea1b8e38bceb3a95f80d7339065c7cf0e9d4eae345de3ef34a4fea3cf",
+      "45e5b19a58847b5d2ab3b9cd68ec7ca4655c7c4dc739d5d7074f512dc3a1296c",
+      "e291c4091d05a06c0e82290ff5b1b4a970c7cff3fa048f835a71c56282522a82",
+      "528a72c53dc27b45c47a559f693e75e6f4a9ab700a4102de4aa74fba03063561",
+      "a1ed114ea1b8e38bceb3a95f80d7339065c7cf0e9d4eae345de3ef34a4fea3cf",
+      "b454b4527dd834dbb96cbc33cef1bcbd5230b829eb832f6198a4d7d7f3e04479",
+      "a1ed114ea1b8e38bceb3a95f80d7339065c7cf0e9d4eae345de3ef34a4fea3cf",
+      "2bb778db2ef94f3f539e9a932ca7026a74c5db41e3b0b523a17489d0aacf911e",
+      "653908707f8dd0aaa2335dc8163504057f83bb9e9fdef846a11010b7d7ea19fb",
+      "8987d899309d6eec9c1978fedb18de99ae7f413ea46b2ac3926dd77d72355e6b",
+      "e291c4091d05a06c0e82290ff5b1b4a970c7cff3fa048f835a71c56282522a82",
+      "98f4d14e8f79f015ec719bf490ee747f65d887f3d12a9e3512c23d6b5522884f",
+      "a1ed114ea1b8e38bceb3a95f80d7339065c7cf0e9d4eae345de3ef34a4fea3cf",
+      "f2e104b489a74966420dcc476e0bf917ab8acaf4646d829ebb4f5f5bbc65fc6e",
+      "fda063a826af5db626e89685674f7b1c79c68c6e9caa0302175b65336d8fc34d",
+      "cd1b48dc2772ad675d81ad5f77d0f54fffe0b57249c00454e536daf6062f7bee"
+    ],
+    "code_commit": "f111bd1 (pre-registration commit, before any rebase)",
+    "measured_on": "2026-08-24",
+    "criteria": "domain.V1CalibrationCriteria (max_false_positives=0, min_recall=0.80, min_margin=0.02)",
+    "selection_rule": "domain.Calibrate -- highest negative + margin, rounded up to two decimals"
+  },
+  "pairs": [
+    {
+      "name": "verbatim repeat",
+      "relation": "identical",
+      "duplicate": true,
+      "score": 0.9999999999999998
+    },
+    {
+      "name": "same question, different choice id scheme and order",
+      "relation": "identical",
+      "duplicate": true,
+      "score": 0.9999999999999998
+    },
+    {
+      "name": "paraphrase with filler words",
+      "relation": "paraphrase",
+      "duplicate": true,
+      "score": 0.9673733036493934
+    },
+    {
+      "name": "paraphrase of a channel question",
+      "relation": "paraphrase",
+      "duplicate": true,
+      "score": 0.930132326507951
+    },
+    {
+      "name": "same assessment, reordered options and reworded stem",
+      "relation": "paraphrase",
+      "duplicate": true,
+      "score": 0.992131858507801
+    },
+    {
+      "name": "same assessment, disjoint vocabulary",
+      "relation": "semantic",
+      "duplicate": true,
+      "score": 0.6220316365149811
+    },
+    {
+      "name": "same fact asked from the opposite direction",
+      "relation": "semantic",
+      "duplicate": true,
+      "score": 0.7343410795226661
+    },
+    {
+      "name": "same concept, different competency",
+      "relation": "competency",
+      "duplicate": false,
+      "score": 0.6284680537270396
+    },
+    {
+      "name": "same topic and stem, different concept",
+      "relation": "concept",
+      "duplicate": false,
+      "score": 0.589743575680039
+    },
+    {
+      "name": "shared stem, unrelated concepts",
+      "relation": "concept",
+      "duplicate": false,
+      "score": 0.6196722679513044
+    },
+    {
+      "name": "same option set, different question",
+      "relation": "concept",
+      "duplicate": false,
+      "score": 0.7914319635014885
+    },
+    {
+      "name": "different topics entirely",
+      "relation": "unrelated",
+      "duplicate": false,
+      "score": 0.3442290353459891
+    },
+    {
+      "name": "same difficulty and tag, different subject",
+      "relation": "unrelated",
+      "duplicate": false,
+      "score": 0.40277923309347424
+    }
+  ]
+}

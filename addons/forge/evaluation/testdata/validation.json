@@ -1,0 +1,48 @@
+{
+  "cases": [
+    {
+      "id": "single-select",
+      "valid": true,
+      "question": {
+        "type": "single_select",
+        "prompt": "Which keyword starts a goroutine?",
+        "choices": [{"id": "a", "text": "go"}, {"id": "b", "text": "run"}],
+        "correct_choice_ids": ["a"],
+        "difficulty": "easy"
+      }
+    },
+    {
+      "id": "multi-select",
+      "valid": true,
+      "question": {
+        "type": "multi_select",
+        "prompt": "Which are channel properties?",
+        "choices": [{"id": "a", "text": "synchronization"}, {"id": "b", "text": "buffering"}],
+        "correct_choice_ids": ["a", "b"],
+        "difficulty": "medium"
+      }
+    },
+    {
+      "id": "single-with-two-answers",
+      "valid": false,
+      "error_contains": "exactly 1",
+      "question": {
+        "type": "single_select",
+        "prompt": "Which keyword starts a goroutine?",
+        "choices": [{"id": "a", "text": "go"}, {"id": "b", "text": "run"}],
+        "correct_choice_ids": ["a", "b"]
+      }
+    },
+    {
+      "id": "dangling-answer-id",
+      "valid": false,
+      "error_contains": "non-existent choice ID",
+      "question": {
+        "type": "single_select",
+        "prompt": "Which keyword starts a goroutine?",
+        "choices": [{"id": "a", "text": "go"}, {"id": "b", "text": "run"}],
+        "correct_choice_ids": ["z"]
+      }
+    }
+  ]
+}

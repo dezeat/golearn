@@ -121,20 +121,41 @@ type Attempt struct {
 }
 
 // Pack is the in-memory representation of a question pack file.
+//
+// GenerationSpec and Provenance are the schema 0.2.0 additions (D-017) and are
+// pointers so that "absent" and "present but empty" stay distinguishable — a
+// 0.1.x pack has neither, and a hand-authored 0.2.0 pack may have neither.
+// Neither field feeds the content hash; see [ComputeQuestionHash].
 type Pack struct {
-	PackVersion string         `json:"pack_version" yaml:"pack_version"`
-	Topic       PackTopic      `json:"topic"        yaml:"topic"`
-	Questions   []PackQuestion `json:"questions" yaml:"questions"`
+	PackVersion    string          `json:"pack_version" yaml:"pack_version"`
+	Topic          PackTopic       `json:"topic"        yaml:"topic"`
+	GenerationSpec *GenerationSpec `json:"generation_spec,omitempty" yaml:"generation_spec,omitempty"`
+	Provenance     *Provenance     `json:"provenance,omitempty"      yaml:"provenance,omitempty"`
+	Questions      []PackQuestion  `json:"questions" yaml:"questions"`
 }
 
 const (
-	// CurrentPackVersion is the pack schema version emitted by export.
+	// CurrentPackVersion is the pack schema version the core's export emits.
+	//
+	// It stays at 0.1.0 deliberately. Export writes what the library stores,
+	// and the library stores no pack-level generation metadata — every 0.2.0
+	// field would be absent, so claiming the newer version would assert a
+	// capability the output does not exercise. Forge emits
+	// [PackVersionGenerated] because a generated pack genuinely carries it.
 	CurrentPackVersion = "0.1.0"
 
+	// PackVersionGenerated is the schema version Forge emits (D-017).
+	PackVersionGenerated = "0.2.0"
+
 	// SupportedPackMajor is the accepted pack schema major version for import.
+	// A major bump is a different contract and is refused.
 	SupportedPackMajor = 0
-	// SupportedPackMinor is the accepted pack schema minor version for import.
-	SupportedPackMinor = 1
+
+	// MaxSupportedPackMinor is the highest minor this binary can honor.
+	// Import accepts any minor at or below it within the supported major, so
+	// 0.1.x packs stay importable after 0.2.0 lands (D-017) — the previous
+	// exact-minor rule would have made every generated pack unreadable.
+	MaxSupportedPackMinor = 2
 )
 
 // PackTopic identifies the topic inside a pack file.
