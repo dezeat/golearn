@@ -8,6 +8,14 @@ From the next release onward, entries are generated automatically by
 [release-please](https://github.com/googleapis/release-please) from
 Conventional Commit history.
 
+## [0.2.1](https://github.com/dezeat/golearn/compare/v0.2.0...v0.2.1) (2026-09-06)
+
+
+### Build System
+
+* **deps:** bump actions/checkout from 7.0.0 to 7.0.1 ([#112](https://github.com/dezeat/golearn/issues/112)) ([b2b6c66](https://github.com/dezeat/golearn/commit/b2b6c661dacc4800460308af788658bd4a47666d))
+* **deps:** bump modernc.org/sqlite from 1.54.0 to 1.56.0 ([#116](https://github.com/dezeat/golearn/issues/116)) ([9e6714a](https://github.com/dezeat/golearn/commit/9e6714aed2fc428cc18ec93abf73d6c8c8f680b1))
+
 ## [0.2.0](https://github.com/dezeat/golearn/compare/v0.1.2...v0.2.0) (2026-08-18)
 
 
